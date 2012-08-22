@@ -18,34 +18,45 @@ typedef map<int, map< int, float > >  Model1Param;
 
 class IbmModel1 {
 
- public:
-
-  // creates an fst for each target sentence
-  void CreateTgtFsts(const string& tgtCorpusFilename, vector< VectorFst< LogArc > >& targetFsts);
-
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
-  void NormalizeParams(Model1Param& params);
+  void NormalizeParams();
   
-  void PrintParams(const Model1Param params);
+  // creates an fst for each target sentence
+  void CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts);
 
-  void PersistParams(Model1Param& params, string outputFilename);
+  void CreateGrammarFst();
   
-  // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-  void InitParams(const string& srcCorpusFilename, const string& tgtCorpusFilename, Model1Param& params, const string& initModelFilename);
-  
-  void CreateGrammarFst(const Model1Param& params, VectorFst< LogArc >& grammarFst);
-  
-  bool IsModelConverged(const LearningInfo& learningInfo);
+  bool IsModelConverged();
 
   // zero all parameters
-  void ClearParams(Model1Param& params);
+  void ClearParams();
   
-  void LearnParameters(Model1Param& params, VectorFst< LogArc >& grammarFst, vector< VectorFst< LogArc > >& srcFsts,
-		       vector< VectorFst< LogArc > >& tgtFsts, LearningInfo& learningInfo, string outputFilenamePrefix);
+  void LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< VectorFst< LogArc > >& tgtFsts);
   
   // returns a list of acceptors of the source sentences in any order. 
   // Each acceptor has a single state with arcs representing src tokens in addition to NULL (srcTokenId = 0)
-  void CreateSrcFsts(const string& srcCorpusFilename, vector< VectorFst< LogArc > >& srcFsts); 
+  void CreateSrcFsts(vector< VectorFst< LogArc > >& srcFsts); 
+
+ public:
+
+  IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix);
+
+  void PrintParams();
+
+  void PersistParams(const string& outputFilename);
+  
+  // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
+  void InitParams(const string& initModelFilename);
+
+  void Train();
+
+  void Align();
+
+ private:
+  string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
+  Model1Param params;
+  VectorFst<LogArc> grammarFst;
+  LearningInfo learningInfo;
 };
 
 #endif

@@ -3,7 +3,53 @@
 using namespace std;
 using namespace fst;
 
-void IbmModel1::CreateTgtFsts(const string& tgtCorpusFilename, vector< VectorFst< LogArc > >& targetFsts) {
+// initialize model 1 scores
+IbmModel1::IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix) {
+  // set member variables
+  this->srcCorpusFilename = srcIntCorpusFilename;
+  this->tgtCorpusFilename = tgtIntCorpusFilename;
+  this->outputPrefix = outputFilenamePrefix;
+
+  // initialize the model parameters
+  cerr << "init model1 params" << endl;
+  stringstream initialModelFilename;
+  initialModelFilename << outputPrefix << ".param.init";
+  InitParams(initialModelFilename.str());
+
+  // create the initial grammar FST
+  cerr << "create grammar fst" << endl;
+  CreateGrammarFst();
+}
+
+void IbmModel1::Train() {
+
+  // TODO: this only works because I'm working on a small corpus. if we have millions of sentence pairs, 
+  // we probably need to create tgtFsts and srcFsts on the fly.
+
+  // create tgt fsts
+  cerr << "create tgt fsts" << endl;
+  vector< VectorFst <LogArc> > tgtFsts;
+  CreateTgtFsts(tgtFsts);
+
+  // create src fsts
+  cerr << "create src fsts" << endl;
+  vector< VectorFst <LogArc> > srcFsts;
+  CreateSrcFsts(srcFsts);
+
+  // training iterations
+  cerr << "train!" << endl;
+  // TODO: add parameters to set convergence criteria
+  float convergenceCriterion = 1.0;
+  learningInfo.useMaxIterationsCount = true;
+  learningInfo.maxIterationsCount = 10;
+  LearnParameters(srcFsts, tgtFsts);
+
+  // persist parameters
+  cerr << "persist" << endl;
+  PersistParams(outputPrefix + ".param.final");
+}
+
+void IbmModel1::CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts) {
     ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
     
     // for each line
@@ -35,7 +81,7 @@ void IbmModel1::CreateTgtFsts(const string& tgtCorpusFilename, vector< VectorFst
   }
   
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
-void IbmModel1::NormalizeParams(Model1Param& params) {
+void IbmModel1::NormalizeParams() {
     // iterate over src tokens in the model
     for(Model1Param::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
       //cout << "=======================" << endl << "normalizing srcToken = " << (*srcIter).first << endl;
@@ -67,21 +113,21 @@ void IbmModel1::NormalizeParams(Model1Param& params) {
     }
   }
   
-void IbmModel1::PrintParams(const Model1Param params) {
+void IbmModel1::PrintParams() {
     // iterate over src tokens in the model
     int counter =0;
     for(Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
       map< int, float > translations = (*srcIter).second;
       // iterate over tgt tokens 
       for(map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	cout << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=log(" << exp(-1.0 * (*tgtIter).second) << ")=" << (*tgtIter).second << endl;
+	cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=log(" << exp(-1.0 * (*tgtIter).second) << ")=" << (*tgtIter).second << endl;
       }
     } 
   }
   
-void IbmModel1::PersistParams(Model1Param& params, string outputFilename) {
+void IbmModel1::PersistParams(const string& outputFilename) {
     ofstream paramsFile(outputFilename.c_str());
-    cout << "writing model params at " << outputFilename << endl;
+    cerr << "writing model params at " << outputFilename << endl;
     
     for (Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
       for (map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
@@ -94,7 +140,7 @@ void IbmModel1::PersistParams(Model1Param& params, string outputFilename) {
   }
   
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-void IbmModel1::InitParams(const string& srcCorpusFilename, const string& tgtCorpusFilename, Model1Param& params, const string& initModelFilename) {
+void IbmModel1::InitParams(const string& initModelFilename) {
     ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in);
     ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
     
@@ -133,14 +179,14 @@ void IbmModel1::InitParams(const string& srcCorpusFilename, const string& tgtCor
     srcCorpus.close();
     tgtCorpus.close();
     
-    NormalizeParams(params);
+    NormalizeParams();
     
     // persist initial model
-    cout << "persisting initial model" << endl;
-    PersistParams(params, initModelFilename);
+    cerr << "persisting initial model" << endl;
+    PersistParams(initModelFilename);
   }
   
-void IbmModel1::CreateGrammarFst(const Model1Param& params, VectorFst< LogArc >& grammarFst) {
+void IbmModel1::CreateGrammarFst() {
     // clear grammar
     if (grammarFst.NumStates() > 0) {
       grammarFst.DeleteArcs(grammarFst.Start());
@@ -165,16 +211,16 @@ void IbmModel1::CreateGrammarFst(const Model1Param& params, VectorFst< LogArc >&
     //  PrintFstSummary(grammarFst);
   }
   
-bool IbmModel1::IsModelConverged(const LearningInfo& learningInfo) {
+bool IbmModel1::IsModelConverged() {
     assert(learningInfo.useMaxIterationsCount || learningInfo.useMinLikelihoodDiff);
     
     // logging
     if(learningInfo.useMaxIterationsCount) {
-      cout << "iterationsCount = " << learningInfo.iterationsCount << ". max = " << learningInfo.maxIterationsCount << endl;
+      cerr << "iterationsCount = " << learningInfo.iterationsCount << ". max = " << learningInfo.maxIterationsCount << endl;
     }
     if(learningInfo.useMinLikelihoodDiff && 
        learningInfo.iterationsCount > 1) {
-      cout << "likelihoodDiff = " << abs(learningInfo.logLikelihood[learningInfo.iterationsCount-1] - 
+      cerr << "likelihoodDiff = " << abs(learningInfo.logLikelihood[learningInfo.iterationsCount-1] - 
 					 learningInfo.logLikelihood[learningInfo.iterationsCount-2]) << ". min = " << learningInfo.minLikelihoodDiff << endl;
     }
     
@@ -195,7 +241,7 @@ bool IbmModel1::IsModelConverged(const LearningInfo& learningInfo) {
   }
   
   // zero all parameters
-void IbmModel1::ClearParams(Model1Param& params) {
+void IbmModel1::ClearParams() {
     for (Model1Param::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
       for (map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
 	tgtIter->second = FstUtils::LOG_ZERO;
@@ -204,14 +250,13 @@ void IbmModel1::ClearParams(Model1Param& params) {
   }
   
   
-void IbmModel1::LearnParameters(Model1Param& params, VectorFst< LogArc >& grammarFst, vector< VectorFst< LogArc > >& srcFsts,
-		       vector< VectorFst< LogArc > >& tgtFsts, LearningInfo& learningInfo, string outputFilenamePrefix) {
+void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< VectorFst< LogArc > >& tgtFsts) {
     do {
       float logLikelihood = 0;
       //    cout << "iteration's loglikelihood = " << logLikelihood << endl;
       
       // this vector will be used to accumulate fractional counts of parameter usages
-      ClearParams(params);
+      ClearParams();
       
       // iterate over sentences
       int sentsCounter = 0;
@@ -310,35 +355,35 @@ void IbmModel1::LearnParameters(Model1Param& params, VectorFst< LogArc >& gramma
 	
       // logging
 	if (++sentsCounter % 50 == 0) {
-	  cout << sentsCounter << " sents processed.." << endl;
+	  cerr << sentsCounter << " sents processed.." << endl;
 	}
       }
       
       // normalize fractional counts such that \sum_t p(t|s) = 1 \forall s
-      NormalizeParams(params);
+      NormalizeParams();
       
       // persist parameters
       stringstream filename;
-      filename << outputFilenamePrefix << ".param." << learningInfo.iterationsCount;
-      PersistParams(params, filename.str());
+      filename << outputPrefix << ".param." << learningInfo.iterationsCount;
+      PersistParams(filename.str());
       
       // create the new grammar
-      CreateGrammarFst(params, grammarFst);
+      CreateGrammarFst();
       
       // logging
-      cout << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl << endl;
+      cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl << endl;
       
       // update learningInfo
       learningInfo.logLikelihood.push_back(logLikelihood);
       learningInfo.iterationsCount++;
       
       // check for convergence
-    } while(!IsModelConverged(learningInfo));
+    } while(!IsModelConverged());
   }
   
   // returns a list of acceptors of the source sentences in any order. 
   // Each acceptor has a single state with arcs representing src tokens in addition to NULL (srcTokenId = 0)
-void IbmModel1::CreateSrcFsts(const string& srcCorpusFilename, vector< VectorFst< LogArc > >& srcFsts) {
+void IbmModel1::CreateSrcFsts(vector< VectorFst< LogArc > >& srcFsts) {
     ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
     
     // for each line
@@ -368,3 +413,9 @@ void IbmModel1::CreateSrcFsts(const string& srcCorpusFilename, vector< VectorFst
     }
     srcCorpus.close();
   }
+
+// TODO: not implemented
+// given the current model, align the corpus
+void IbmModel1::Align() {
+  
+}

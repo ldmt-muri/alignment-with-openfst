@@ -55,44 +55,15 @@ int main(int argc, char **argv) {
   //  Experimental();
   //  return 0;
 
-  IbmModel1 model;
-
   // parse arguments
   cout << "parsing arguments" << endl;
   string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
   ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
 
-  // create tgt fsts
-  cout << "create tgt fsts" << endl;
-  vector< VectorFst <LogArc> > tgtFsts;
-  model.CreateTgtFsts(tgtCorpusFilename, tgtFsts);
+  // initialize the model
+  IbmModel1 model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
 
-  // initialize model 1 scores
-  cout << "init model1 params" << endl;
-  Model1Param params;
-  stringstream initialModelFilename;
-  initialModelFilename << outputFilenamePrefix << ".param.init";
-  model.InitParams(srcCorpusFilename, tgtCorpusFilename, params, initialModelFilename.str());
+  // train model parameters
+  model.Train();
 
-  // create the initial grammar FST
-  cout << "create grammar fst" << endl;
-  VectorFst<LogArc> grammarFst;
-  model.CreateGrammarFst(params, grammarFst);
-
-  // create srcFsts
-  cout << "create src fsts" << endl;
-  vector< VectorFst <LogArc> > srcFsts;
-  model.CreateSrcFsts(srcCorpusFilename, srcFsts);
-
-  // training iterations
-  cout << "train!" << endl;
-  float convergenceCriterion = 1.0;
-  LearningInfo learningInfo;
-  learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 10;
-  model.LearnParameters(params, grammarFst, srcFsts, tgtFsts, learningInfo, outputFilenamePrefix);
-
-  // persist parameters
-  cout << "persist" << endl;
-  model.PersistParams(params, outputFilenamePrefix + ".param.final");
 }

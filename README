@@ -5,11 +5,11 @@ dependencies:
 * openfst-1.3.2
 * python 2.7
 
-how to compile:
+how to build:
 ===============
 * make
 
-example:
+how to run:
 ========
 * example invocation can be found at run-example.bash, which makes use of a small parallel corpus of english-kinyarwanda located in the 'example' subdirectory
 
