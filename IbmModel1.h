@@ -46,7 +46,7 @@ class IbmModel1 {
   void PersistParams(const string& outputFilename);
   
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-  void InitParams(const string& initModelFilename);
+  void InitParams();
 
   void Train();
 

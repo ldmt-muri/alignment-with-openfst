@@ -14,7 +14,8 @@ IbmModel1::IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCor
   cerr << "init model1 params" << endl;
   stringstream initialModelFilename;
   initialModelFilename << outputPrefix << ".param.init";
-  InitParams(initialModelFilename.str());
+  InitParams();
+  PersistParams(initialModelFilename.str());
 
   // create the initial grammar FST
   cerr << "create grammar fst" << endl;
@@ -140,7 +141,7 @@ void IbmModel1::PersistParams(const string& outputFilename) {
   }
   
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-void IbmModel1::InitParams(const string& initModelFilename) {
+void IbmModel1::InitParams() {
     ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in);
     ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
     
@@ -180,10 +181,6 @@ void IbmModel1::InitParams(const string& initModelFilename) {
     tgtCorpus.close();
     
     NormalizeParams();
-    
-    // persist initial model
-    cerr << "persisting initial model" << endl;
-    PersistParams(initModelFilename);
   }
   
 void IbmModel1::CreateGrammarFst() {
