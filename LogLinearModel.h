@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <math.h>
+#include <time.h>
 
 #include "StringUtils.h"
 #include "FstUtils.h"
@@ -64,7 +65,7 @@ class LogLinearModel {
 
   void Align();
 
-  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& alignmentFst, bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon);
+  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& alignmentFst, bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, int sentId);
 
   void AddSentenceContributionToGradient(const VectorFst< LogTripleArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 

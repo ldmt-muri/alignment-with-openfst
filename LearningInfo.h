@@ -39,6 +39,9 @@ class LearningInfo {
     useMinLikelihoodDiff = false;
     iterationsCount = 0;
     minLikelihoodDiff = 1.0;
+    maxIterationsCount = 10;
+    saveAlignmentFstsOnDisk = false;
+
   }
 
   bool IsModelConverged() {
@@ -80,6 +83,9 @@ class LearningInfo {
 
   // optimization method
   OptUtils::OptMethod optimizationMethod;
+
+  // save alignment FSTs on disk
+  bool saveAlignmentFstsOnDisk;
 
   // output
   int iterationsCount;

@@ -63,10 +63,12 @@ int main(int argc, char **argv) {
   float regularizationConst = 0.01;
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.iterationsCount = 10;
-  OptUtils::OptMethod optimizationMethod;
-  optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
-  optimizationMethod.miniBatchSize = 1;
+  learningInfo.maxIterationsCount = 1000;
+  learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.minLikelihoodDiff = 1;
+  learningInfo.maxIterationsCount = 1000;
+  learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
+  learningInfo.optimizationMethod.miniBatchSize = 1;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

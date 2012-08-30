@@ -6,6 +6,7 @@
 #include <sstream>
 #include <fstream>
 #include <assert.h>
+#include <math.h>
 
 #include "LearningInfo.h"
 

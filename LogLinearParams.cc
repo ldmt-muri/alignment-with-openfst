@@ -26,12 +26,12 @@ float LogLinearParams::ComputeLogProb(int srcToken, int tgtToken, int srcPos, in
   map<string, float> activeFeatures;
   FireFeatures(srcToken, tgtToken, srcPos, tgtPos, srcSentLength, tgtSentLength, activeFeatures);
   // compute log prob
-  float result =  DotProduct(activeFeatures, params);
+  float result = DotProduct(activeFeatures, params);
   
   // for debugging
-  cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
-  cerr << " srcSentLength=" << srcSentLength << " tgtSentLength=" << tgtSentLength << endl;
-  cerr << "RESULT=" << result << endl << endl;
+  //  cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
+  //  cerr << " srcSentLength=" << srcSentLength << " tgtSentLength=" << tgtSentLength << endl;
+  //  cerr << "RESULT=" << result << endl << endl;
 
   return result;
 }
@@ -45,7 +45,7 @@ void LogLinearParams::FireFeatures(int srcToken, int tgtToken, int srcPos, int t
   activeFeatures[temp.str()] = 1.0;
 
   // F2: diagonal-bias
-  activeFeatures["F2:diagonal-bias"] = ((float) srcPos / srcSentLength) / ((float) tgtPos / tgtSentLength);
+  activeFeatures["F2:diagonal-bias"] = fabs((float) srcPos / srcSentLength) - ((float) tgtPos / tgtSentLength);
   
   // F3: src token
   temp.str("");

@@ -235,38 +235,76 @@ void LogLinearModel::CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogTri
 // lexicon is only used when tgtLineIsGiven=false. Depending on its value, the constructed FST may represent a subset of 
 // possible translations (cuz it's usually too expensive to represnet all translations). 
 void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& alignmentFst, 
-				       bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon) {
-  // tgt transducer
-  VectorFst<LogTripleArc> tgtFst;
-  // in this model, two kinds of alignment FSTs are needed: one assumes a particular target sentence, 
-  // while the other represents many more translations.
+				       bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+				       int sentId) {
+
+  stringstream alignmentFstFilename;
+  alignmentFstFilename << outputPrefix << ".align";
   if(tgtLineIsGiven) {
-    CreateTgtFst(tgtTokens, tgtFst);
+    alignmentFstFilename << "GivenTS." << sentId;
   } else {
-    CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst);
+    alignmentFstFilename << "GivenS." << sentId;
   }
 
-  // per-sentence grammar
-  VectorFst<LogTripleArc> grammarFst;
-  CreatePerSentGrammarFst(srcTokens, tgtTokens, grammarFst);
+  // in the first pass over the corpus, construct the FSTs
+  if(!learningInfo.saveAlignmentFstsOnDisk || 
+     learningInfo.saveAlignmentFstsOnDisk && learningInfo.iterationsCount == 0) {
+    // tgt transducer
+    VectorFst<LogTripleArc> tgtFst;
+    // in this model, two kinds of alignment FSTs are needed: one assumes a particular target sentence, 
+    // while the other represents many more translations.
+    if(tgtLineIsGiven) {
+      CreateTgtFst(tgtTokens, tgtFst);
+    } else {
+      CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst);
+    }
+    
+    // per-sentence grammar
+    VectorFst<LogTripleArc> grammarFst;
+    CreatePerSentGrammarFst(srcTokens, tgtTokens, grammarFst);
+    
+    // src transducer
+    VectorFst<LogTripleArc> srcFst;
+    CreateSrcFst(srcTokens, srcFst);
+    
+    // compose the three transducers to get the alignmentFst with weights representing tgt/src positions
+    VectorFst<LogTripleArc> temp;
+    Compose(tgtFst, grammarFst, &temp);
+    
+    // for debugging
+    //  if(tgtLineIsGiven) {
+    //    cerr << "=======================tgtFst + perSentGrammar=====================" << endl;
+    //    FstUtils::PrintFstSummary(temp);
+    //    string dummy;
+    //    cin >> dummy;
+    //  }
+    
+    Compose(temp, srcFst, &alignmentFst);
+    
+    // save the resulting alignmentFst for future use
+    if(learningInfo.saveAlignmentFstsOnDisk) {
+      alignmentFst.Write(alignmentFstFilename.str());
+    }
+    
+  } else if (learningInfo.saveAlignmentFstsOnDisk) {
+    // in subsequent passes, read the previously stored FST
+    cerr << "hi" << endl;
+    // TODO: debug this block. something is wrong with the read operation. The huge FSTs, when read, don't have any states.
+    alignmentFst.Read(alignmentFstFilename.str());
+    bool verified = Verify(alignmentFst);
+    if (verified) {
+      cerr << "the model loaded was verified." << endl;
+    } else {
+      cerr << "the model loaded was not verified." << endl;
+    }
 
-  // src transducer
-  VectorFst<LogTripleArc> srcFst;
-  CreateSrcFst(srcTokens, srcFst);
+    if(!tgtLineIsGiven && sentId == 1) {
+      FstUtils::PrintFstSummary(alignmentFst);
+    }
+    string dummy;
+    cin >> dummy;
 
-  // compose the three transducers to get the alignmentFst with weights representing tgt/src positions
-  VectorFst<LogTripleArc> temp;
-  Compose(tgtFst, grammarFst, &temp);
-
-  // for debugging
-  //  if(tgtLineIsGiven) {
-  //    cerr << "=======================tgtFst + perSentGrammar=====================" << endl;
-  //    FstUtils::PrintFstSummary(temp);
-  //    string dummy;
-  //    cin >> dummy;
-  //  }
-
-  Compose(temp, srcFst, &alignmentFst);
+  }
   
   // compute the probability of each transition on the alignment FST according to the current model parameters
   // set the third value in the LogTripleWeights on the arcs = the computed prob for that arc
@@ -285,6 +323,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   }
 
   // for debugging
+  //  cerr << "end of BuildAlignmentFst()" << endl;
   //  if(tgtLineIsGiven) {
   //cerr << "=======================tgtFst + perSentGrammar + srcFst=====================" << endl;
   //FstUtils::PrintFstSummary(alignmentFst);
@@ -315,20 +354,37 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogTripl
       // find the features activated on this transition, and their values
       map<string, float> activeFeatures;
       gradient.FireFeatures(srcToken, tgtToken, (int)srcPos, (int)tgtPos, srcTokensCount, tgtTokensCount, activeFeatures);
+
+      // for debugging
+      //      cerr << endl << "=================features fired===================" << endl;
+      //      cerr << "arc: tgtToken=" << tgtToken << " srcToken=" << srcToken << " tgtPos=" << tgtPos << " srcPos=" << srcPos;
+      //      cerr << " srcTokensCount=" << srcTokensCount << " tgtTokensCount=" << tgtTokensCount << " totalProb=" << totalProb << endl;
+      //      cerr << "Features fired are:" << endl;
+
       // now, for each feature fired on each arc of aGivenTS
       for(map<string,float>::const_iterator feature = activeFeatures.begin(); feature != activeFeatures.end(); feature++) {
-	if(gradient.params.count(feature->first) == 0) 
+	if(gradient.params.count(feature->first) == 0) {
 	  gradient.params[feature->first] = 0;
-	// the positive contribution to the derivative of this feature by this arc is
-	LogWeight logContribution = Times(Times(totalProb, feature->second), -1.0 * logPartitionFunction);
-	if(subtract) {
-	  gradient.params[feature->first] -= FstUtils::nExp(logContribution.Value());
-	} else {
-	  gradient.params[feature->first] += FstUtils::nExp(logContribution.Value());
 	}
+
+	// for debugging 
+	//	cerr << "gradient[" << feature->first << "=" << feature->second << "] was " << gradient.params[feature->first] << " became ";
+	
+	// the positive contribution to the derivative of this feature by this arc is
+	float contribution = feature->second * FstUtils::nExp(Times(totalProb, -1.0 * logPartitionFunction).Value());
+	if(subtract) {
+	  gradient.params[feature->first] -= contribution;
+	} else {
+	  gradient.params[feature->first] += contribution;
+	}
+
+	// for debugging
+	//	cerr << gradient.params[feature->first] << endl;
       }
     }
   }
+  //  string dummy2;
+  //  cin >> dummy2;
 }
 
 // for each feature in the model, add the corresponding regularization term to the gradient
@@ -336,10 +392,12 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
 
   // compute ||params||_2
   float l2 = 0;
-  for(map<string, float>::const_iterator featureIter = params.params.begin();
-      featureIter != params.params.end();
-      featureIter++) {
-    l2 += featureIter->second * featureIter->second;
+  if(regularizationType == Regularizer::L2) {
+    for(map<string, float>::const_iterator featureIter = params.params.begin();
+	featureIter != params.params.end();
+	featureIter++) {
+      l2 += featureIter->second * featureIter->second;
+    }
   }
 
   // for each feature
@@ -353,6 +411,8 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
       gradient.params[featureIter->first] += term;
       assert(gradient.params[featureIter->first] == term);
       break;
+    case Regularizer::NONE:
+      break;
     default:
       assert(false);
       break;
@@ -362,8 +422,13 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
 
 void LogLinearModel::Train() {
 
+  clock_t accUpdateClocks = 0, accUsingFstClocks = 0, accBuildingFstClocks = 0, accReadClocks = 0, accRuntimeClocks = 0, accRegularizationClocks = 0, accWriteClocks = 0;
+
   // passes over the training data
   do {
+    
+    clock_t timestamp1 = clock();
+
     float logLikelihood = 0;
 
     ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
@@ -376,17 +441,21 @@ void LogLinearModel::Train() {
     LogLinearParams gradient;
 
     // first, compute the regularizer's term for each feature in the gradient
+    clock_t timestamp2 = clock();
     AddRegularizerTerm(gradient);
+    accRegularizationClocks += clock() - timestamp2;
     
     // for each line
     string srcLine, tgtLine;
     int sentsCounter = 1;
+    clock_t timestamp3 = clock();
     while(getline(srcCorpus, srcLine)) {
       getline(tgtCorpus, tgtLine);
+      accReadClocks += clock() - timestamp3;
 
       // for debugging
-      cerr << "srcLine: " << srcLine << endl;
-      cerr << "tgtLine: " << tgtLine << endl << endl;
+      //      cerr << "srcLine: " << srcLine << endl;
+      //      cerr << "tgtLine: " << tgtLine << endl << endl;
 
       // read the list of integers representing target tokens
       vector< int > srcTokens, tgtTokens;
@@ -396,14 +465,16 @@ void LogLinearModel::Train() {
       srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
       
       // build FST(a|t,s) and build FST(a,t|s)
+      clock_t timestamp4 = clock();
       VectorFst< LogTripleArc > aGivenTS, aTGivenS;
-      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, DiscriminativeLexicon::ALL);
-      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, DiscriminativeLexicon::ALL);    
+      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, DiscriminativeLexicon::ALL, sentsCounter);
+      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, DiscriminativeLexicon::ALL, sentsCounter);
 
       // change the LogTripleWeight semiring to LogWeight using LogTripleToLogMapper
       VectorFst< LogArc > aGivenTSProbs, aTGivenSProbs;
       ArcMap(aGivenTS, &aGivenTSProbs, LogTripleToLogMapper());
       ArcMap(aTGivenS, &aTGivenSProbs, LogTripleToLogMapper());
+      accBuildingFstClocks += clock() - timestamp4;
       
       // for debugging
       //      cerr << "========================aGivenTSProbs=====================" << endl;
@@ -412,6 +483,7 @@ void LogLinearModel::Train() {
       //      cin >> dummy;
 
       // get the total (i.e. end-to-end) probability of traversing each arc
+      clock_t timestamp5 = clock();
       VectorFst< LogArc > aGivenTSTotalProb, aTGivenSTotalProb;
       LogWeight aGivenTSBeta0, aTGivenSBeta0;
       FstUtils::ComputeTotalProb<LogWeight,LogArc>(aGivenTSProbs, aGivenTSTotalProb, aGivenTSBeta0);
@@ -419,37 +491,53 @@ void LogLinearModel::Train() {
 
       // add this sentence's contribution to the gradient of model parameters.
       // lickily, the contribution factorizes into: the end-to-end arc probabilities and beta[0] of aGivenTS and aTGivenS.
+      clock_t timestamp6 = clock();
       AddSentenceContributionToGradient(aGivenTS, aGivenTSTotalProb, gradient, aGivenTSBeta0.Value(), srcTokens.size(), tgtTokens.size(), false);
       AddSentenceContributionToGradient(aTGivenS, aTGivenSTotalProb, gradient, aTGivenSBeta0.Value(), srcTokens.size(), tgtTokens.size(), true);
+      accUsingFstClocks += clock() - timestamp5;
 
       // update the iteration log likelihood with this sentence's likelihod
       assert(aTGivenSBeta0.Value() != 0);
-      logLikelihood += aGivenTSBeta0.Value() / aTGivenSBeta0.Value();
+      logLikelihood += aGivenTSBeta0.Value() - aTGivenSBeta0.Value();
       
       // if the optimization algorithm is stochastic, update the parameters here.
+      cerr << "s";
       if(IsStochastic(learningInfo.optimizationMethod.algorithm) && sentsCounter % learningInfo.optimizationMethod.miniBatchSize == 0) {
+	cerr << "u";
 	params.UpdateParams(gradient, learningInfo.optimizationMethod);
 	gradient.Clear();
       }
-
+      accUpdateClocks += clock() - timestamp6;
+      
       // logging
       if (++sentsCounter % 50 == 0) {
-	cerr << sentsCounter << " sents processed.." << endl;
+	cerr << endl << sentsCounter << " sents processed.." << endl;
       }
+
+      timestamp3 = clock();
     }
     
     // if the optimization algorithm isn't stochastic, update the parameters here.
+    clock_t timestamp7 = clock();
     if(IsStochastic(learningInfo.optimizationMethod.algorithm)) {
       params.UpdateParams(gradient, learningInfo.optimizationMethod);
     }
+    accUpdateClocks += clock() - timestamp7;
     
     // persist parameters
     stringstream filename;
+    clock_t timestamp8 = clock();
     filename << outputPrefix << ".param." << learningInfo.iterationsCount;
     params.PersistParams(filename.str());
+    accWriteClocks += clock() - timestamp8;
     
     // logging
-    cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl << endl;
+    cerr << endl << "WOOHOOOO" << endl;
+    cerr << "completed iteration # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
+    cerr << "total iteration time = " << (float) (clock()-timestamp1) / CLOCKS_PER_SEC << " sec." << endl << endl;
+    
+    // book keeping
+    accRuntimeClocks += clock() - timestamp1;
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(logLikelihood);
@@ -458,12 +546,21 @@ void LogLinearModel::Train() {
     // close the files
     srcCorpus.close();
     tgtCorpus.close();
-    
+
     // check for convergence
   } while(!learningInfo.IsModelConverged());
 
   // persist parameters
   params.PersistParams(outputPrefix + ".param.final");
+
+  // report accumulated times
+  cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated fst usage time = " << (float) accUsingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
 }
   
 // TODO: not implemented
