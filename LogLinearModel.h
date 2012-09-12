@@ -5,6 +5,7 @@
 #include <fstream>
 #include <math.h>
 #include <time.h>
+#include <set>
 
 #include "StringUtils.h"
 #include "FstUtils.h"
@@ -15,26 +16,22 @@ using namespace std;
 
 #define NULL_SRC_TOKEN_ID 1
 
-namespace DiscriminativeLexicon {
-  enum DiscriminativeLexicon {ALL, COOCC};
-}
-
-namespace Regularizer {
-  enum Regularizer {NONE, L2};
-}
-
 class LogLinearModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeParams();
   
   // creates an acceptor for a target sentence
-  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogTripleArc>& tgtFst);
+  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogTripleArc>& tgtFst, set<int>& uniqueTgtTokens);
 
   // create an acceptor of many possible translations of the source sentence
-  void CreateAllTgtFst(const vector<int>& srcTokens, int tgtSentLen, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, VectorFst<LogTripleArc>& allTgtFst);
+  void CreateAllTgtFst(const vector<int>& srcTokens, 
+		       int tgtSentLen, 
+		       typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+		       VectorFst<LogTripleArc>& allTgtFst,
+		       set<int>& uniqueTgtTokens);
 
-  void CreatePerSentGrammarFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& grammarFst);
+  void CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogTripleArc>& grammarFst);
   
   void CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogTripleArc>& srcFst);
 

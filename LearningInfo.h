@@ -8,6 +8,14 @@
 
 using namespace std;
 
+namespace DiscriminativeLexicon {
+  enum DiscriminativeLexicon {ALL, COOCC};
+}
+
+namespace Regularizer {
+  enum Regularizer {NONE, L2};
+}
+
 namespace OptUtils {
   enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT};
 
@@ -41,7 +49,7 @@ class LearningInfo {
     minLikelihoodDiff = 1.0;
     maxIterationsCount = 10;
     saveAlignmentFstsOnDisk = false;
-
+    neighborhood = DiscriminativeLexicon::ALL;
   }
 
   bool IsModelConverged() {
@@ -83,6 +91,9 @@ class LearningInfo {
 
   // optimization method
   OptUtils::OptMethod optimizationMethod;
+
+  // discriminative lexicon
+  DiscriminativeLexicon::DiscriminativeLexicon neighborhood;
 
   // save alignment FSTs on disk
   bool saveAlignmentFstsOnDisk;

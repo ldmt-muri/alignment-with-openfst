@@ -64,6 +64,14 @@ void Experimental() {
   Compose(fst1, fst2, &temp);
   Compose(temp, fst3, &final);
 
+  final.Write("example/test.bin");
+
+  VectorFst< ProductArc<LogWeight, LogWeight> > temp2;
+  temp2.Read("example/test.bin");
+
+  //  FstUtils::PrintFstSummary(final);
+  //  FstUtils::PrintFstSummary(temp2);
+
   cout << "===================FST1=============" << endl;
   //  FstUtils::PrintFstSummary(fst1);
   cout << "===================FST2=============" << endl;
