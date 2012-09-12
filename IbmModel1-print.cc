@@ -49,7 +49,9 @@ class IbmModel1 {
     int stateId = srcFst.AddState();
 
     // one arc per source token
-    for(vector<int>::const_iterator tokenIter = srcTokens.begin(); tokenIter != srcTokens.end(); tokenIter++) {
+    for(vector<int>::const_iterator tokenIter = srcTokens.begin(); 
+	tokenIter != srcTokens.end(); 
+	tokenIter++) {
       srcFst.AddArc(stateId, LogArc(*tokenIter, *tokenIter, 0, stateId));
     }
 
@@ -78,7 +80,9 @@ class IbmModel1 {
 
     // create an arc for each parameter t|s
     for(Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      for(map<int,float>::const_iterator tgtIter = (*srcIter).second.begin(); tgtIter != (*srcIter).second.end(); tgtIter++) {
+      for(map<int,float>::const_iterator tgtIter = (*srcIter).second.begin(); 
+	  tgtIter != (*srcIter).second.end(); 
+	  tgtIter++) {
 	int tgtToken = (*tgtIter).first;
 	int srcToken = (*srcIter).first;
 	float paramValue = (*tgtIter).second;
@@ -162,11 +166,12 @@ class IbmModel1 {
 	    
 	    // probability of using this parameter given this sentence pair and the previous model
 	    LogWeight currentParamLogProb = arcIter.Value().weight;
-	    float fPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]).Value() - fSentLogLikelihood;
+	    float fPosteriorLogProb = 
+	      Times(Times(alphas[fromState], currentParamLogProb), betas[toState]).Value() - fSentLogLikelihood;
 	    
 	    // accumulate the fractional count for this parameter
-	    params[srcToken][tgtToken] = Plus(LogWeight(params[srcToken][tgtToken]), LogWeight(fNormalizedPosteriorLogProb)).Value();
-
+	    params[srcToken][tgtToken] = 
+	      Plus(LogWeight(params[srcToken][tgtToken]), LogWeight(fNormalizedPosteriorLogProb)).Value();
 	  }
 	}   
 	
@@ -179,9 +184,6 @@ class IbmModel1 {
       
       // create a new grammar for the next iteration
       CreateGrammarFst();
-      
-      // logging
-      cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl << endl;
       
       // update learningInfo
       learningInfo.logLikelihood.push_back(logLikelihood);
