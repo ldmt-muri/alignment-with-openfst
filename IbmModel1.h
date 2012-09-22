@@ -26,8 +26,6 @@ class IbmModel1 {
 
   void CreateGrammarFst();
   
-  bool IsModelConverged();
-
   // zero all parameters
   void ClearParams();
   
@@ -39,7 +37,7 @@ class IbmModel1 {
 
  public:
 
-  IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix);
+  IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
 
   void PrintParams();
 

@@ -45,6 +45,8 @@ class LearningInfo {
   LearningInfo() {
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
+    useEarlyStopping = false;
+    trainToDevDataSize = 10;
     iterationsCount = 0;
     minLikelihoodDiff = 1.0;
     maxIterationsCount = 10;
@@ -53,7 +55,7 @@ class LearningInfo {
   }
 
   bool IsModelConverged() {
-    assert(useMaxIterationsCount || useMinLikelihoodDiff);
+    assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping);
     
     // logging
     if(useMaxIterationsCount) {
@@ -62,7 +64,13 @@ class LearningInfo {
     if(useMinLikelihoodDiff && 
        iterationsCount > 1) {
       cerr << "likelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
-					 logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl;
+					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl;
+    }
+    if(useEarlyStopping &&
+       iterationsCount > 1) {
+      cerr << "validationLikelihood[" << iterationsCount-2 << "] = " << validationLogLikelihood[iterationsCount-2] << endl;
+      cerr << "validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
+      cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl;
     }
     
     // check for convergnece conditions
@@ -76,6 +84,11 @@ class LearningInfo {
 					    logLikelihood[iterationsCount-2])) {
       return true;
     } 
+    if(useEarlyStopping &&
+       iterationsCount > 5 &&
+       validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2] > 0) {
+      return true;
+    }
     
     // none of the convergence conditions apply!
     return false;
@@ -89,6 +102,11 @@ class LearningInfo {
   bool useMinLikelihoodDiff;
   float minLikelihoodDiff;
 
+  // criteria 3
+  // by early stopping, i mean assume convergence as soon as the likelihood of a validation set cease to increase
+  bool useEarlyStopping;
+  int trainToDevDataSize;
+
   // optimization method
   OptUtils::OptMethod optimizationMethod;
 
@@ -101,6 +119,7 @@ class LearningInfo {
   // output
   int iterationsCount;
   vector< float > logLikelihood;
+  vector< float > validationLogLikelihood;
 };
 
 

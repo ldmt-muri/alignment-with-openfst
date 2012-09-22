@@ -95,7 +95,12 @@ int main(int argc, char **argv) {
   ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
 
   // initialize the model
-  IbmModel1 model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
+  LearningInfo learningInfo;
+  // TODO: add parameters to set convergence criteria
+  //  learningInfo.maxIterationsCount = 3;
+  //  learningInfo.useMaxIterationsCount = true;
+  learningInfo.useEarlyStopping = true;
+  IbmModel1 model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
 
   // train model parameters
   model.Train();
