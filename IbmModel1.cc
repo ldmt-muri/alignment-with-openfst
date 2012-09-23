@@ -26,22 +26,14 @@ IbmModel1::IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCor
 
 void IbmModel1::Train() {
 
-  // TODO: this only works because I'm working on a small corpus. if we have millions of sentence pairs, 
-  // we probably need to create tgtFsts and srcFsts on the fly.
-
   // create tgt fsts
   cerr << "create tgt fsts" << endl;
   vector< VectorFst <LogArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
-  // create src fsts
-  cerr << "create src fsts" << endl;
-  vector< VectorFst <LogArc> > srcFsts;
-  CreateSrcFsts(srcFsts);
-
   // training iterations
   cerr << "train!" << endl;
-  LearnParameters(srcFsts, tgtFsts);
+  LearnParameters(tgtFsts);
 
   // persist parameters
   cerr << "persist" << endl;
@@ -94,8 +86,6 @@ void IbmModel1::NormalizeParams() {
       //cout << "fTotalProb += " << exp(-1.0 * temp.Value()) << "(i.e. e^-" << temp.Value() << ") ==> " << fTotalProb << endl;
     }
     // exponentiate to find p(*|src) before normalization
-    //    float fLogTotalProb = (float) logTotalProb.Value();
-    //cout << "totalProb = " << fTotalProb << endl << endl;
     // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
     float fVerifyTotalProb = 0.0;
     for(map< int, float >::iterator tgtIter = translations->begin(); tgtIter != translations->end(); tgtIter++) {
@@ -206,7 +196,42 @@ void IbmModel1::CreateGrammarFst() {
   //  PrintFstSummary(grammarFst);
 }
 
-  // zero all parameters
+void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentGrammarFsts) {
+  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
+  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in);
+  
+  // for each line
+  string srcLine, tgtLine;
+  while(getline(srcCorpus, srcLine) && getline(tgtCorpus, tgtLine)) {
+    
+    // read the list of integers representing source tokens
+    vector<int> srcTokens;
+    set<int> tgtTokens;
+    StringUtils::ReadIntTokens(srcLine, srcTokens);
+    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    // allow null alignments
+    srcTokens.push_back(NULL_SRC_TOKEN_ID);
+    
+    // create the fst
+    VectorFst< LogArc > grammarFst;
+    int stateId = grammarFst.AddState();
+    assert(stateId == 0);
+    for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+      for(set<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
+	grammarFst.AddArc(stateId, LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));	
+      }
+    }
+    grammarFst.SetStart(stateId);
+    grammarFst.SetFinal(stateId, 0);
+    ArcSort(&grammarFst, ILabelCompare<LogArc>());
+    perSentGrammarFsts.push_back(grammarFst);
+    
+  }
+  srcCorpus.close();
+  tgtCorpus.close();
+}
+
+// zero all parameters
 void IbmModel1::ClearParams() {
   for (Model1Param::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
     for (map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
@@ -215,10 +240,15 @@ void IbmModel1::ClearParams() {
   }
 }
 
-void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< VectorFst< LogArc > >& tgtFsts) {
+void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
   clock_t compositionClocks = 0, forwardBackwardClocks = 0, updatingFractionalCountsClocks = 0, grammarConstructionClocks = 0, normalizationClocks = 0;
   clock_t t00 = clock();
   do {
+    clock_t t05 = clock();
+    vector< VectorFst< LogArc > > perSentGrammarFsts;
+    CreatePerSentGrammarFsts(perSentGrammarFsts);
+    grammarConstructionClocks += clock() - t05;
+
     clock_t t10 = clock();
     float logLikelihood = 0, validationLogLikelihood = 0;
     //    cout << "iteration's loglikelihood = " << logLikelihood << endl;
@@ -228,18 +258,16 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< 
     
     // iterate over sentences
     int sentsCounter = 0;
-    for( vector< VectorFst< LogArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(); 
-	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end(); 
-	 tgtIter++, srcIter++) {
+    for( vector< VectorFst< LogArc > >::const_iterator tgtIter = tgtFsts.begin(), grammarIter = perSentGrammarFsts.begin(); 
+	 tgtIter != tgtFsts.end() && grammarIter != perSentGrammarFsts.end(); 
+	 tgtIter++, grammarIter++) {
       
       // build the alignment fst
       clock_t t20 = clock();
-      VectorFst< LogArc > tgtFst = *tgtIter, srcFst = *srcIter, temp, alignmentFst;
-      Compose(tgtFst, grammarFst, &temp);
-      ArcSort(&temp, ILabelCompare<LogArc>());
-      Compose(temp, srcFst, &alignmentFst);
+      VectorFst< LogArc > tgtFst = *tgtIter, perSentGrammarFst = *grammarIter, alignmentFst;
+      Compose(tgtFst, perSentGrammarFst, &alignmentFst);
       compositionClocks += clock() - t20;
-      //      PrintFstSummary(alignmentFst);
+      //FstUtils::PrintFstSummary(alignmentFst);
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
@@ -321,7 +349,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< 
       
       // logging
       if (++sentsCounter % 1000 == 0) {
-	cerr << sentsCounter << " sents processed.." << endl;
+	cerr << sentsCounter << " sents processed. iterationLoglikelihood = " << logLikelihood <<  endl;
       }
     }
     
@@ -343,7 +371,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< 
     grammarConstructionClocks += clock() - t60;
 
     // logging
-    cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl << endl;
+    cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(logLikelihood);
@@ -362,39 +390,6 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< 
   cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << "grammarConstruct = " << (float) grammarConstructionClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << endl;
-}
-
-// returns a list of acceptors of the source sentences in any order. 
-// Each acceptor has a single state with arcs representing src tokens in addition to NULL (srcTokenId = 0)
-void IbmModel1::CreateSrcFsts(vector< VectorFst< LogArc > >& srcFsts) {
-  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
-  
-  // for each line
-  string line;
-  while(getline(srcCorpus, line)) {
-    
-    // read the list of integers representing source tokens
-    vector< int > intTokens;
-    StringUtils::ReadIntTokens(line, intTokens);
-    // allow null alignments
-    intTokens.push_back(NULL_SRC_TOKEN_ID);
-    
-    // create the fst
-    VectorFst< LogArc > srcFst;
-    int stateId = srcFst.AddState();
-    assert(stateId == 0);
-    for(vector<int>::const_iterator tokenIter = intTokens.begin(); tokenIter != intTokens.end(); tokenIter++) {
-      srcFst.AddArc(stateId, LogArc(*tokenIter, *tokenIter, 0, stateId));
-    }
-    srcFst.SetStart(stateId);
-    srcFst.SetFinal(stateId, 0);
-    ArcSort(&srcFst, ILabelCompare<LogArc>());
-    srcFsts.push_back(srcFst);
-    
-    // for debugging
-    //    PrintFstSummary(srcFst);
-  }
-  srcCorpus.close();
 }
 
 // TODO: not implemented

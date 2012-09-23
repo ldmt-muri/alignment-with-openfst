@@ -3,6 +3,7 @@
 
 #include <string>
 #include <sstream>
+#include <set>
 #include <vector>
 
 typedef std::string string;
@@ -29,6 +30,19 @@ class StringUtils {
       stringstream stringToken(*tokensIter);
       stringToken >> intToken;
       intTokens.push_back(intToken);
+    }
+  }
+
+  // read int token set
+  static void ReadIntTokens(const string& sentence, std::set<int>& intTokens) {
+    std::vector<string> stringTokens;
+    SplitString(sentence, ' ', stringTokens);
+    for (std::vector<string>::iterator tokensIter = stringTokens.begin(); 
+	 tokensIter < stringTokens.end(); tokensIter++) {
+      int intToken;
+      stringstream stringToken(*tokensIter);
+      stringToken >> intToken;
+      intTokens.insert(intToken);
     }
   }
 

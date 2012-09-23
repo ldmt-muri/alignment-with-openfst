@@ -59,18 +59,18 @@ class LearningInfo {
     
     // logging
     if(useMaxIterationsCount) {
-      cerr << "iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl;
+      cerr << "iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl << endl;
     }
     if(useMinLikelihoodDiff && 
        iterationsCount > 1) {
       cerr << "likelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
-					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl;
+					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl << endl;
     }
     if(useEarlyStopping &&
        iterationsCount > 1) {
       cerr << "validationLikelihood[" << iterationsCount-2 << "] = " << validationLogLikelihood[iterationsCount-2] << endl;
       cerr << "validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
-      cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl;
+      cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl << endl;
     }
     
     // check for convergnece conditions

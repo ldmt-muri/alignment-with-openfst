@@ -25,16 +25,14 @@ class IbmModel1 {
   void CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts);
 
   void CreateGrammarFst();
+
+  void CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentGrammarFsts);
   
   // zero all parameters
   void ClearParams();
   
-  void LearnParameters(vector< VectorFst< LogArc > >& srcFsts, vector< VectorFst< LogArc > >& tgtFsts);
+  void LearnParameters(vector< VectorFst< LogArc > >& tgtFsts);
   
-  // returns a list of acceptors of the source sentences in any order. 
-  // Each acceptor has a single state with arcs representing src tokens in addition to NULL (srcTokenId = 0)
-  void CreateSrcFsts(vector< VectorFst< LogArc > >& srcFsts); 
-
  public:
 
   IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
