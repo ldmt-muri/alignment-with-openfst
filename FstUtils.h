@@ -130,4 +130,30 @@ struct LogTripleToLogMapper {
   uint64 Properties(uint64 props) const { return props; }
 };
 
+// an arc mapper that doesn't change anything in the FST layout, but replaces each LogWeight
+// with a TropicalWeight (which has the path property)
+struct LogToTropicalMapper {
+  fst::StdArc operator()(const fst::LogArc &arc) const {
+    return fst::StdArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
+  }
+  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  uint64 Properties(uint64 props) const { return props; }
+};
+
+// an arc mapper that doesn't change anything in the FST layout, but replaces each TropicalWeight
+// with a LogWeight (which can be used to run forward backward)
+struct TropicalToLogMapper {
+  fst::LogArc operator()(const fst::StdArc &arc) const {
+    return fst::LogArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
+  }
+  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  uint64 Properties(uint64 props) const { return props; }
+};
+
+
+
 #endif
