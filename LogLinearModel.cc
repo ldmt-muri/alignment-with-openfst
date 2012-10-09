@@ -63,8 +63,8 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   //	tgtTokenIter++) {
   //      cerr << "count(" << srcTokenIter->first << "," << tgtTokenIter->first << ")=" << tgtTokenIter->second << endl;
   //    }
-  //  }
-  //  string dummy;
+  //  } 
+ //  string dummy;
   //  cin >> dummy;
 }
 
@@ -72,7 +72,7 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
 void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens, 
 				     int tgtSentLen, 
 				     typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
-				     VectorFst<LogTripleArc>& allTgtFst,
+				     VectorFst<LogQuadArc>& allTgtFst,
 				     set<int>& uniqueTgtTokens) {
   // determine the set of possible target tokens allowed to be in a translation
   uniqueTgtTokens.clear();
@@ -101,12 +101,12 @@ void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens,
     for (set<int>::const_iterator uniqueTgtTokenIter = uniqueTgtTokens.begin(); 
 	 uniqueTgtTokenIter != uniqueTgtTokens.end(); 
 	 uniqueTgtTokenIter++) {
-      allTgtFst.AddArc(stateId-1, LogTripleArc(*uniqueTgtTokenIter, *uniqueTgtTokenIter, FstUtils::EncodeTriple(stateId, 0, 0), stateId));
+      allTgtFst.AddArc(stateId-1, LogQuadArc(*uniqueTgtTokenIter, *uniqueTgtTokenIter, FstUtils::EncodeQuad(stateId, 0, 0, 0), stateId));
     }
   }
   allTgtFst.SetStart(0);
-  allTgtFst.SetFinal(statesCount-1, LogTripleWeight::One());
-  ArcSort(&allTgtFst, ILabelCompare<LogTripleArc>());
+  allTgtFst.SetFinal(statesCount-1, LogQuadWeight::One());
+  ArcSort(&allTgtFst, ILabelCompare<LogQuadArc>());
   
   // for debugging
   //  cerr << "=====================" << endl;
@@ -120,19 +120,19 @@ void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens,
 // create the tgt sent transducer: a linear chain of target words in order, with ProductWeight<LogWeight,LogWeight>
 // the first and second values in the weight semiring represent the tgt and src token position, respectively. 
 // note: tgtFst is assumed to be empty
-void LogLinearModel::CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogTripleArc>& tgtFst, set<int>& uniqueTgtTokens) {
+void LogLinearModel::CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQuadArc>& tgtFst, set<int>& uniqueTgtTokens) {
   // create the fst
   int statesCount = tgtTokens.size() + 1;
   for(int stateId = 0; stateId < tgtTokens.size()+1; stateId++) {
     int temp = tgtFst.AddState();
     assert(temp == stateId);
     if(stateId == 0) continue;
-    tgtFst.AddArc(stateId-1, LogTripleArc(tgtTokens[stateId-1], tgtTokens[stateId-1], FstUtils::EncodeTriple(stateId, 0, 0), stateId));
+    tgtFst.AddArc(stateId-1, LogQuadArc(tgtTokens[stateId-1], tgtTokens[stateId-1], FstUtils::EncodeQuad(stateId, 0, 0, 0), stateId));
     uniqueTgtTokens.insert(tgtTokens[stateId-1]);
   }
   tgtFst.SetStart(0);
-  tgtFst.SetFinal(tgtTokens.size(), LogTripleWeight::One());
-  ArcSort(&tgtFst, ILabelCompare<LogTripleArc>());
+  tgtFst.SetFinal(tgtTokens.size(), LogQuadWeight::One());
+  ArcSort(&tgtFst, ILabelCompare<LogQuadArc>());
   
   // for debugging
   //  cerr << "=====================" << endl;
@@ -147,7 +147,7 @@ void LogLinearModel::CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogTri
 // arcs from state x to state y have iLabel=<TGT-TOKEN-ID> and oLabel=y, where <TGT-TOKEN-ID> is a wildcard for all target words in this sentence.
 // all arcs have the weight: LogTripleWeight::One(). 
 // note: grammarFst is assumed to be empty
-void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogTripleArc>& grammarFst) {
+void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst) {
   // first, create the initial state
   int initialState = grammarFst.AddState();
   assert(initialState == 0);
@@ -158,11 +158,11 @@ void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const
   for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
     if(srcTokenIdToStateId.count(*srcTokenIter) > 0) { continue; }
     srcTokenIdToStateId[*srcTokenIter] = grammarFst.AddState();
-    grammarFst.SetFinal(srcTokenIdToStateId[*srcTokenIter], LogTripleWeight::One());
+    grammarFst.SetFinal(srcTokenIdToStateId[*srcTokenIter], LogQuadWeight::One());
   }
 
   // then, from every state ...
-  for(StateIterator< VectorFst<LogTripleArc> > siter(grammarFst); !siter.Done(); siter.Next()) {
+  for(StateIterator< VectorFst<LogQuadArc> > siter(grammarFst); !siter.Done(); siter.Next()) {
     int fromState = siter.Value();
     
     // to each of the srcTokenId-bound states ...
@@ -179,13 +179,13 @@ void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const
 	int tgtTokenId = *tgtTokenIter;
 
 	// add the damn arc!
-	grammarFst.AddArc(fromState, LogTripleArc(tgtTokenId, srcTokenId, LogTripleWeight::One(), toState));
+	grammarFst.AddArc(fromState, LogQuadArc(tgtTokenId, srcTokenId, LogQuadWeight::One(), toState));
       }
     }
   }
 
   // sort input labels to enable composition
-  ArcSort(&grammarFst, ILabelCompare<LogTripleArc>());
+  ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
 
   // for debugging
   //  cerr << "==================== " << endl;
@@ -316,7 +316,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       float arcProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, tgtTokenPos, srcTokens.size(), tgtTokens.size());
       arc.weight = FstUtils::EncodeTriple(tgtTokenPos, srcTokenPos, arcProb);
       aiter.SetValue(arc);
-    } 
+    }
   }
 
   // for debugging
@@ -484,6 +484,17 @@ void LogLinearModel::Train() {
       VectorFst< LogArc > aGivenTSProbs, aTGivenSProbs;
       ArcMap(aGivenTS, &aGivenTSProbs, LogTripleToLogMapper());
       ArcMap(aTGivenS, &aTGivenSProbs, LogTripleToLogMapper());
+
+      // prune paths whose probabilities are less than 1/e^3 of the best path
+      //      cerr << "aTGivenSProbs size: " << endl;
+      //      cerr << "before pruning: " << aTGivenSProbs.NumStates() << " stataes" << endl;
+      //      VectorFst<StdArc> prunableFst;
+      //      ArcMap(aTGivenSProbs, &prunableFst, LogToTropicalMapper());
+      //      Prune(&prunableFst, 1);
+      //      ArcMap(prunableFst, &aTGivenSProbs, TropicalToLogMapper());
+      //      cerr << "after pruning: " << aTGivenSProbs.NumStates() << " stataes" << endl;
+      //      cerr << endl;
+
       accBuildingFstClocks += clock() - timestamp4;
       
       // for debugging
@@ -492,7 +503,7 @@ void LogLinearModel::Train() {
       //      string dummy;
       //      cin >> dummy;
 
-      // get the total (i.e. end-to-end) probability of traversing each arc
+      // get the posterior probability of traversing each arc given src and tgt(s).
       clock_t timestamp5 = clock();
       VectorFst< LogArc > aGivenTSTotalProb, aTGivenSTotalProb;
       LogWeight aGivenTSBeta0, aTGivenSBeta0;

@@ -3,13 +3,22 @@
 
 #include <fst/fstlib.h>
 
+// pair typedef
 typedef fst::ProductWeight<fst::LogWeight, fst::LogWeight> LogPairWeight;
 typedef fst::ProductArc<fst::LogWeight, fst::LogWeight> LogPairArc;
+
+// triple typedef
 typedef fst::ProductWeight<LogPairWeight, fst::LogWeight> LogTripleWeight;
 typedef fst::ProductArc<LogPairWeight, fst::LogWeight> LogTripleArc;
 
+// quadruple typedef
+typedef fst::ProductWeight<LogTripleWeight, fst::LogWeight> LogQuadWeight;
+typedef fst::ProductArc<LogTripleWeight, fst::LogWeight> LogQuadArc;
+
 class FstUtils {
  public:
+  static const int LOG_ZERO = 30;
+
   inline static float nLog(float prob) {
     return -1.0 * log(prob);
   }
@@ -18,19 +27,24 @@ class FstUtils {
   }
 
   static void PrintFstSummary(fst::VectorFst<fst::LogArc>& fst);
-  static void PrintFstSummary(fst::VectorFst<LogTripleArc>& fst);
 
   static LogPairWeight EncodePairInfinity();
   static LogPairWeight EncodePair(float val1, float val2);
   static void DecodePair(const LogPairWeight& w, float& v1, float& v2);
   static string PrintPair(const LogPairWeight& w);
+  static void PrintFstSummary(fst::VectorFst<LogPairArc>& fst);
   
   static LogTripleWeight EncodeTripleInfinity();
   static LogTripleWeight EncodeTriple(float val1, float val2, float val3);
   static void DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3);
   static string PrintTriple(const LogTripleWeight& w);
+  static void PrintFstSummary(fst::VectorFst<LogTripleArc>& fst);
 
-  static const int LOG_ZERO = 30;
+  static LogQuadWeight EncodeQuadInfinity();
+  static LogQuadWeight EncodeQuad(float val1, float val2, float val3, float val4);
+  static void DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4);
+  static string PrintQuad(const LogQuadWeight& w);
+  static void PrintFstSummary(fst::VectorFst<LogQuadArc>& fst);
 
   template<class WeightType, class ArcType>
     inline static void ComputeTotalProb(const fst::VectorFst<ArcType>& prob, fst::VectorFst<ArcType>& totalProbs, WeightType& beta0) {
@@ -130,6 +144,20 @@ struct LogTripleToLogMapper {
   uint64 Properties(uint64 props) const { return props; }
 };
 
+// an arc mapper that doesn't change anything in the FST layout, but replaces each LogQuadWeight 
+// with a LogWeight equal to the last component in LogQuadWeight
+struct LogQuadToLogMapper {
+  fst::LogArc operator()(const LogQuadArc &arc) const {
+    float v1, v2, v3, v4;
+    FstUtils::DecodeQuad(arc.weight, v1, v2, v3, v4);
+    return fst::LogArc(arc.ilabel, arc.olabel, v4, arc.nextstate);
+  }
+  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  uint64 Properties(uint64 props) const { return props; }
+};
+
 // an arc mapper that doesn't change anything in the FST layout, but replaces each LogWeight
 // with a TropicalWeight (which has the path property)
 struct LogToTropicalMapper {
@@ -153,7 +181,5 @@ struct TropicalToLogMapper {
   fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
   uint64 Properties(uint64 props) const { return props; }
 };
-
-
 
 #endif

@@ -40,17 +40,20 @@ void LogLinearParams::FireFeatures(int srcToken, int tgtToken, int srcPos, int t
 				   int srcSentLength, int tgtSentLength, std::map<string, float>& activeFeatures) {
   stringstream temp;
 
-  // F1: src-tgt pair
+  // F1: src-tgt pair (subset of word association features in Chris et al. 2011)
   temp << "F1:" << srcToken << "-" << tgtToken;
   activeFeatures[temp.str()] = 1.0;
 
-  // F2: diagonal-bias
+  // F2: diagonal-bias (positional features in Chris et al. 2011)
   activeFeatures["F2:diagonal-bias"] = fabs((float) srcPos / srcSentLength) - ((float) tgtPos / tgtSentLength);
   
-  // F3: src token
+  // F3: src token (source features in Chris et al. 2011)
   temp.str("");
   temp << "F3:" << srcToken;
   activeFeatures[temp.str()] = 1.0;
+
+  // F4: alignment jump (subset of src path features in Chris et al. 2011)
+  //  activeFeatures["F4:alignment-jump"] = 
 }
 
 // each line consists of: <featureStringId><space><featureWeight>\n
