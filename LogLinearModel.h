@@ -22,18 +22,18 @@ class LogLinearModel {
   void NormalizeParams();
   
   // creates an acceptor for a target sentence
-  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogTripleArc>& tgtFst, set<int>& uniqueTgtTokens);
+  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQuadArc>& tgtFst, set<int>& uniqueTgtTokens);
 
   // create an acceptor of many possible translations of the source sentence
   void CreateAllTgtFst(const vector<int>& srcTokens, 
 		       int tgtSentLen, 
 		       typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
-		       VectorFst<LogTripleArc>& allTgtFst,
+		       VectorFst<LogQuadArc>& allTgtFst,
 		       set<int>& uniqueTgtTokens);
 
-  void CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogTripleArc>& grammarFst);
+  void CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst);
   
-  void CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogTripleArc>& srcFst);
+  void CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
 
   bool IsModelConverged();
 
@@ -62,9 +62,9 @@ class LogLinearModel {
 
   void Align();
 
-  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& alignmentFst, bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, int sentId);
+  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, int sentId);
 
-  void AddSentenceContributionToGradient(const VectorFst< LogTripleArc >& descriptorFst, 
+  void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 
 					 LogLinearParams& gradient,
 					 float logPartitionFunction,

@@ -145,7 +145,7 @@ void LogLinearModel::CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQua
 // in addition to the initial state, there's one final state per sourceTokenId in this sentence pair.
 // all states (including initial) emit arcs to all other states (excluding initial). 
 // arcs from state x to state y have iLabel=<TGT-TOKEN-ID> and oLabel=y, where <TGT-TOKEN-ID> is a wildcard for all target words in this sentence.
-// all arcs have the weight: LogTripleWeight::One(). 
+// all arcs have the weight: LogQuadWeight::One(). 
 // note: grammarFst is assumed to be empty
 void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst) {
   // first, create the initial state
@@ -195,28 +195,28 @@ void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const
 }
 
 // this is a single-state acceptor which accepts any sequence of srcTokenIds in this sentence pair
-// the weight on the arcs is LogTripleWeight(0,SRC-TOKEN-POS). In case a srcTokenId is repeated more
+// the weight on the arcs is LogQuadWeight(0,SRC-TOKEN-POS). In case a srcTokenId is repeated more
 // in this source sentence, we create multiple arcs for it in order to adequately represent the 
 // corresponding position in src sentence. 
 // note: the first token in srcTokens must be the NULL source token ID
 // note: srcFst is assumed to be empty
-void LogLinearModel::CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogTripleArc>& srcFst) {
+void LogLinearModel::CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
   // note: the first token in srcTokens must be the NULL source token ID
   assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
 
   // create the initial/final and only state
   int stateId = srcFst.AddState();
   srcFst.SetStart(stateId);
-  srcFst.SetFinal(stateId, LogTripleWeight::One());
+  srcFst.SetFinal(stateId, LogQuadWeight::One());
   // note: srcFst is assumed to be empty
   assert(stateId == 0);
 
   // now add the arcs
   for(int srcTokenPos = 0; srcTokenPos < srcTokens.size(); srcTokenPos++) {
     int srcToken = srcTokens[srcTokenPos];
-    srcFst.AddArc(stateId, LogTripleArc(srcToken, srcToken, FstUtils::EncodeTriple(0, srcTokenPos, 0), stateId));
+    srcFst.AddArc(stateId, LogQuadArc(srcToken, srcToken, FstUtils::EncodeQuad(0, srcTokenPos, 0, 0), stateId));
   }
-  ArcSort(&srcFst, ILabelCompare<LogTripleArc>());
+  ArcSort(&srcFst, ILabelCompare<LogQuadArc>());
     
   // for debugging
   //  cerr << "=============SRC FST==========" << endl;
@@ -228,7 +228,7 @@ void LogLinearModel::CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogTri
 // may be a translation of the source sentence. Effectively, this FST represents p(alignment, tgtSent | srcSent, L_t).
 // lexicon is only used when tgtLineIsGiven=false. Depending on its value, the constructed FST may represent a subset of 
 // possible translations (cuz it's usually too expensive to represnet all translations). 
-void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogTripleArc>& alignmentFst, 
+void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
 				       bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 				       int sentId) {
 
@@ -244,7 +244,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   if(!learningInfo.saveAlignmentFstsOnDisk || 
      learningInfo.saveAlignmentFstsOnDisk && learningInfo.iterationsCount == 0) {
     // tgt transducer
-    VectorFst<LogTripleArc> tgtFst;
+    VectorFst<LogQuadArc> tgtFst;
     // unique target tokens used in tgtFst. this is populated by CreateTgtFst or CreateAllTgtFst and later used by CreatePerSentGrammarFst
     set<int> uniqueTgtTokens;
     // in this model, two kinds of alignment FSTs are needed: one assumes a particular target sentence, 
@@ -256,15 +256,15 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
     }
     
     // per-sentence grammar
-    VectorFst<LogTripleArc> grammarFst;
+    VectorFst<LogQuadArc> grammarFst;
     CreatePerSentGrammarFst(srcTokens, uniqueTgtTokens, grammarFst);
     
     // src transducer
-    VectorFst<LogTripleArc> srcFst;
+    VectorFst<LogQuadArc> srcFst;
     CreateSrcFst(srcTokens, srcFst);
     
     // compose the three transducers to get the alignmentFst with weights representing tgt/src positions
-    VectorFst<LogTripleArc> temp;
+    VectorFst<LogQuadArc> temp;
     Compose(tgtFst, grammarFst, &temp);
     
     // for debugging
@@ -304,17 +304,17 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   }
   
   // compute the probability of each transition on the alignment FST according to the current model parameters
-  // set the third value in the LogTripleWeights on the arcs = the computed prob for that arc
-  for(StateIterator< VectorFst<LogTripleArc> > siter(alignmentFst); !siter.Done(); siter.Next()) {
-    LogTripleArc::StateId stateId = siter.Value();
-    for(MutableArcIterator< VectorFst<LogTripleArc> > aiter(&alignmentFst, stateId); !aiter.Done(); aiter.Next()) {
-      LogTripleArc arc = aiter.Value();
+  // set the third value in the LogQuadWeights on the arcs = the computed prob for that arc
+  for(StateIterator< VectorFst<LogQuadArc> > siter(alignmentFst); !siter.Done(); siter.Next()) {
+    LogQuadArc::StateId stateId = siter.Value();
+    for(MutableArcIterator< VectorFst<LogQuadArc> > aiter(&alignmentFst, stateId); !aiter.Done(); aiter.Next()) {
+      LogQuadArc arc = aiter.Value();
       int tgtTokenId = arc.ilabel;
       int srcTokenId = arc.olabel;
       float tgtTokenPos, srcTokenPos, dummy;
-      FstUtils::DecodeTriple(arc.weight, tgtTokenPos, srcTokenPos, dummy);
+      FstUtils::DecodeQuad(arc.weight, tgtTokenPos, srcTokenPos, dummy, dummy);
       float arcProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, tgtTokenPos, srcTokens.size(), tgtTokens.size());
-      arc.weight = FstUtils::EncodeTriple(tgtTokenPos, srcTokenPos, arcProb);
+      arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, dummy, arcProb);
       aiter.SetValue(arc);
     }
   }
@@ -330,7 +330,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 
 }
 
-void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogTripleArc >& descriptorFst, 
+void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 						       const VectorFst< LogArc >& totalProbFst, 
 						       LogLinearParams& gradient,
 						       float logPartitionFunction,
@@ -343,7 +343,7 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogTripl
     d1 += clock() - temp;
     temp = clock();
     ArcIterator< VectorFst< LogArc > > totalProbArcIter(totalProbFst, stateId);
-    for (ArcIterator< VectorFst< LogTripleArc > > descriptorArcIter(descriptorFst, stateId);
+    for (ArcIterator< VectorFst< LogQuadArc > > descriptorArcIter(descriptorFst, stateId);
 	 !descriptorArcIter.Done() && !totalProbArcIter.Done();
 	 descriptorArcIter.Next(), totalProbArcIter.Next()) {
       d2 += clock() - temp;
@@ -352,7 +352,7 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogTripl
       int tgtToken = descriptorArcIter.Value().ilabel;
       int srcToken = descriptorArcIter.Value().olabel;
       float tgtPos, srcPos, dummy;
-      FstUtils::DecodeTriple(descriptorArcIter.Value().weight, tgtPos, srcPos, dummy);
+      FstUtils::DecodeQuad(descriptorArcIter.Value().weight, tgtPos, srcPos, dummy, dummy);
       LogWeight totalProb = totalProbArcIter.Value().weight;
       d3 += clock() - temp;
       temp = clock();
@@ -476,14 +476,14 @@ void LogLinearModel::Train() {
       
       // build FST(a|t,s) and build FST(a,t|s)
       clock_t timestamp4 = clock();
-      VectorFst< LogTripleArc > aGivenTS, aTGivenS;
+      VectorFst< LogQuadArc > aGivenTS, aTGivenS;
       BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter);
       BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter);
 
-      // change the LogTripleWeight semiring to LogWeight using LogTripleToLogMapper
+      // change the LogQuadWeight semiring to LogWeight using LogQuadToLogMapper
       VectorFst< LogArc > aGivenTSProbs, aTGivenSProbs;
-      ArcMap(aGivenTS, &aGivenTSProbs, LogTripleToLogMapper());
-      ArcMap(aTGivenS, &aTGivenSProbs, LogTripleToLogMapper());
+      ArcMap(aGivenTS, &aGivenTSProbs, LogQuadToLogMapper());
+      ArcMap(aTGivenS, &aTGivenSProbs, LogQuadToLogMapper());
 
       // prune paths whose probabilities are less than 1/e^3 of the best path
       //      cerr << "aTGivenSProbs size: " << endl;
