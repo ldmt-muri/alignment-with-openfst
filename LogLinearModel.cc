@@ -45,14 +45,37 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
     StringUtils::ReadIntTokens(tgtLine, tgtTokens);
     // fill srcTgtFreq with frequency of co-occurence of each srcToken-tgtToken pair
     for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+      map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
       for(vector<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
-	map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
 	if(tgtFreq.count(*tgtTokenIter) == 0) { tgtFreq[*tgtTokenIter] = 0; }
 	tgtFreq[*tgtTokenIter]++;
       }
     }
   }
+  srcCorpus.close();
+  tgtCorpus.close();
+
+  // grammar is unweighted, so there's no need to change from one iteration to the next (unless we want to prune it)
+  CreateGrammarFst();
+
+  // bool vectors indicating which feature types to use
+  assert(enabledFeatureTypesSimple.size() == 0 && enabledFeatureTypesFirstOrder.size() == 0);
+  enabledFeatureTypesSimple.push_back(true); // F0
+  enabledFeatureTypesSimple.push_back(true); // F1
+  enabledFeatureTypesSimple.push_back(true); // F2
+  enabledFeatureTypesSimple.push_back(true); // F3
+  enabledFeatureTypesSimple.push_back(true); // F4
+  enabledFeatureTypesSimple.push_back(true); // F5
+  enabledFeatureTypesSimple.push_back(true); // F6
+  enabledFeatureTypesFirstOrder.push_back(true); // F0
+  enabledFeatureTypesFirstOrder.push_back(true); // F1
+  enabledFeatureTypesFirstOrder.push_back(true); // F2
+  enabledFeatureTypesFirstOrder.push_back(true); // F3
+  enabledFeatureTypesFirstOrder.push_back(false); // F4
+  enabledFeatureTypesFirstOrder.push_back(false); // F5
+  enabledFeatureTypesFirstOrder.push_back(false); // F6
   
+
   // for debugging
   //  cerr << "================srcTgtFreq===================" << endl;
   //  for(map<int, map<int,int> >::const_iterator srcTokenIter = srcTgtFreq.begin();
@@ -66,6 +89,33 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   //  } 
  //  string dummy;
   //  cin >> dummy;
+}
+
+// assumptions: 
+// - srcTgtFreq has been populated
+// - grammarFst is empty
+void LogLinearModel::CreateGrammarFst() {
+  assert(grammarFst.NumStates() == 0);
+  assert(srcTgtFreq.size() != 0);
+
+  // create the single state of this fst and make it initial and final
+  int stateId = grammarFst.AddState();
+  assert(stateId == 0);
+  grammarFst.SetStart(stateId);
+  grammarFst.SetFinal(stateId, LogQuadWeight::One());
+
+  // for each src type
+  for(map<int, map<int, int> >::const_iterator srcIter = srcTgtFreq.begin();
+      srcIter != srcTgtFreq.end();
+      srcIter++) {
+    // for each tgt type that cooccurs with that src type
+    for(map<int, int>::const_iterator tgtIter = srcIter->second.begin(); 
+	tgtIter != srcIter->second.end();
+	tgtIter++) {
+      // for each cooccuring tgt-src pair in the corpus, add an arc
+      grammarFst.AddArc(stateId, LogQuadArc(tgtIter->first, srcIter->first, LogQuadWeight::One(), stateId));
+    }
+  }
 }
 
 // create a transducer that represents possible translations of the source sentence of a given length
@@ -194,13 +244,65 @@ void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const
   //  FstUtils::PrintFstSummary(grammarFst);  
 }
 
+// assumptions:
+// - first token in srcTokens is the NULL token (to represent null-alignments)
+// - srcFst is assumed to be empty
+//
+// notes:
+// - the structure of this FST is laid out such that each state encodes the previous non-null 
+//   src position. the initial state is unique: it represents both the starting state the state
+//   where all previous alignments are null-alignments.
+// - if a source type is repeated, it will have multiple states corresponding to the different positions
+// - the "1stOrder" part of the function name indicates this FST represents a first order markov process
+//   for alignment transitions.
+//
+void LogLinearModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
+
+  // enforce assumptions
+  assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
+  assert(srcFst.NumStates() == 0);
+
+  // create one state per src position
+  for(int i = 0; i < srcTokens.size(); i++) {
+    int stateId = srcFst.AddState();
+    // assumption that AddState() first returns a zero then increment ones
+    assert(i == stateId);
+  }
+
+  // for each state
+  for(int i = 0; i < srcTokens.size(); i++) {
+    
+    // set the initial/final states
+    if(i == 0) {
+      srcFst.SetStart(i);
+    } else {
+      srcFst.SetFinal(i, LogQuadWeight::One());
+    }
+
+    // each state can go to itself with the null src token
+    srcFst.AddArc(i, LogQuadArc(srcTokens[i], srcTokens[i], FstUtils::EncodeQuad(0, i, i, 0), i));
+
+    // each state can go to states representing non-null alignments
+    for(int j = 1; j < srcTokens.size(); j++) {
+      srcFst.AddArc(i, LogQuadArc(srcTokens[j], srcTokens[j], FstUtils::EncodeQuad(0, j, i, 0), j));
+    }
+  }
+ 
+  // arc sort to enable composition
+  ArcSort(&srcFst, ILabelCompare<LogQuadArc>());
+
+  // for debugging
+  //  cerr << "=============SRC FST==========" << endl;
+  //  FstUtils::PrintFstSummary(srcFst);
+}  
+
 // this is a single-state acceptor which accepts any sequence of srcTokenIds in this sentence pair
 // the weight on the arcs is LogQuadWeight(0,SRC-TOKEN-POS). In case a srcTokenId is repeated more
 // in this source sentence, we create multiple arcs for it in order to adequately represent the 
 // corresponding position in src sentence. 
 // note: the first token in srcTokens must be the NULL source token ID
 // note: srcFst is assumed to be empty
-void LogLinearModel::CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
+void LogLinearModel::CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
   // note: the first token in srcTokens must be the NULL source token ID
   assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
 
@@ -255,27 +357,16 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst, uniqueTgtTokens);
     }
     
-    // per-sentence grammar
-    VectorFst<LogQuadArc> grammarFst;
-    CreatePerSentGrammarFst(srcTokens, uniqueTgtTokens, grammarFst);
+    // src transducer(s)
+    VectorFst<LogQuadArc> simpleSrcFst, firstOrderSrcFst;
+    CreateSimpleSrcFst(srcTokens, simpleSrcFst);
+    Create1stOrderSrcFst(srcTokens, firstOrderSrcFst);
     
-    // src transducer
-    VectorFst<LogQuadArc> srcFst;
-    CreateSrcFst(srcTokens, srcFst);
-    
-    // compose the three transducers to get the alignmentFst with weights representing tgt/src positions
-    VectorFst<LogQuadArc> temp;
+    // compose the three transducers (tgt, grammar, src) to get the alignmentFst with weights representing tgt/src positions
+    VectorFst<LogQuadArc> temp, simpleAlignmentFst;
     Compose(tgtFst, grammarFst, &temp);
-    
-    // for debugging
-    //  if(tgtLineIsGiven) {
-    //    cerr << "=======================tgtFst + perSentGrammar=====================" << endl;
-    //    FstUtils::PrintFstSummary(temp);
-    //    string dummy;
-    //    cin >> dummy;
-    //  }
-    
-    Compose(temp, srcFst, &alignmentFst);
+    Compose(temp, simpleSrcFst, &simpleAlignmentFst);
+    Compose(temp, firstOrderSrcFst, &alignmentFst);
     
     // save the resulting alignmentFst for future use
     if(learningInfo.saveAlignmentFstsOnDisk) {
@@ -304,20 +395,23 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   }
   
   // compute the probability of each transition on the alignment FST according to the current model parameters
-  // set the third value in the LogQuadWeights on the arcs = the computed prob for that arc
+  // set the fourth value in the LogQuadWeights on the arcs = the computed prob for that arc
   for(StateIterator< VectorFst<LogQuadArc> > siter(alignmentFst); !siter.Done(); siter.Next()) {
     LogQuadArc::StateId stateId = siter.Value();
     for(MutableArcIterator< VectorFst<LogQuadArc> > aiter(&alignmentFst, stateId); !aiter.Done(); aiter.Next()) {
       LogQuadArc arc = aiter.Value();
       int tgtTokenId = arc.ilabel;
       int srcTokenId = arc.olabel;
-      float tgtTokenPos, srcTokenPos, dummy;
-      FstUtils::DecodeQuad(arc.weight, tgtTokenPos, srcTokenPos, dummy, dummy);
-      float arcProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, tgtTokenPos, srcTokens.size(), tgtTokens.size());
-      arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, dummy, arcProb);
+      float tgtTokenPos, srcTokenPos, prevSrcTokenPos, dummy;
+      FstUtils::DecodeQuad(arc.weight, tgtTokenPos, srcTokenPos, prevSrcTokenPos, dummy);
+      float arcProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, prevSrcTokenPos, tgtTokenPos, 
+					    srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
+      arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, prevSrcTokenPos, arcProb);
       aiter.SetValue(arc);
     }
   }
+
+  // TODO: compute metrics of how similar the true and proposal distributions are
 
   // for debugging
   //  cerr << "end of BuildAlignmentFst()" << endl;
@@ -351,14 +445,14 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
       // parse the descriptorArc and totalProbArc
       int tgtToken = descriptorArcIter.Value().ilabel;
       int srcToken = descriptorArcIter.Value().olabel;
-      float tgtPos, srcPos, dummy;
-      FstUtils::DecodeQuad(descriptorArcIter.Value().weight, tgtPos, srcPos, dummy, dummy);
+      float tgtPos, srcPos, prevSrcPos, dummy;
+      FstUtils::DecodeQuad(descriptorArcIter.Value().weight, tgtPos, srcPos, prevSrcPos, dummy);
       LogWeight totalProb = totalProbArcIter.Value().weight;
       d3 += clock() - temp;
       temp = clock();
       // find the features activated on this transition, and their values
       map<string, float> activeFeatures;
-      gradient.FireFeatures(srcToken, tgtToken, (int)srcPos, (int)tgtPos, srcTokensCount, tgtTokensCount, activeFeatures);
+      gradient.FireFeatures(srcToken, tgtToken, (int)srcPos, (int)prevSrcPos, (int)tgtPos, srcTokensCount, tgtTokensCount, enabledFeatureTypesFirstOrder, activeFeatures);
       d4 += clock() - temp;
       temp = clock();
       // for debugging

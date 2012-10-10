@@ -32,8 +32,12 @@ class LogLinearModel {
 		       set<int>& uniqueTgtTokens);
 
   void CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst);
+
+  void CreateGrammarFst();
   
-  void CreateSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+
+  void CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
 
   bool IsModelConverged();
 
@@ -77,13 +81,15 @@ class LogLinearModel {
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
   LogLinearParams params;
-  VectorFst<LogArc> grammarFst;
+  VectorFst<LogQuadArc> grammarFst;
   LearningInfo learningInfo;
   // maps a srcTokenId to a map of tgtTokenIds and the number of times they co-occurred in a sent pair
   std::map<int, std::map<int, int> > srcTgtFreq;
   float regularizationConst;
   typename Regularizer::Regularizer regularizationType;
   OptUtils::OptMethod optimizationMethod;
+  // vectors specifiying which feature types to use (initialized in the constructor)
+  std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;  
 };
 
 #endif

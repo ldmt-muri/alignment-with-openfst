@@ -7,6 +7,7 @@
 #include <fstream>
 #include <assert.h>
 #include <math.h>
+#include <cmath>
 
 #include "LearningInfo.h"
 
@@ -14,13 +15,15 @@ class LogLinearParams {
 
  public:
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
-  void FireFeatures(int srcToken, int tgtToken, int srcPos, int tgtPos, int srcSentLength, int tgtSentLength, std::map<std::string, float>& activeFeatures);
+  void FireFeatures(int srcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, int srcSentLength, int tgtSentLength, 
+		    const std::vector<bool>& enabledFeatureTypes, std::map<std::string, float>& activeFeatures);
 
   // compute dot product of two sparse vectors, each represented with a map. 
   float DotProduct(const std::map<std::string, float>& values, const std::map<std::string, float>& weights);
 
   // given description of an arc in the alignment transducer, compute the local arc probability
-  float ComputeLogProb(int srcToken, int tgtToken, int srcPos, int tgtPos, int srcSentLength, int tgtSentLength);
+  float ComputeLogProb(int srcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, int srcSentLength, int tgtSentLength,
+		       const std::vector<bool>& enabledFeatureTypes);
 
   // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const LogLinearParams& gradient, const OptUtils::OptMethod& optMethod);
