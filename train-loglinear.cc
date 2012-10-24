@@ -34,6 +34,12 @@ void Experimental() {
   cout << "The temp fst looks like this:" << endl;
   FstUtils::PrintFstSummary(temp);
 
+  LogWeight x = FstUtils::nLog(0.25);
+  LogWeight y = FstUtils::nLog(0.5);
+  LogWeight z = Divide(x, y);
+  cerr << "0.25 / 0.5 = " << FstUtils::nExp(z.Value());
+  cerr << x << " - " << y << " = " << z;
+
   /*
   vector<LogWeight> alphas, betas;
   ShortestDistance(alignment, &alphas, false);
@@ -69,6 +75,8 @@ int main(int argc, char **argv) {
   learningInfo.maxIterationsCount = 1000;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
+  learningInfo.samplesCount = 2;
+  learningInfo.distATGivenS = Distribution::TRUE;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

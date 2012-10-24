@@ -66,7 +66,9 @@ class LogLinearModel {
 
   void Align();
 
-  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, int sentId);
+  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
+			 bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+			 int sentId, Distribution::Distribution distribution);
 
   void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 
@@ -89,7 +91,7 @@ class LogLinearModel {
   typename Regularizer::Regularizer regularizationType;
   OptUtils::OptMethod optimizationMethod;
   // vectors specifiying which feature types to use (initialized in the constructor)
-  std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;  
+  std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;
 };
 
 #endif

@@ -8,6 +8,10 @@
 
 using namespace std;
 
+namespace Distribution {
+  enum Distribution {TRUE, PROPOSAL1};
+}
+
 namespace DiscriminativeLexicon {
   enum DiscriminativeLexicon {ALL, COOCC};
 }
@@ -52,6 +56,8 @@ class LearningInfo {
     maxIterationsCount = 10;
     saveAlignmentFstsOnDisk = false;
     neighborhood = DiscriminativeLexicon::ALL;
+    samplesCount = 1000;
+    distATGivenS = Distribution::TRUE;
   }
 
   bool IsModelConverged() {
@@ -116,10 +122,17 @@ class LearningInfo {
   // save alignment FSTs on disk
   bool saveAlignmentFstsOnDisk;
 
+  // number of samples used to approximate the posterior expectations
+  int samplesCount;
+
   // output
   int iterationsCount;
   vector< float > logLikelihood;
-  vector< float > validationLogLikelihood;
+  vector< float > validationLogLikelihood;  
+
+  // distribution used to model p(aT|S)
+  Distribution::Distribution distATGivenS;
+
 };
 
 
