@@ -202,59 +202,6 @@ void LogLinearModel::CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQua
   //  FstUtils::PrintFstSummary(tgtFst);
 }
 
-// this grammar fst is designed such that when composed with tgtFst and srcFst, it produces the alignmentFst.
-// in addition to the initial state, there's one final state per sourceTokenId in this sentence pair.
-// all states (including initial) emit arcs to all other states (excluding initial). 
-// arcs from state x to state y have iLabel=<TGT-TOKEN-ID> and oLabel=y, where <TGT-TOKEN-ID> is a wildcard for all target words in this sentence.
-// all arcs have the weight: LogQuadWeight::One(). 
-// note: grammarFst is assumed to be empty
-void LogLinearModel::CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst) {
-  // first, create the initial state
-  int initialState = grammarFst.AddState();
-  assert(initialState == 0);
-  grammarFst.SetStart(initialState);
-
-  // then create a final state for each unique src token id
-  map<int,int> srcTokenIdToStateId;
-  for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
-    if(srcTokenIdToStateId.count(*srcTokenIter) > 0) { continue; }
-    srcTokenIdToStateId[*srcTokenIter] = grammarFst.AddState();
-    grammarFst.SetFinal(srcTokenIdToStateId[*srcTokenIter], LogQuadWeight::One());
-  }
-
-  // then, from every state ...
-  for(StateIterator< VectorFst<LogQuadArc> > siter(grammarFst); !siter.Done(); siter.Next()) {
-    int fromState = siter.Value();
-    
-    // to each of the srcTokenId-bound states ...
-    for(map<int,int>::const_iterator boundStateIter = srcTokenIdToStateId.begin(); 
-	boundStateIter != srcTokenIdToStateId.end();
-	boundStateIter++) {
-      int toState = boundStateIter->second;
-      int srcTokenId = boundStateIter->first;
-
-      // add arcs for each unique tgtTokenId
-      for(set<int>::const_iterator tgtTokenIter = uniqueTgtTokens.begin();
-	  tgtTokenIter != uniqueTgtTokens.end();
-	  tgtTokenIter++) {
-	int tgtTokenId = *tgtTokenIter;
-
-	// add the damn arc!
-	grammarFst.AddArc(fromState, LogQuadArc(tgtTokenId, srcTokenId, LogQuadWeight::One(), toState));
-      }
-    }
-  }
-
-  // sort input labels to enable composition
-  ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
-
-  // for debugging
-  //  cerr << "==================== " << endl;
-  //  cerr << "PER-SENT GRAMMAR FST " << endl;
-  //  cerr << "==================== " << endl;
-  //  FstUtils::PrintFstSummary(grammarFst);  
-}
-
 // assumptions:
 // - first token in srcTokens is the NULL token (to represent null-alignments)
 // - srcFst is assumed to be empty
@@ -711,6 +658,7 @@ void LogLinearModel::Train() {
       BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE, tgtFst);
       //cerr << "building aTGivenS" << endl;
       BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
+      // TODO: does it make sense to union aGivenTS into aTGivenS
       //      if(learningInfo.distATGivenS != Distribution::TRUE) {
       //	Union(&aTGivenS, aGivenTS);
       //      }
