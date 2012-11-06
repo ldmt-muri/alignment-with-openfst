@@ -27,7 +27,7 @@ class LogLinearModel {
   // create an acceptor of many possible translations of the source sentence
   void CreateAllTgtFst(const vector<int>& srcTokens, 
 		       int tgtSentLen, 
-		       typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+		       DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 		       VectorFst<LogQuadArc>& allTgtFst,
 		       set<int>& uniqueTgtTokens);
 
@@ -67,13 +67,12 @@ class LogLinearModel {
   void Align();
 
   void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
-			 bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
-			 int sentId, Distribution::Distribution distribution);
+			 bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+			 int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst);
 
   void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 
 					 LogLinearParams& gradient,
-					 float logPartitionFunction,
 					 int srcTokensCount,
 					 int tgtTokensCount,
 					 bool subtract);
@@ -88,7 +87,7 @@ class LogLinearModel {
   // maps a srcTokenId to a map of tgtTokenIds and the number of times they co-occurred in a sent pair
   std::map<int, std::map<int, int> > srcTgtFreq;
   float regularizationConst;
-  typename Regularizer::Regularizer regularizationType;
+  Regularizer::Regularizer regularizationType;
   OptUtils::OptMethod optimizationMethod;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;

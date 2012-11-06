@@ -46,11 +46,11 @@ void Experimental() {
   ShortestDistance(alignment, &betas, true);
   int stateId = 0;
   for (vector<LogWeight>::const_iterator alphasIter = alphas.begin(); alphasIter != alphas.end(); alphasIter++) {
-    cout << "alphas[" << stateId++ << "] = " << alphasIter->Value() << " = e^" << exp(-1.0 * alphasIter->Value()) << endl;
+  cout << "alphas[" << stateId++ << "] = " << alphasIter->Value() << " = e^" << exp(-1.0 * alphasIter->Value()) << endl;
   }
   stateId = 0;
   for (vector<LogWeight>::const_iterator betasIter = betas.begin(); betasIter != betas.end(); betasIter++) {
-    cout << "betas[" << stateId++ << "] = " << betasIter->Value() << " = e^" << exp(-1.0 * betasIter->Value()) << endl;
+  cout << "betas[" << stateId++ << "] = " << betasIter->Value() << " = e^" << exp(-1.0 * betasIter->Value()) << endl;
   }
   */
 }
@@ -69,14 +69,13 @@ int main(int argc, char **argv) {
   float regularizationConst = 0.01;
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 1000;
   learningInfo.useMinLikelihoodDiff = true;
-  learningInfo.minLikelihoodDiff = 1;
-  learningInfo.maxIterationsCount = 1000;
+  learningInfo.minLikelihoodDiff = 0.01;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
-  learningInfo.samplesCount = 2;
-  learningInfo.distATGivenS = Distribution::TRUE;
+  learningInfo.samplesCount = 10000;
+  learningInfo.distATGivenS = Distribution::PROPOSAL1;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

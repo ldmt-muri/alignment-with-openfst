@@ -4,6 +4,7 @@
 #include <ctime>
 #include <cstdlib>
 #include <fst/fstlib.h>
+#include <typeinfo>
 
 // pair typedef
 typedef fst::ProductWeight<fst::LogWeight, fst::LogWeight> LogPairWeight;
@@ -21,6 +22,7 @@ class FstUtils {
  public:
   static const int LOG_ZERO = 30;
   static const int EPSILON = 0;
+  static const float LOG_PROBS_MUST_BE_GREATER_THAN_ME; // set in FstUtils.cc
 
   inline static float nLog(double prob) {
     return -1.0 * log(prob);
@@ -30,6 +32,9 @@ class FstUtils {
   }
 
   static string PrintFstSummary(fst::VectorFst<fst::LogArc>& fst);
+  static string PrintFstSummary(fst::VectorFst<fst::StdArc>& fst);
+  static int FindFinalState(const fst::VectorFst<fst::LogArc>& fst);
+  static void MakeOneFinalState(fst::VectorFst<fst::LogArc>& fst);
 
   static LogPairWeight EncodePairInfinity();
   static LogPairWeight EncodePair(float val1, float val2);
@@ -73,7 +78,9 @@ class FstUtils {
     //cerr << "creating states of the shadow fst" << endl;
     while(totalProbs.NumStates() < prob.NumStates()) {
       int stateId = totalProbs.AddState();
-      totalProbs.SetFinal(stateId, prob.Final(stateId));
+      if(prob.Final(stateId) != WeightType::Zero()) {
+	totalProbs.SetFinal(stateId, WeightType::One());
+      }
     }
     totalProbs.SetStart(prob.Start());
       
@@ -85,12 +92,19 @@ class FstUtils {
 	ArcType arc = aiter.Value();
 	typename ArcType::StateId to = arc.nextstate;
 	// posterior arc weight = weight(start=>arc) * weight(arc) * weight(arc=>final)
-	// note: we haven't yet divided by the partition function
-	// TODO: wouldn't it be better to divide by the partition function right here?!
-	WeightType arcTotalProb = fst::Times(fst::Times(alphas[from], arc.weight), betas[to]);
+	WeightType arcTotalProb = fst::Divide(fst::Times(fst::Times(alphas[from], arc.weight), betas[to]), beta0);
+	// TODO: assert this is a valid probability (it's tricky because we don't know which semiring is used.
+	//	if(typeid(WeightType).name() == "N3fst12LogWeightTplIfEE") {
+	//	  assert(arcTotalProb >= 0);
+	//	}
+	// add the arc
 	totalProbs.AddArc(from, ArcType(arc.ilabel, arc.olabel, arcTotalProb, to));
       } 
     }
+
+    // for debugging only
+    //    cerr << "===============TotalProbFst===================" << endl;
+    //    cerr << FstUtils::PrintFstSummary(totalProbs) << endl << endl;
   }
 };
 

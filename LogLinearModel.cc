@@ -37,12 +37,18 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
   // for each line
   string srcLine, tgtLine;
+  map<int,int> tgtTokenIdFreq;
   while(getline(srcCorpus, srcLine)) {
     getline(tgtCorpus, tgtLine);
     // read the list of integers representing target tokens
     vector< int > srcTokens, tgtTokens;
     StringUtils::ReadIntTokens(srcLine, srcTokens);
     StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    // update tgtTokenIdFreq (i.e. how many times each target token id has been repeated in the corpus)
+    for(vector<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
+      if(tgtTokenIdFreq.count(*tgtTokenIter) == 0) { tgtTokenIdFreq[*tgtTokenIter] = 0; }
+      tgtTokenIdFreq[*tgtTokenIter]++;
+    }
     // fill srcTgtFreq with frequency of co-occurence of each srcToken-tgtToken pair
     for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
       map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
@@ -51,6 +57,11 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
 	tgtFreq[*tgtTokenIter]++;
       }
     }
+  }
+  // add the null alignments to the grammar
+  map<int,int>& tgtFreq = srcTgtFreq[NULL_SRC_TOKEN_ID];
+  for(map<int,int>::const_iterator tgtTokenIter = tgtTokenIdFreq.begin(); tgtTokenIter != tgtTokenIdFreq.end(); tgtTokenIter++) {
+    tgtFreq[tgtTokenIter->first] = tgtTokenIter->second;
   }
   srcCorpus.close();
   tgtCorpus.close();
@@ -64,16 +75,16 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   enabledFeatureTypesSimple.push_back(true); // F1
   enabledFeatureTypesSimple.push_back(true); // F2
   enabledFeatureTypesSimple.push_back(true); // F3
-  enabledFeatureTypesSimple.push_back(true); // F4
-  enabledFeatureTypesSimple.push_back(true); // F5
-  enabledFeatureTypesSimple.push_back(true); // F6
+  enabledFeatureTypesSimple.push_back(false); // F4
+  enabledFeatureTypesSimple.push_back(false); // F5
+  enabledFeatureTypesSimple.push_back(false); // F6
   enabledFeatureTypesFirstOrder.push_back(true); // F0
   enabledFeatureTypesFirstOrder.push_back(true); // F1
   enabledFeatureTypesFirstOrder.push_back(true); // F2
   enabledFeatureTypesFirstOrder.push_back(true); // F3
-  enabledFeatureTypesFirstOrder.push_back(false); // F4
-  enabledFeatureTypesFirstOrder.push_back(false); // F5
-  enabledFeatureTypesFirstOrder.push_back(false); // F6
+  enabledFeatureTypesFirstOrder.push_back(true); // F4
+  enabledFeatureTypesFirstOrder.push_back(true); // F5
+  enabledFeatureTypesFirstOrder.push_back(true); // F6
   
 
   // for debugging
@@ -121,7 +132,7 @@ void LogLinearModel::CreateGrammarFst() {
 // create a transducer that represents possible translations of the source sentence of a given length
 void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens, 
 				     int tgtSentLen, 
-				     typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+				     DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 				     VectorFst<LogQuadArc>& allTgtFst,
 				     set<int>& uniqueTgtTokens) {
   // determine the set of possible target tokens allowed to be in a translation
@@ -271,6 +282,9 @@ void LogLinearModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFs
 
   // for each state
   for(int i = 0; i < srcTokens.size(); i++) {
+
+    // for debugging only
+    //    cerr << "srcTokens[" << i << "] = " << srcTokens[i] << endl;
     
     // set the initial/final states
     if(i == 0) {
@@ -280,7 +294,7 @@ void LogLinearModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFs
     }
 
     // each state can go to itself with the null src token
-    srcFst.AddArc(i, LogQuadArc(srcTokens[i], srcTokens[i], FstUtils::EncodeQuad(0, i, i, 0), i));
+    srcFst.AddArc(i, LogQuadArc(srcTokens[0], srcTokens[0], FstUtils::EncodeQuad(0, i, i, 0), i));
 
     // each state can go to states representing non-null alignments
     for(int j = 1; j < srcTokens.size(); j++) {
@@ -293,7 +307,7 @@ void LogLinearModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFs
 
   // for debugging
   //  cerr << "=============SRC FST==========" << endl;
-  //  FstUtils::PrintFstSummary(srcFst);
+  //  cerr << FstUtils::PrintFstSummary(srcFst);
 }  
 
 // this is a single-state acceptor which accepts any sequence of srcTokenIds in this sentence pair
@@ -327,8 +341,11 @@ void LogLinearModel::CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<
 // lexicon is only used when tgtLineIsGiven=false. Depending on its value, the constructed FST may represent a subset of 
 // possible translations (cuz it's usually too expensive to represnet all translations). 
 void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
-				       bool tgtLineIsGiven, typename DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
-				       int sentId, Distribution::Distribution distribution) {
+				       bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+				       int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst) {
+
+  assert(alignmentFst.NumStates() == 0);
+
   stringstream alignmentFstFilename;
   alignmentFstFilename << outputPrefix << ".align";
   if(tgtLineIsGiven) {
@@ -340,12 +357,13 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   // in the first pass over the corpus, construct the FSTs
   if(distribution != Distribution::TRUE ||
      !learningInfo.saveAlignmentFstsOnDisk || 
-     learningInfo.saveAlignmentFstsOnDisk && learningInfo.iterationsCount == 0) {
+     (learningInfo.saveAlignmentFstsOnDisk && learningInfo.iterationsCount == 0)) {
 
     // build the alignment FST according to the true distribution
     if(distribution == Distribution::TRUE) {
+      
       // tgt transducer
-      VectorFst<LogQuadArc> tgtFst;
+      assert(tgtFst.NumStates() == 0);
       // unique target tokens used in tgtFst. this is populated by CreateTgtFst or CreateAllTgtFst and later used by CreatePerSentGrammarFst
       set<int> uniqueTgtTokens;
       // in this model, two kinds of alignment FSTs are needed: one assumes a particular target sentence, 
@@ -364,6 +382,10 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       VectorFst<LogQuadArc> temp;
       Compose(tgtFst, grammarFst, &temp);
       Compose(temp, firstOrderSrcFst, &alignmentFst);
+
+      // for debugging
+      //      cerr << "====================== ALIGNMENT FST ===========================" << endl;
+      //      cerr << FstUtils::PrintFstSummary(alignmentFst) << endl;
 
     // build the alignment FST according to the distribution proposal1
     } else if (distribution == Distribution::PROPOSAL1) {
@@ -459,10 +481,11 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       }
 
       // for debugging only
+      //cerr << "=================SAMPLED ALIGNMENT FST============" << endl;
+      //cerr << FstUtils::PrintFstSummary(alignmentFst);
       //cerr << endl << "finished fixing the sampleAlignmentFst weights" << endl;
       //cerr << "alignmentFst is ready" << endl << endl;
     }
-
 
     // save the resulting alignmentFst for future use
     if(learningInfo.saveAlignmentFstsOnDisk) {
@@ -483,7 +506,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
     }
 
     if(!tgtLineIsGiven && sentId == 1) {
-      FstUtils::PrintFstSummary(alignmentFst);
+      cerr << FstUtils::PrintFstSummary(alignmentFst);
     }
     string dummy;
     cin >> dummy;
@@ -517,7 +540,6 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 						       const VectorFst< LogArc >& totalProbFst, 
 						       LogLinearParams& gradient,
-						       float logPartitionFunction,
 						       int srcTokensCount,
 						       int tgtTokensCount,
 						       bool subtract) {
@@ -525,6 +547,8 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
   temp = clock();
   // make sure the totalProbFst is a shadow fst of descriptorFst
   assert(descriptorFst.NumStates() == totalProbFst.NumStates());
+
+  // traverse arcs
   for (int stateId = 0; stateId < descriptorFst.NumStates() ;stateId++) {
     d1 += clock() - temp;
     temp = clock();
@@ -534,30 +558,37 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
 	 descriptorArcIter.Next(), totalProbArcIter.Next()) {
       d2 += clock() - temp;
       temp = clock();
+
       // make sure the totalProbFst is a shadow fst of descriptorFst
       assert(descriptorArcIter.Value().ilabel == totalProbArcIter.Value().ilabel);
       assert(descriptorArcIter.Value().olabel == totalProbArcIter.Value().olabel);
       assert(!descriptorArcIter.Done());
       assert(!totalProbArcIter.Done());
       assert(descriptorArcIter.Value().nextstate == totalProbArcIter.Value().nextstate);
+
       // parse the descriptorArc and totalProbArc
       int tgtToken = descriptorArcIter.Value().ilabel;
       int srcToken = descriptorArcIter.Value().olabel;
       float tgtPos, srcPos, prevSrcPos, dummy;
       FstUtils::DecodeQuad(descriptorArcIter.Value().weight, tgtPos, srcPos, prevSrcPos, dummy);
       LogWeight totalProb = totalProbArcIter.Value().weight;
+
+      // make sure the weight on this arc in the totalProbFst is a valid probability
+      assert(totalProb.Value() >= 0);
+
       d3 += clock() - temp;
       temp = clock();
+
       // find the features activated on this transition, and their values
       map<string, float> activeFeatures;
       gradient.FireFeatures(srcToken, tgtToken, (int)srcPos, (int)prevSrcPos, (int)tgtPos, srcTokensCount, tgtTokensCount, enabledFeatureTypesFirstOrder, activeFeatures);
       d4 += clock() - temp;
       temp = clock();
       // for debugging
-      cerr << endl << "=================features fired===================" << endl;
-      cerr << "arc: tgtToken=" << tgtToken << " srcToken=" << srcToken << " tgtPos=" << tgtPos << " srcPos=" << srcPos;
-      cerr << " srcTokensCount=" << srcTokensCount << " tgtTokensCount=" << tgtTokensCount << " totalLogProb=" << totalProb << endl;
-      cerr << "Features fired are:" << endl;
+      //      cerr << endl << "=================features fired===================" << endl;
+      //      cerr << "arc: tgtToken=" << tgtToken << " srcToken=" << srcToken << " tgtPos=" << tgtPos << " srcPos=" << srcPos;
+      //      cerr << " srcTokensCount=" << srcTokensCount << " tgtTokensCount=" << tgtTokensCount << " totalLogProb=" << totalProb << endl;
+      //      cerr << "Features fired are:" << endl;
 
       // now, for each feature fired on each arc of aGivenTS
       for(map<string,float>::const_iterator feature = activeFeatures.begin(); feature != activeFeatures.end(); feature++) {
@@ -566,11 +597,10 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
 	}
 
 	// for debugging 
-	cerr << "gradient[" << feature->first << "=" << feature->second << "] was " << gradient.params[feature->first] << " became ";
+	//	cerr << "val[" << feature->first << "]=" << feature->second << ". gradient[" << feature->first << "] was " << gradient.params[feature->first] << " became ";
 	
 	// the positive contribution to the derivative of this feature by this arc is
-	// TODO: wouldn't it be better to divide by the partition function while computing totalProb in FstUtils::ComputeTotalProb()? do we need the unnormalized total weights somewhere else?
-	float contribution = feature->second * FstUtils::nExp(Times(totalProb, -1.0 * logPartitionFunction).Value());
+	float contribution = feature->second * FstUtils::nExp(totalProb.Value());
 	if(subtract) {
 	  gradient.params[feature->first] -= contribution;
 	} else {
@@ -578,7 +608,7 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
 	}
 
 	// for debugging
-	cerr << gradient.params[feature->first] << endl;
+	//cerr << gradient.params[feature->first] << endl;
       }
       d5 += clock() - temp;
       temp = clock();
@@ -629,6 +659,7 @@ void LogLinearModel::Train() {
 
   // passes over the training data
   int iterationCounter = 0;
+  bool outputAlignments = false, done = false;
   do {
 
     //for debugging
@@ -675,11 +706,14 @@ void LogLinearModel::Train() {
       
       // build FST(a|t,s) and build FST(a,t|s)
       clock_t timestamp4 = clock();
-      VectorFst< LogQuadArc > aGivenTS, aTGivenS;
+      VectorFst< LogQuadArc > aGivenTS, aTGivenS, tgtFst, dummy;
       //cerr << "building aGivenTS" << endl;
-      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE);
+      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE, tgtFst);
       //cerr << "building aTGivenS" << endl;
-      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, Distribution::PROPOSAL1);
+      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
+      //      if(learningInfo.distATGivenS != Distribution::TRUE) {
+      //	Union(&aTGivenS, aGivenTS);
+      //      }
 
       // for debugging
       //cerr << "both aGivenTS and aTGivenS was built" << endl;
@@ -691,6 +725,18 @@ void LogLinearModel::Train() {
       //cerr << "building aTGivenSProbs" << endl;
       ArcMap(aTGivenS, &aTGivenSProbs, LogQuadToLogMapper());
       //cerr << "aTGivenS's start state = " << aTGivenS.Start() << " while aTGivenSProbs's start state = " << aTGivenSProbs.Start() << endl;
+
+      // output alignments (after the model converges)
+      VectorFst< StdArc > bestAlignment;
+      if(outputAlignments) {
+	// tropical has the path property
+	VectorFst< StdArc > aGivenTSProbsWithPathProperty;
+	ArcMap(aGivenTSProbs, &aGivenTSProbsWithPathProperty, LogToTropicalMapper());
+	cerr << "===============best alignment==============================" << endl;
+	cerr << "sent " << sentsCounter << endl;
+	ShortestPath(aGivenTSProbsWithPathProperty, &bestAlignment);
+	cerr << FstUtils::PrintFstSummary(bestAlignment);
+      }
 
       // prune paths whose probabilities are less than 1/e^3 of the best path
       //      cerr << "aTGivenSProbs size: " << endl;
@@ -723,18 +769,39 @@ void LogLinearModel::Train() {
       // add this sentence's contribution to the gradient of model parameters.
       // luckily, the contribution factorizes into: the end-to-end arc probabilities and beta[0] of aGivenTS and aTGivenS.
       clock_t timestamp6 = clock();
-      cerr << "===========================" << endl << "add sent contribution to E(features) according to p(a|T,S)" << endl;
-      AddSentenceContributionToGradient(aGivenTS, aGivenTSTotalProb, gradient, aGivenTSBeta0.Value(), srcTokens.size(), tgtTokens.size(), false);
+      //      cerr << "===========================" << endl << "add sent #" << sentsCounter << " contribution to E(features) according to p(a|T,S)" << endl;
+      //      cerr << "===========================" << endl;
+      AddSentenceContributionToGradient(aGivenTS, aGivenTSTotalProb, gradient, srcTokens.size(), tgtTokens.size(), false);
 
       clock_t timestamp6d5 = clock();
-      cerr << "===========================" << endl << "add sent contribution to E(features) according to p(a,T|S)" << endl;
-      AddSentenceContributionToGradient(aTGivenS, aTGivenSTotalProb, gradient, aTGivenSBeta0.Value(), srcTokens.size(), tgtTokens.size(), true);
+      //      cerr << "===========================" << endl << "add sent contribution to E(features) according to p(a,T|S)" << endl;
+      AddSentenceContributionToGradient(aTGivenS, aTGivenSTotalProb, gradient, srcTokens.size(), tgtTokens.size(), true);
       accGenericClocks += clock() - timestamp6d5;
 
       // update the iteration log likelihood with this sentence's likelihod
+      // the update is equal to \sum_{a compatible with reference t} p(a,t|s) = ShortestDistance(FstCompose(ref t, aTGivenSProbs / beta0 )) 
       assert(aTGivenSBeta0.Value() != 0);
-      logLikelihood += aGivenTSBeta0.Value() - aTGivenSBeta0.Value();
+      VectorFst< LogArc > tgtFstLogArc, constrainedATGivenSProbs;
+      ArcMap(tgtFst, &tgtFstLogArc, LogQuadToLogMapper());
+      Compose(tgtFstLogArc, aTGivenSProbs, &constrainedATGivenSProbs);
+      FstUtils::MakeOneFinalState(constrainedATGivenSProbs);
+      int finalState = FstUtils::FindFinalState(constrainedATGivenSProbs);
+      assert(finalState != -1);
+      constrainedATGivenSProbs.SetFinal(finalState, Divide(LogWeight::One(), aTGivenSBeta0));
+      vector< LogWeight > betas;
+      ShortestDistance(constrainedATGivenSProbs, &betas, true);
+      LogWeight constrainedATGivenSBeta0 = betas[constrainedATGivenSProbs.Start()];
+      cerr << "constrainedATGivenSBeta0 = " << constrainedATGivenSBeta0.Value() << endl;
+      assert(constrainedATGivenSBeta0.Value() >= FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME);
+      logLikelihood += constrainedATGivenSBeta0.Value();
       
+      // for debugging only
+      //      cerr << "====================constrainedATGivenSProbs==============" << endl;
+      //      cerr << FstUtils::PrintFstSummary(constrainedATGivenSProbs) << endl;
+      cerr << "=============sentence's likelihood===========" << endl;
+      cerr << "-log p(ref translation|s) = " << constrainedATGivenSBeta0.Value() << endl;
+      cerr << "iteration's loglikelihood now = " << logLikelihood << endl << endl;
+
       // if the optimization algorithm is stochastic, update the parameters here.
       cerr << "s";
       if(IsStochastic(learningInfo.optimizationMethod.algorithm) && sentsCounter % learningInfo.optimizationMethod.miniBatchSize == 0) {
@@ -746,17 +813,17 @@ void LogLinearModel::Train() {
 
       // for debugging only
       // report accumulated times
-      cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
-      cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
+      //      cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //      cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
       
       // logging
-      if (++sentsCounter % 50 == 0) {
+      if (++sentsCounter % 1 == 0) {
 	cerr << endl << sentsCounter << " sents processed.." << endl;
       }
 
@@ -792,8 +859,20 @@ void LogLinearModel::Train() {
     srcCorpus.close();
     tgtCorpus.close();
 
-    // check for convergence
-  } while(!learningInfo.IsModelConverged());
+    // if we output alignments during this iteration, then we're done
+    done = false;
+    if(outputAlignments) { 
+      done = true;
+    } else {
+      // otherwise, check for model convergence to decide whether or not next iteration will output alignments
+      outputAlignments = learningInfo.IsModelConverged();
+      if(outputAlignments) {
+	cerr << "===============================================" << endl;
+	cerr << "==WE ARE DONE TRAINING. NOW OUTPUT ALIGNMENTS==" << endl;
+	cerr << "===============================================" << endl;
+      }
+    }
+  } while(!done);
 
   // persist parameters
   params.PersistParams(outputPrefix + ".param.final");

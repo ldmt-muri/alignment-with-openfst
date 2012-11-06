@@ -2,6 +2,8 @@
 
 using namespace fst;
 
+const float FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME = -0.01;
+
 LogPairWeight FstUtils::EncodePairInfinity() {
   return EncodePair(numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
 }
@@ -81,12 +83,30 @@ string FstUtils::PrintFstSummary(VectorFst<LogArc>& fst) {
   ss << "states:" << endl;
   for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
     const LogArc::StateId &stateId = siter.Value();
+    string final = fst.Final(stateId) != LogWeight::Zero()? " FINAL ": "";
+    string initial = fst.Start() == stateId? " START " : "";
+    ss << "state:" << stateId << " " << initial << final << fst.Final(stateId) << endl;
+    ss << "arcs:" << endl;
+    for(ArcIterator< VectorFst<LogArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
+      const LogArc &arc = aiter.Value();
+      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId << "-->" << arc.nextstate << " " << arc.weight << endl;
+    } 
+    ss << endl;
+  }
+  return ss.str();
+}
+
+string FstUtils::PrintFstSummary(VectorFst<StdArc>& fst) {
+  stringstream ss;
+  ss << "states:" << endl;
+  for(StateIterator< VectorFst<StdArc> > siter(fst); !siter.Done(); siter.Next()) {
+    const StdArc::StateId &stateId = siter.Value();
     string final = fst.Final(stateId) != 0? " FINAL": "";
     string initial = fst.Start() == stateId? " START" : "";
     ss << "state:" << stateId << initial << final << endl;
     ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<LogArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const LogArc &arc = aiter.Value();
+    for(ArcIterator< VectorFst<StdArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
+      const StdArc &arc = aiter.Value();
       ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId << "-->" << arc.nextstate << " " << arc.weight << endl;
     } 
     ss << endl;
@@ -170,11 +190,38 @@ void FstUtils::MakeOneFinalState(fst::VectorFst<LogQuadArc>& fst) {
   fst.SetFinal(finalStateId, LogQuadWeight::One());
 }
 
+// assumption: the fst has one or more final state
+// output: all states which used to be final in the original fst, are not final now, but they go to a new final state with epsion input/output labels and the transition's weight = the original stopping weight of the corresponding state.
+void FstUtils::MakeOneFinalState(fst::VectorFst<LogArc>& fst) {
+  int finalStateId = fst.AddState();
+
+  for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
+    LogWeight stoppingWeight = fst.Final(siter.Value());
+    if(stoppingWeight != LogWeight::Zero()) {
+      fst.SetFinal(siter.Value(), LogWeight::Zero());
+      fst.AddArc(siter.Value(), LogArc(FstUtils::EPSILON, FstUtils::EPSILON, stoppingWeight, finalStateId));
+    }
+  }
+
+  fst.SetFinal(finalStateId, LogWeight::One());
+}
+
 // return the id of a final states in this fst. if no final state found, returns -1.
 int FstUtils::FindFinalState(const fst::VectorFst<LogQuadArc>& fst) {
   for(StateIterator< VectorFst<LogQuadArc> > siter(fst); !siter.Done(); siter.Next()) {
     const LogQuadArc::StateId &stateId = siter.Value();
     if(fst.Final(stateId) != LogQuadWeight::Zero()) {
+      return (int) stateId;
+    }
+  }
+  return -1;
+}
+
+// return the id of a final states in this fst. if no final state found, returns -1.
+int FstUtils::FindFinalState(const fst::VectorFst<LogArc>& fst) {
+  for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
+    const LogArc::StateId &stateId = siter.Value();
+    if(fst.Final(stateId) != LogWeight::Zero()) {
       return (int) stateId;
     }
   }

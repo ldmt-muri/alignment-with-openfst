@@ -62,6 +62,7 @@ void LogLinearParams::FireFeatures(int srcToken, int tgtToken, int srcPos, int p
   }
 
   // F4: alignment jump distance (subset of src path features in Chris et al. 2011)
+  // for debugging only
   if(enabledFeatureTypes.size() > 4 && enabledFeatureTypes[4]) {
     temp.str("");
     temp << "F4:" << abs(srcPos - prevSrcPos);
