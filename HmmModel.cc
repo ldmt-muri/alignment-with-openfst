@@ -9,6 +9,9 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
 		   const string& outputFilenamePrefix, 
 		   const LearningInfo& learningInfo) {
 
+  // TODO: use a constant for reproducible results
+  srand(time(0));
+
   // set member variables
   this->srcCorpusFilename = srcIntCorpusFilename;
   this->tgtCorpusFilename = tgtIntCorpusFilename;
@@ -165,9 +168,9 @@ void HmmModel::PersistParams(const string& outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   cerr << "writing model params at " << outputFilename << endl;
   paramsFile << "=============== translation parameters p(tgtWord|srcWord) ============" << endl;
-  PersistParams(paramsFile, aParams);
-  paramsFile << endl << "=============== alignment parameters p(a_i|a_{i-1}) ==================" << endl;
   PersistParams(paramsFile, tFractionalCounts);
+  paramsFile << endl << "=============== alignment parameters p(a_i|a_{i-1}) ==================" << endl;
+  PersistParams(paramsFile, aParams);
   paramsFile.close();
 }
 
@@ -215,6 +218,8 @@ void HmmModel::InitParams() {
       // assume that previous alignment = k, initialize p(i|k)
 	aFractionalCounts[k][i] = FstUtils::nLog(1/3.0);
       }
+      // also initialize aFractionalCounts[-1][i]
+      aFractionalCounts[INITIAL_SRC_POS][i] = FstUtils::nLog(1/3.0);
 
     }
   }
@@ -311,12 +316,15 @@ void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogT
       srcFst.SetFinal(i, LogTripleWeight::One());
     }
 
+    // we don't allow prevAlignment to be null alignment in our markov model. if a null alignment happens after alignment = 5, we use 5 as prevAlignment, not the null alignment. if null alignment happens before any non-null alignment, we use a special src position INITIAL_SRC_POS to indicate the prevAlignment
+    int prevAlignment = i == 0? INITIAL_SRC_POS : i;
+
     // each state can go to itself with the null src token
-    srcFst.AddArc(i, LogTripleArc(srcTokens[0], srcTokens[0], FstUtils::EncodeTriple(i, i, aParams[i][i]), i));
+    srcFst.AddArc(i, LogTripleArc(srcTokens[0], srcTokens[0], FstUtils::EncodeTriple(i, prevAlignment, aParams[prevAlignment][i]), i));
 
     // each state can go to states representing non-null alignments
     for(int j = 1; j < srcTokens.size(); j++) {
-      srcFst.AddArc(i, LogTripleArc(srcTokens[j], srcTokens[j], FstUtils::EncodeTriple(j, i, aParams[i][j]), j));
+      srcFst.AddArc(i, LogTripleArc(srcTokens[j], srcTokens[j], FstUtils::EncodeTriple(j, prevAlignment, aParams[prevAlignment][j]), j));
     }
   }
  
@@ -470,6 +478,63 @@ void HmmModel::LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts) {
   cerr << "fractionalCounts = " << (float) updatingFractionalCountsClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << endl;
+}
+
+// sample an integer from a multinomial
+int HmmModel::SampleFromMultinomial(const MultinomialParam params) {
+  // generate a pseudo random number between 0 and 1
+  double randomProb = ((double) rand() / (RAND_MAX));
+
+  // find the lucky value
+  for(MultinomialParam::const_iterator paramIter = params.begin(); 
+      paramIter != params.end(); 
+      paramIter++) {
+    double valueProb = FstUtils::nExp(paramIter->second);
+    if(randomProb <= valueProb) {
+      return paramIter->first;
+    } else {
+      randomProb -= valueProb;
+    }
+  }
+
+  // if you get here, one of the following two things happened: \sum valueProb_i > 1 OR randomProb > 1
+  assert(false);
+}
+
+// assumptions:
+// - both aParams and tFractionalCounts are properly normalized logProbs
+// sample both an alignment and a translation, given src sentence and tgt length
+void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb) {
+
+  // intialize
+  int prevAlignment = INITIAL_SRC_POS;
+  hmmLogProb = 0;
+
+  // for each target position,
+  for(; tgtLength > 0; tgtLength--) {
+
+    // sample a src position (i.e. an alignment)
+    int currentAlignment;
+    do {
+      currentAlignment = SampleFromMultinomial(aParams[prevAlignment]);
+    } while(currentAlignment >= srcTokens.size());
+    alignments.push_back(currentAlignment);
+    
+    // sample a translation
+    int currentTranslation = SampleFromMultinomial(tFractionalCounts[srcTokens[currentAlignment]]);
+    tgtTokens.push_back(currentTranslation);
+
+    // update the sample probability according to the model
+    hmmLogProb += aParams[prevAlignment][currentAlignment];
+    hmmLogProb += tFractionalCounts[srcTokens[currentAlignment]][currentTranslation];
+
+    // update prevAlignment
+    if(currentAlignment != NULL_SRC_TOKEN_ID) {
+      prevAlignment = currentAlignment;
+    }
+  }
+
+  assert(tgtTokens.size() == 3 && alignments.size() == 3);
 }
 
 // TODO: not implemented

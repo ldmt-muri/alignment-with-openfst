@@ -68,6 +68,10 @@ class HmmModel {
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);
 
+  int SampleFromMultinomial(const MultinomialParam params);
+
+  void SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
+
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
 
