@@ -31,8 +31,6 @@ class LogLinearModel {
 		       VectorFst<LogQuadArc>& allTgtFst,
 		       set<int>& uniqueTgtTokens);
 
-  void CreatePerSentGrammarFst(const vector<int>& srcTokens, const set<int>& uniqueTgtTokens, VectorFst<LogQuadArc>& grammarFst);
-
   void CreateGrammarFst();
   
   void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);

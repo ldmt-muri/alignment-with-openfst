@@ -27,6 +27,7 @@ class FstUtils {
   inline static float nLog(double prob) {
     return -1.0 * log(prob);
   }
+
   inline static double nExp(float exponent) {
     return exp(-1.0 * exponent);
   }
