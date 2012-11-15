@@ -83,9 +83,8 @@ string FstUtils::PrintFstSummary(VectorFst<LogArc>& fst) {
   ss << "states:" << endl;
   for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
     const LogArc::StateId &stateId = siter.Value();
-    string final = fst.Final(stateId) != LogWeight::Zero()? " FINAL ": "";
     string initial = fst.Start() == stateId? " START " : "";
-    ss << "state:" << stateId << " " << initial << final << fst.Final(stateId) << endl;
+    ss << "state:" << stateId << initial << " FinalScore=" <<  fst.Final(stateId).Value() << endl;
     ss << "arcs:" << endl;
     for(ArcIterator< VectorFst<LogArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
       const LogArc &arc = aiter.Value();
@@ -101,9 +100,8 @@ string FstUtils::PrintFstSummary(VectorFst<StdArc>& fst) {
   ss << "states:" << endl;
   for(StateIterator< VectorFst<StdArc> > siter(fst); !siter.Done(); siter.Next()) {
     const StdArc::StateId &stateId = siter.Value();
-    string final = fst.Final(stateId) != 0? " FINAL": "";
     string initial = fst.Start() == stateId? " START" : "";
-    ss << "state:" << stateId << initial << final << endl;
+    ss << "state:" << stateId << initial << " FinalScore=" <<  fst.Final(stateId).Value() << endl;
     ss << "arcs:" << endl;
     for(ArcIterator< VectorFst<StdArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
       const StdArc &arc = aiter.Value();
@@ -313,7 +311,8 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
 
   // now we have all the necessary ingredients to start sampling. lets go!
   int samplesCounter = 0;
-  srand(time(0));
+  // Note: seed with time(0) if you don't care about reproducibility
+  srand(1234);
   assert(sampleSize > 0);
   while(samplesCounter++ < sampleSize) {
     int currentFstState = fst.Start();

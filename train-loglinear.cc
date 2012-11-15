@@ -61,32 +61,37 @@ int main(int argc, char **argv) {
   //  return 0;
 
   // parse arguments
-  cout << "parsing arguments" << endl;
+  cerr << "parsing arguments" << endl;
   string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
   ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
 
   // train the hmm model
   LearningInfo hmmLearningInfo;
-  hmmLearningInfo.maxIterationsCount = 100;
+  hmmLearningInfo.maxIterationsCount = 1;
   hmmLearningInfo.useMaxIterationsCount = true;
-  hmmLearningInfo.minLikelihoodDiff = 1.0;
+  hmmLearningInfo.minLikelihoodDiff = 0.01;
   hmmLearningInfo.useMinLikelihoodDiff = true;
-  HmmModel hmmModel(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, hmmLearningInfo);
+  string proposalTrainingOutputFilenamePrefix = outputFilenamePrefix + ".proposal";
+  HmmModel hmmModel(srcCorpusFilename, tgtCorpusFilename, proposalTrainingOutputFilenamePrefix, hmmLearningInfo);
   hmmModel.Train();
+  cerr << "finished HMM training." << endl << endl;
+  string dummy;
+  //  cin >> dummy;
 
   // initialize the loglinear model
   Regularizer::Regularizer regularizationType = Regularizer::NONE;
   float regularizationConst = 0.01;
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.useMinLikelihoodDiff = false;
   learningInfo.minLikelihoodDiff = 0.01;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 30;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
-  learningInfo.samplesCount = 1000;
+  learningInfo.samplesCount = 100;
   learningInfo.distATGivenS = Distribution::LOCAL;
   learningInfo.customDistribution = &hmmModel;
+  learningInfo.unionAllCompatibleAlignments = true;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

@@ -335,7 +335,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       Compose(temp, firstOrderSrcFst, &alignmentFst);
 
       // for debugging
-      //      cerr << "====================== ALIGNMENT FST ===========================" << endl;
+      //      cerr << "====================== ALIGNMENT FST | TRUE ===========================" << endl;
       //      cerr << FstUtils::PrintFstSummary(alignmentFst) << endl;
 
     // build the alignment FST according to the distribution LOCAL (which uses the local subset of features in the loglinear model)
@@ -450,6 +450,10 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 
       // build an alignment FST using those samples
       CreateSampleAlignmentFst(srcTokens, translations, alignments, logProbs, alignmentFst);
+
+      // for debugging only
+      //            cerr << "=========translations/alignments sampled from the custom distribution========" << endl;
+      //            cerr << FstUtils::PrintFstSummary(alignmentFst) << endl;
     }
 
     // save the resulting alignmentFst for future use
@@ -561,7 +565,7 @@ void LogLinearModel::CreateSampleAlignmentFst(const vector<int>& srcTokens,
 				     nextState));
       
       // update previousSrcPosition and previousState
-      previousSrcPosition = srcPos == 0?
+      previousSrcPosition = (srcPos == NULL_SRC_TOKEN_POS)?
 	previousSrcPosition:
 	srcPos;
       previousState = nextState;
@@ -606,7 +610,7 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
       LogWeight totalProb = totalProbArcIter.Value().weight;
 
       // make sure the weight on this arc in the totalProbFst is a valid probability
-      assert(totalProb.Value() >= 0);
+      assert(totalProb.Value() >= FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME);
 
       d3 += clock() - temp;
       temp = clock();
@@ -744,8 +748,10 @@ void LogLinearModel::Train() {
       //cerr << "building aTGivenS" << endl;
       BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
       // union aGivenTS into aTGivenS so that we have good samples as well as bad samples
-      if(learningInfo.distATGivenS != Distribution::TRUE) {
-	Union(&aTGivenS, aGivenTS);
+      // TODO: currently, we don't control how much weight goes to (a,t) pairs coming from aGivenTS vs. aTGivenS when we do this
+      //       union. It would be better if we control it in a smart way.  
+      if(learningInfo.distATGivenS != Distribution::TRUE && learningInfo.unionAllCompatibleAlignments) {
+      	Union(&aTGivenS, aGivenTS);
       }
 
       // for debugging
@@ -824,16 +830,16 @@ void LogLinearModel::Train() {
       vector< LogWeight > betas;
       ShortestDistance(constrainedATGivenSProbs, &betas, true);
       LogWeight constrainedATGivenSBeta0 = betas[constrainedATGivenSProbs.Start()];
-      cerr << "constrainedATGivenSBeta0 = " << constrainedATGivenSBeta0.Value() << endl;
+      //      cerr << "constrainedATGivenSBeta0 = " << constrainedATGivenSBeta0.Value() << endl;
       assert(constrainedATGivenSBeta0.Value() >= FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME);
       logLikelihood += constrainedATGivenSBeta0.Value();
       
       // for debugging only
       //      cerr << "====================constrainedATGivenSProbs==============" << endl;
       //      cerr << FstUtils::PrintFstSummary(constrainedATGivenSProbs) << endl;
-      cerr << "=============sentence's likelihood===========" << endl;
-      cerr << "-log p(ref translation|s) = " << constrainedATGivenSBeta0.Value() << endl;
-      cerr << "iteration's loglikelihood now = " << logLikelihood << endl << endl;
+      //      cerr << "=============sentence's likelihood===========" << endl;
+            cerr << "-log p(ref translation|s) = " << constrainedATGivenSBeta0.Value() << endl;
+      //      cerr << "iteration's loglikelihood now = " << logLikelihood << endl << endl;
 
       // if the optimization algorithm is stochastic, update the parameters here.
       cerr << "s";
@@ -856,9 +862,10 @@ void LogLinearModel::Train() {
       //      cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
       
       // logging
-      if (++sentsCounter % 1 == 0) {
-	cerr << endl << sentsCounter << " sents processed.." << endl;
+      if (sentsCounter % 1 == 1000) {
+      	cerr << endl << sentsCounter << " sents processed.." << endl;
       }
+      sentsCounter++;
 
       timestamp3 = clock();
     }

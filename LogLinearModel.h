@@ -15,6 +15,7 @@ using namespace fst;
 using namespace std;
 
 #define NULL_SRC_TOKEN_ID 1
+#define NULL_SRC_TOKEN_POS 0
 // the loglinear alignment model has some features as functions of the previous alignment 
 // But, when evaluating the first tgt position, there's no previous alignemnt, 
 // then we can use this constant whenever we need a_{-1}

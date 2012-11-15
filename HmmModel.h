@@ -15,6 +15,8 @@ using namespace std;
 
 // this id is reserved for the unique source word (NULL). no other source word is allowed to take this id.
 #define NULL_SRC_TOKEN_ID 1
+// this is the src position of the null src word in any src sentence
+#define NULL_SRC_TOKEN_POS 0
 // the HMM word alignment model has parameters for p(a_i|a_{i-1}). 
 // But, when i == 0, there's no a_{-1}. we can use this constant whenever we need a_{-1}
 #define INITIAL_SRC_POS -1

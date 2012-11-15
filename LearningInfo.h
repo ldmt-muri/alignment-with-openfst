@@ -145,6 +145,8 @@ class LearningInfo {
   Distribution::Distribution distATGivenS;
   IAlignmentSampler *customDistribution;
 
+  // when using a proposal distribution for p(a,T|S), would you like to union the alignments of p(a|T,S) as well?
+  bool unionAllCompatibleAlignments;
 };
 
 
