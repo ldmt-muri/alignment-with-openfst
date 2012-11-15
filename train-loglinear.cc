@@ -1,4 +1,5 @@
 #include "LogLinearModel.h"
+#include "HmmModel.h"
 
 using namespace fst;
 using namespace std;
@@ -64,7 +65,16 @@ int main(int argc, char **argv) {
   string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
   ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
 
-  // initialize the model
+  // train the hmm model
+  LearningInfo hmmLearningInfo;
+  hmmLearningInfo.maxIterationsCount = 100;
+  hmmLearningInfo.useMaxIterationsCount = true;
+  hmmLearningInfo.minLikelihoodDiff = 1.0;
+  hmmLearningInfo.useMinLikelihoodDiff = true;
+  HmmModel hmmModel(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, hmmLearningInfo);
+  hmmModel.Train();
+
+  // initialize the loglinear model
   Regularizer::Regularizer regularizationType = Regularizer::NONE;
   float regularizationConst = 0.01;
   LearningInfo learningInfo;
@@ -74,8 +84,9 @@ int main(int argc, char **argv) {
   learningInfo.maxIterationsCount = 10;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
-  learningInfo.samplesCount = 10000;
-  learningInfo.distATGivenS = Distribution::PROPOSAL1;
+  learningInfo.samplesCount = 1000;
+  learningInfo.distATGivenS = Distribution::LOCAL;
+  learningInfo.customDistribution = &hmmModel;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

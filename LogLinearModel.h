@@ -15,6 +15,10 @@ using namespace fst;
 using namespace std;
 
 #define NULL_SRC_TOKEN_ID 1
+// the loglinear alignment model has some features as functions of the previous alignment 
+// But, when evaluating the first tgt position, there's no previous alignemnt, 
+// then we can use this constant whenever we need a_{-1}
+#define INITIAL_SRC_POS -1
 
 class LogLinearModel {
 
@@ -36,6 +40,12 @@ class LogLinearModel {
   void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
 
   void CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+
+  void CreateSampleAlignmentFst(const vector<int>& srcTokens,
+				const vector< vector<int> >& translations, 
+				const vector< vector<int> >& alignments, 
+				const vector< double >& logProbs,
+				VectorFst< LogQuadArc >& alignmentFst);
 
   bool IsModelConverged();
 

@@ -307,7 +307,11 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
      (learningInfo.saveAlignmentFstsOnDisk && learningInfo.iterationsCount == 0)) {
 
     // build the alignment FST according to the true distribution
-    if(distribution == Distribution::TRUE) {
+    // note: we always use the true distribution when the translation is given because,
+    //       with the current set of features, the alignment FST is not terribly huge O(tgtLength * srcLength^2).
+    //       However, when the translation is not given (i.e. tgtLineIsGiven == false), 
+    //       we use whichever distribution given as a parameter to this method.
+    if(distribution == Distribution::TRUE || tgtLineIsGiven) {
       
       // tgt transducer
       assert(tgtFst.NumStates() == 0);
@@ -334,20 +338,17 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       //      cerr << "====================== ALIGNMENT FST ===========================" << endl;
       //      cerr << FstUtils::PrintFstSummary(alignmentFst) << endl;
 
-    // build the alignment FST according to the distribution proposal1
-    } else if (distribution == Distribution::PROPOSAL1) {
+    // build the alignment FST according to the distribution LOCAL (which uses the local subset of features in the loglinear model)
+    } else if (distribution == Distribution::LOCAL) {
 
       // tgt transducer
       VectorFst<LogQuadArc> tgtFst;
       // unique target tokens used in tgtFst. this is populated by CreateTgtFst or CreateAllTgtFst and later used by CreatePerSentGrammarFst
       set<int> uniqueTgtTokens;
-      // in this model, two kinds of alignment FSTs are needed: one assumes a particular target sentence, 
-      // while the other represents many more translations.
-      if(tgtLineIsGiven) {
-	CreateTgtFst(tgtTokens, tgtFst, uniqueTgtTokens);
-      } else {
-	CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst, uniqueTgtTokens);
-      }
+
+      // this distribution is only used to generate alignment Fsts, without conditioning on the reference translation.
+      assert(!tgtLineIsGiven);
+      CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst, uniqueTgtTokens);
       
       // src transducer(s)
       VectorFst<LogQuadArc> simpleSrcFst;
@@ -432,6 +433,23 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       //cerr << FstUtils::PrintFstSummary(alignmentFst);
       //cerr << endl << "finished fixing the sampleAlignmentFst weights" << endl;
       //cerr << "alignmentFst is ready" << endl << endl;
+    } else if(distribution == Distribution::CUSTOM) {
+      assert(learningInfo.customDistribution != 0);
+
+      // draw samples from the custom distribution
+      vector< vector<int> > translations, alignments;
+      vector< double > logProbs;
+      vector< int > emptyIntVector;
+      for(int i = 0; i < learningInfo.samplesCount; i++) {
+	double logProb = -1;
+	translations.push_back(emptyIntVector);
+	alignments.push_back(emptyIntVector);
+	learningInfo.customDistribution->SampleAT(srcTokens, tgtTokens.size(), translations[i], alignments[i], logProb);
+	logProbs.push_back(logProb);
+      }
+
+      // build an alignment FST using those samples
+      CreateSampleAlignmentFst(srcTokens, translations, alignments, logProbs, alignmentFst);
     }
 
     // save the resulting alignmentFst for future use
@@ -463,7 +481,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
     assert(false);
   }
   
-  // if proposal1 were used to generate the alignmentFst, then we have already set the weights appropriately
+  // if another distribution were used to generate the alignmentFst, then we have already set the weights appropriately
   if(distribution == Distribution::TRUE) {
     // compute the probability of each transition on the alignment FST according to the current model parameters
     // set the fourth value in the LogQuadWeights on the arcs = the computed prob for that arc
@@ -480,6 +498,73 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 	arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, prevSrcTokenPos, arcProb);
 	aiter.SetValue(arc);
       }
+    }
+  }
+}
+
+// assumptions:
+// - translations, alignemnts and logProbs have the same length, i.e. the number of samples generated from the proposal distribution.
+// - translations[i], alignments[i] and logProbs[i] refer to the tgt token sequence, the alignemnt sequence and the normalized logprob of sample #i.
+// - furthermore, translations[i] and alignments[i] have the same length, i.e. the number of target tokens in the translation.
+// - the first element in srcTokens is the NULL token.
+// each sample will have its own final state. the stopping weight = 1/proposal_prob(sample) 
+// i.e. the last LogWeight in the LogQuadWeight on the arc is set to -logProbs[sampleId]
+// each alignment arc carries the following information: srcToken, tgtToken, tgtPosition, srcPosition, previousSrcPosition, arcWeight
+// all this information can be inferred from the sample's alignment/translations vector, except for the arcWeight.
+// we set the arcWeight to the unnormalized prior probability of the arc, according to the true distribution
+// this way, the weight of any complete path in this alignment FST is equal to the importance weight = unnormalized_true_p(sample) / proposal_p(sample)
+void LogLinearModel::CreateSampleAlignmentFst(const vector<int>& srcTokens,
+					      const vector< vector<int> >& translations, 
+					      const vector< vector<int> >& alignments, 
+					      const vector< double >& logProbs,
+					      VectorFst< LogQuadArc >& alignmentFst) {
+  assert(alignmentFst.NumStates() == 0);
+  assert(translations.size() == alignments.size());
+  assert(translations.size() == logProbs.size());
+  assert(srcTokens.size() > 0 && srcTokens[0] == NULL_SRC_TOKEN_ID);
+  
+  // create a start state
+  int startState = alignmentFst.AddState();
+  alignmentFst.SetStart(startState);
+  
+  // for each sample
+  for(int i = 0; i < translations.size(); i++) {
+    assert(translations[i].size() == alignments[i].size());
+    
+    // start each sample's path with the start state
+    int previousState = startState;
+    int previousSrcPosition = INITIAL_SRC_POS;
+
+    // for each target position
+    for(int tgtPos = 0; tgtPos < translations[i].size(); tgtPos++) {
+      
+      // create the next state in this sample's path, and make it final if it's the last one.
+      int nextState = alignmentFst.AddState();
+      if(tgtPos == translations[i].size() - 1) {
+	alignmentFst.SetFinal(nextState, FstUtils::EncodeQuad(0,0,0,-logProbs[i]));
+      }
+
+      // prepare the information needed on this transition
+      int srcPos = alignments[i][tgtPos];
+      // previousSrcPosition = previousSrcPosition
+      // tgtPos = tgtPos
+      int srcToken = srcTokens[srcPos];
+      int tgtToken = translations[i][tgtPos];
+      float unnormalizedTrueDistPriorProb = 
+	params.ComputeLogProb(srcToken, tgtToken, srcPos, previousSrcPosition, tgtPos, 
+			      srcTokens.size(), translations[i].size(), enabledFeatureTypesFirstOrder);
+      
+      // now add the arc
+      alignmentFst.AddArc(previousState, 
+			  LogQuadArc(tgtToken, srcToken, 
+				     FstUtils::EncodeQuad(tgtPos, srcPos, previousSrcPosition, unnormalizedTrueDistPriorProb),
+				     nextState));
+      
+      // update previousSrcPosition and previousState
+      previousSrcPosition = srcPos == 0?
+	previousSrcPosition:
+	srcPos;
+      previousState = nextState;
     }
   }
 }
@@ -658,10 +743,10 @@ void LogLinearModel::Train() {
       BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE, tgtFst);
       //cerr << "building aTGivenS" << endl;
       BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
-      // TODO: does it make sense to union aGivenTS into aTGivenS
-      //      if(learningInfo.distATGivenS != Distribution::TRUE) {
-      //	Union(&aTGivenS, aGivenTS);
-      //      }
+      // union aGivenTS into aTGivenS so that we have good samples as well as bad samples
+      if(learningInfo.distATGivenS != Distribution::TRUE) {
+	Union(&aTGivenS, aGivenTS);
+      }
 
       // for debugging
       //cerr << "both aGivenTS and aTGivenS was built" << endl;

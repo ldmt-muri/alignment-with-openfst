@@ -6,10 +6,20 @@
 #include <math.h>
 #include <assert.h>
 
+#include "IAlignmentSampler.h"
+
 using namespace std;
 
 namespace Distribution {
-  enum Distribution {TRUE, PROPOSAL1};
+  enum Distribution {
+    // the log linear distribution with all features
+    TRUE, 
+    // the log linear distribution, using the subset of the features which can be computed
+    // as a function of the current the current target word, alignment variable, src sentence, 
+    // and tgt lengths (but not previous target words or alignments).
+    LOCAL, 
+    // any distribution that implements the interface IAlignmentSampler
+    CUSTOM};
 }
 
 namespace DiscriminativeLexicon {
@@ -58,6 +68,7 @@ class LearningInfo {
     neighborhood = DiscriminativeLexicon::ALL;
     samplesCount = 1000;
     distATGivenS = Distribution::TRUE;
+    customDistribution = 0;
   }
 
   bool IsModelConverged() {
@@ -130,8 +141,9 @@ class LearningInfo {
   vector< float > logLikelihood;
   vector< float > validationLogLikelihood;  
 
-  // distribution used to model p(aT|S)
+  // distribution used to model p(a,T|S)
   Distribution::Distribution distATGivenS;
+  IAlignmentSampler *customDistribution;
 
 };
 

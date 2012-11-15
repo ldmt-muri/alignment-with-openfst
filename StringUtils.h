@@ -2,9 +2,9 @@
 #define _STRING_UTILS_H_
 
 #include <string>
+#include <vector>
 #include <sstream>
 #include <set>
-#include <vector>
 
 typedef std::string string;
 typedef std::stringstream stringstream;

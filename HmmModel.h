@@ -8,6 +8,7 @@
 #include "LearningInfo.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
+#include "IAlignmentSampler.h"
 
 using namespace fst;
 using namespace std;
@@ -23,7 +24,7 @@ typedef map<int, float> MultinomialParam;
 // parameters for describing a set of conditional multinomial distributions p(x|y)=z such that y is the first key, x is the nested key, z is a log probability
 typedef map<int, MultinomialParam> ConditionalMultinomialParam;
 
-class HmmModel {
+class HmmModel : public IAlignmentSampler {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeFractionalCounts();
@@ -70,7 +71,7 @@ class HmmModel {
 
   int SampleFromMultinomial(const MultinomialParam params);
 
-  void SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
+  virtual void SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
 
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
