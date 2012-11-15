@@ -9,8 +9,8 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
 		   const string& outputFilenamePrefix, 
 		   const LearningInfo& learningInfo) {
 
-  // TODO: use a constant for reproducible results
-  srand(time(0));
+  // Note: seed with time(0) if you don't care about reproducbility
+  srand(425);
 
   // set member variables
   this->srcCorpusFilename = srcIntCorpusFilename;
@@ -511,7 +511,9 @@ void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>
   hmmLogProb = 0;
 
   // for each target position,
-  for(; tgtLength > 0; tgtLength--) {
+  for(int i = 0; i < tgtLength; i++) {
+    // for debugging only
+    //cerr << "at tgtPos=" << i << ", prevAlignment=" << prevAlignment << ", ";
 
     // sample a src position (i.e. an alignment)
     int currentAlignment;
@@ -519,22 +521,28 @@ void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>
       currentAlignment = SampleFromMultinomial(aParams[prevAlignment]);
     } while(currentAlignment >= srcTokens.size());
     alignments.push_back(currentAlignment);
+    // for debugging only
+    // cerr << "sample srcPos=" << currentAlignment << " which happens to be (" << srcTokens[currentAlignment] << "), ";
     
     // sample a translation
     int currentTranslation = SampleFromMultinomial(tFractionalCounts[srcTokens[currentAlignment]]);
     tgtTokens.push_back(currentTranslation);
+    // for debugging only
+    //cerr << "and sample translation=" << currentTranslation << endl;
 
     // update the sample probability according to the model
     hmmLogProb += aParams[prevAlignment][currentAlignment];
     hmmLogProb += tFractionalCounts[srcTokens[currentAlignment]][currentTranslation];
 
     // update prevAlignment
-    if(currentAlignment != NULL_SRC_TOKEN_ID) {
+    if(currentAlignment != NULL_SRC_TOKEN_POS) {
       prevAlignment = currentAlignment;
     }
   }
 
-  assert(tgtTokens.size() == 3 && alignments.size() == 3);
+	//cerr << "hmmLogProb=" << hmmLogProb << endl;
+  assert(tgtTokens.size() == tgtLength && alignments.size() == tgtLength);
+  assert(hmmLogProb >= 0);
 }
 
 // TODO: not implemented
