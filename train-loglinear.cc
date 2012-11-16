@@ -1,15 +1,23 @@
 #include "LogLinearModel.h"
 #include "HmmModel.h"
+#include "VocabEncoder.h"
+#include "IbmModel1.h"
 
 using namespace fst;
 using namespace std;
 
-// TODO: add parameters to set convergence criteria
-void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &outputFilepathPrefix) {
-  assert(argc == 4);
+void ParseParameters(int argc, char **argv, 
+		     string &srcCorpusFilename, 
+		     string &tgtCorpusFilename, 
+		     string &srcVocabFilename, 
+		     string &tgtVocabFilename, 
+		     string &outputFilepathPrefix) {
+  assert(argc == 6);
   srcCorpusFilename = argv[1];
   tgtCorpusFilename = argv[2];
-  outputFilepathPrefix = argv[3];
+  srcVocabFilename = argv[3];
+  tgtVocabFilename = argv[4];
+  outputFilepathPrefix = argv[5];
 }
 
 void Experimental() {
@@ -41,19 +49,6 @@ void Experimental() {
   cerr << "0.25 / 0.5 = " << FstUtils::nExp(z.Value());
   cerr << x << " - " << y << " = " << z;
 
-  /*
-  vector<LogWeight> alphas, betas;
-  ShortestDistance(alignment, &alphas, false);
-  ShortestDistance(alignment, &betas, true);
-  int stateId = 0;
-  for (vector<LogWeight>::const_iterator alphasIter = alphas.begin(); alphasIter != alphas.end(); alphasIter++) {
-  cout << "alphas[" << stateId++ << "] = " << alphasIter->Value() << " = e^" << exp(-1.0 * alphasIter->Value()) << endl;
-  }
-  stateId = 0;
-  for (vector<LogWeight>::const_iterator betasIter = betas.begin(); betasIter != betas.end(); betasIter++) {
-  cout << "betas[" << stateId++ << "] = " << betasIter->Value() << " = e^" << exp(-1.0 * betasIter->Value()) << endl;
-  }
-  */
 }
 
 int main(int argc, char **argv) {
@@ -62,8 +57,8 @@ int main(int argc, char **argv) {
 
   // parse arguments
   cerr << "parsing arguments" << endl;
-  string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
+  string srcCorpusFilename, tgtCorpusFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix;
+  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix);
 
   // train the hmm model
   LearningInfo hmmLearningInfo;
@@ -77,6 +72,29 @@ int main(int argc, char **argv) {
   cerr << "finished HMM training." << endl << endl;
   string dummy;
   //  cin >> dummy;
+
+  // initialize ibm 1 forward logprobs
+  LearningInfo model1LearningInfo;
+  model1LearningInfo.minLikelihoodDiff = 0.01;
+  model1LearningInfo.useMinLikelihoodDiff = true;
+  string ibm1ForwardOutputFilenamePrefix = outputFilenamePrefix + ".ibm1fwd";
+  IbmModel1 ibm1ForwardModel(srcCorpusFilename, tgtCorpusFilename, ibm1ForwardOutputFilenamePrefix, model1LearningInfo);
+  ibm1ForwardModel.Train();
+  cerr << "finished forward ibm1 training." << endl << endl;
+  //  cin >> dummy;
+
+  // initialize ibm 1 backward logprobs
+  string ibm1BackwardOutputFilenamePrefix = outputFilenamePrefix + ".ibm1bwd";
+  IbmModel1 ibm1BackwardModel(tgtCorpusFilename, srcCorpusFilename, ibm1BackwardOutputFilenamePrefix, model1LearningInfo);
+  ibm1BackwardModel.Train();
+  cerr << "finished backward ibm1 training." << endl << endl;
+  //  cin >> dummy;
+
+  // initialize int-to-string src types map
+  VocabDecoder srcTypes(srcVocabFilename);
+
+  // initialize int-to-string tgt types map
+  VocabDecoder tgtTypes(tgtVocabFilename);
 
   // initialize the loglinear model
   Regularizer::Regularizer regularizationType = Regularizer::NONE;
@@ -92,6 +110,10 @@ int main(int argc, char **argv) {
   learningInfo.distATGivenS = Distribution::LOCAL;
   learningInfo.customDistribution = &hmmModel;
   learningInfo.unionAllCompatibleAlignments = true;
+  learningInfo.srcVocabDecoder = &srcTypes;
+  learningInfo.tgtVocabDecoder = &tgtTypes;
+  learningInfo.ibm1ForwardLogProbs = &ibm1ForwardModel.params;
+  learningInfo.ibm1BackwardLogProbs = &ibm1BackwardModel.params;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
 
   // train model parameters

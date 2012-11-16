@@ -5,8 +5,10 @@
 #include <iostream>
 #include <math.h>
 #include <assert.h>
+#include <map>
 
 #include "IAlignmentSampler.h"
+#include "VocabEncoder.h"
 
 using namespace std;
 
@@ -147,6 +149,18 @@ class LearningInfo {
 
   // when using a proposal distribution for p(a,T|S), would you like to union the alignments of p(a|T,S) as well?
   bool unionAllCompatibleAlignments;
+
+  // map src type IDs to strings
+  VocabDecoder *srcVocabDecoder;
+
+  // map tgt type IDs to strings
+  VocabDecoder *tgtVocabDecoder;
+
+  // ibm 1 forward log probs
+  std::map<int, std::map<int, float> > *ibm1ForwardLogProbs;
+
+  // ibm 1 backward log probs
+  std::map<int, std::map<int, float> > *ibm1BackwardLogProbs;
 };
 
 

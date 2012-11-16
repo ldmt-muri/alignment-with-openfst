@@ -17,7 +17,11 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
 			       const string& outputFilenamePrefix, 
 			       const Regularizer::Regularizer& regularizationType, 
 			       const float regularizationConst, 
-			       const LearningInfo& learningInfo) {
+			       const LearningInfo& learningInfo) : params(*learningInfo.srcVocabDecoder,
+  									  *learningInfo.tgtVocabDecoder,
+  									  *learningInfo.ibm1ForwardLogProbs,
+  									  *learningInfo.ibm1BackwardLogProbs) {
+
   // set member variables
   this->srcCorpusFilename = srcIntCorpusFilename;
   this->tgtCorpusFilename = tgtIntCorpusFilename;
@@ -71,35 +75,19 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
 
   // bool vectors indicating which feature types to use
   assert(enabledFeatureTypesSimple.size() == 0 && enabledFeatureTypesFirstOrder.size() == 0);
-  enabledFeatureTypesSimple.push_back(true); // F0
-  enabledFeatureTypesSimple.push_back(true); // F1
-  enabledFeatureTypesSimple.push_back(true); // F2
-  enabledFeatureTypesSimple.push_back(true); // F3
-  enabledFeatureTypesSimple.push_back(false); // F4
-  enabledFeatureTypesSimple.push_back(false); // F5
-  enabledFeatureTypesSimple.push_back(false); // F6
-  enabledFeatureTypesFirstOrder.push_back(true); // F0
-  enabledFeatureTypesFirstOrder.push_back(true); // F1
-  enabledFeatureTypesFirstOrder.push_back(true); // F2
-  enabledFeatureTypesFirstOrder.push_back(true); // F3
-  enabledFeatureTypesFirstOrder.push_back(true); // F4
-  enabledFeatureTypesFirstOrder.push_back(true); // F5
-  enabledFeatureTypesFirstOrder.push_back(true); // F6
-  
+  for(int i = 0; i < 25; i++) {
+    enabledFeatureTypesSimple.push_back(true);
+    enabledFeatureTypesFirstOrder.push_back(true);
+  }
+  // disable nonlocal features for a simpler model
+  enabledFeatureTypesSimple[4] = false; // F4
+  enabledFeatureTypesSimple[5] = false; // F5
+  enabledFeatureTypesSimple[6] = false; // F6  
+  enabledFeatureTypesSimple[19] = false; // F19
+  enabledFeatureTypesSimple[20] = false; // F20
+  enabledFeatureTypesSimple[23] = false; // F23
+  enabledFeatureTypesSimple[24] = false; // F24
 
-  // for debugging
-  //  cerr << "================srcTgtFreq===================" << endl;
-  //  for(map<int, map<int,int> >::const_iterator srcTokenIter = srcTgtFreq.begin();
-  //      srcTokenIter != srcTgtFreq.end();
-  //      srcTokenIter++) {
-  //    for(map<int,int>::const_iterator tgtTokenIter = srcTokenIter->second.begin();
-  //	tgtTokenIter != srcTokenIter->second.end();
-  //	tgtTokenIter++) {
-  //      cerr << "count(" << srcTokenIter->first << "," << tgtTokenIter->first << ")=" << tgtTokenIter->second << endl;
-  //    }
-  //  } 
- //  string dummy;
-  //  cin >> dummy;
 }
 
 // assumptions: 
@@ -406,8 +394,10 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 	  float tgtTokenPos, srcTokenPos, prevSrcTokenPosHolder, arcProbHolder;
 	  FstUtils::DecodeQuad(arcWeight, tgtTokenPos, srcTokenPos, prevSrcTokenPosHolder, arcProbHolder);
 	  prevSrcTokenPosHolder = previousAlignment[(int)stateId];
-	  float trueUnnormalizedArcLogProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, prevSrcTokenPosHolder, tgtTokenPos, 
-					      srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
+	  int prevSrcTokenId = prevSrcTokenPosHolder == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[prevSrcTokenPosHolder];
+	  float trueUnnormalizedArcLogProb = params.ComputeLogProb(srcTokenId, prevSrcTokenId, tgtTokenId, 
+								   srcTokenPos, prevSrcTokenPosHolder, tgtTokenPos, 
+								   srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
 
 	  // for debugging only
 	  //cerr <<  " tgtTokenPos=" << tgtTokenPos << " srcTokenPos=" << srcTokenPos << " prevSrcTokenPos=" << prevSrcTokenPosHolder << " trueUnnormalizedArcLogProb=" << trueUnnormalizedArcLogProb << " proposalUnnormalizedArcLogProb=" << arcProbHolder;
@@ -497,7 +487,8 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 	int srcTokenId = arc.olabel;
 	float tgtTokenPos, srcTokenPos, prevSrcTokenPos, dummy;
 	FstUtils::DecodeQuad(arc.weight, tgtTokenPos, srcTokenPos, prevSrcTokenPos, dummy);
-	float arcProb = params.ComputeLogProb(srcTokenId, tgtTokenId, srcTokenPos, prevSrcTokenPos, tgtTokenPos, 
+	int prevSrcTokenId = prevSrcTokenPos == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[prevSrcTokenPos];
+	float arcProb = params.ComputeLogProb(srcTokenId, prevSrcTokenId,  tgtTokenId, srcTokenPos, prevSrcTokenPos, tgtTokenPos, 
 					      srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
 	arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, prevSrcTokenPos, arcProb);
 	aiter.SetValue(arc);
@@ -554,8 +545,9 @@ void LogLinearModel::CreateSampleAlignmentFst(const vector<int>& srcTokens,
       // tgtPos = tgtPos
       int srcToken = srcTokens[srcPos];
       int tgtToken = translations[i][tgtPos];
+      int prevSrcToken = previousSrcPosition == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[previousSrcPosition];
       float unnormalizedTrueDistPriorProb = 
-	params.ComputeLogProb(srcToken, tgtToken, srcPos, previousSrcPosition, tgtPos, 
+	params.ComputeLogProb(srcToken, prevSrcToken, tgtToken, srcPos, previousSrcPosition, tgtPos, 
 			      srcTokens.size(), translations[i].size(), enabledFeatureTypesFirstOrder);
       
       // now add the arc
@@ -573,10 +565,10 @@ void LogLinearModel::CreateSampleAlignmentFst(const vector<int>& srcTokens,
   }
 }
 
-void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
-						       const VectorFst< LogArc >& totalProbFst, 
+void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadArc> &descriptorFst, 
+						       const VectorFst< LogArc > &totalProbFst, 
 						       LogLinearParams& gradient,
-						       int srcTokensCount,
+						       const vector<int> &srcTokens,
 						       int tgtTokensCount,
 						       bool subtract) {
   clock_t d1 = 0, d2 = 0, d3 = 0, d4 = 0, d5 = 0, temp;
@@ -617,7 +609,15 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
 
       // find the features activated on this transition, and their values
       map<string, float> activeFeatures;
-      gradient.FireFeatures(srcToken, tgtToken, (int)srcPos, (int)prevSrcPos, (int)tgtPos, srcTokensCount, tgtTokensCount, enabledFeatureTypesFirstOrder, activeFeatures);
+      int prevSrcToken = INITIAL_SRC_POS ? INITIAL_SRC_POS : srcTokens[(int)prevSrcPos];
+      // epsilon arc
+      if(srcToken == 0 && tgtToken == 0) {
+	continue;
+      }
+      assert(srcToken != 0);
+      assert(tgtToken != 0 && tgtPos != 0);
+      gradient.FireFeatures(srcToken, prevSrcToken, tgtToken, (int)srcPos, (int)prevSrcPos, (int)tgtPos, 
+			    srcTokens.size(), tgtTokensCount, enabledFeatureTypesFirstOrder, activeFeatures);
       d4 += clock() - temp;
       temp = clock();
       // for debugging
@@ -714,7 +714,7 @@ void LogLinearModel::Train() {
     // in other words, when the equations on paper say we should gradient[feature] += x, we usually have x in the log-domain -log(x),
     // so effectively we need to add (rather than log-add) e^{- -log(x) } which is equivalent to += x
     // TODO OPTIMIZATION: instead of defining gradient here, define it as a class member.
-    LogLinearParams gradient;
+    LogLinearParams gradient(params.srcTypes, params.tgtTypes, params.ibmModel1ForwardScores, params.ibmModel1BackwardScores);
 
     // first, compute the regularizer's term for each feature in the gradient
     clock_t timestamp2 = clock();
@@ -810,11 +810,11 @@ void LogLinearModel::Train() {
       clock_t timestamp6 = clock();
       //      cerr << "===========================" << endl << "add sent #" << sentsCounter << " contribution to E(features) according to p(a|T,S)" << endl;
       //      cerr << "===========================" << endl;
-      AddSentenceContributionToGradient(aGivenTS, aGivenTSTotalProb, gradient, srcTokens.size(), tgtTokens.size(), false);
+      AddSentenceContributionToGradient(aGivenTS, aGivenTSTotalProb, gradient, srcTokens, tgtTokens.size(), false);
 
       clock_t timestamp6d5 = clock();
       //      cerr << "===========================" << endl << "add sent contribution to E(features) according to p(a,T|S)" << endl;
-      AddSentenceContributionToGradient(aTGivenS, aTGivenSTotalProb, gradient, srcTokens.size(), tgtTokens.size(), true);
+      AddSentenceContributionToGradient(aTGivenS, aTGivenSTotalProb, gradient, srcTokens, tgtTokens.size(), true);
       accGenericClocks += clock() - timestamp6d5;
 
       // update the iteration log likelihood with this sentence's likelihod

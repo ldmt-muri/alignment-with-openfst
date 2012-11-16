@@ -50,9 +50,12 @@ class IbmModel1 {
 
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
-  Model1Param params;
   VectorFst<LogArc> grammarFst;
   LearningInfo learningInfo;
+
+ public:  
+  Model1Param params;
+
 };
 
 #endif

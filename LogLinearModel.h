@@ -82,7 +82,7 @@ class LogLinearModel {
   void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 
 					 LogLinearParams& gradient,
-					 int srcTokensCount,
+					 const vector<int> &srcTokens,
 					 int tgtTokensCount,
 					 bool subtract);
   
