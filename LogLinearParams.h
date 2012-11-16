@@ -35,6 +35,11 @@ class LogLinearParams {
   // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const LogLinearParams& gradient, const OptUtils::OptMethod& optMethod);
 
+  // applies the accumulative l1 penalty on feature weights, also updates the appliedL1Penalty values
+  void ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
+				LogLinearParams& appliedL1Penalty,
+				const double correctL1Penalty);
+
   // compute the orthographic similarity between two strings
   float ComputeOrthographicSimilarity(const std::string& srcWord, const std::string& tgtWord);
 

@@ -11,4 +11,5 @@
 make
 #./train-model1 example/small.eng.int example/small.kin.int example/small.out
 ./train-loglinear example/small.eng.int example/small.kin.int example/small.out
+#./train-hmm example/small.eng.int example/small.kin.int example/small.out
 #head example/small.out.param.final

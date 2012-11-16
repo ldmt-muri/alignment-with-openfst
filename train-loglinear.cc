@@ -97,8 +97,6 @@ int main(int argc, char **argv) {
   VocabDecoder tgtTypes(tgtVocabFilename);
 
   // initialize the loglinear model
-  Regularizer::Regularizer regularizationType = Regularizer::NONE;
-  float regularizationConst = 0.01;
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.useMinLikelihoodDiff = false;
@@ -106,6 +104,8 @@ int main(int argc, char **argv) {
   learningInfo.maxIterationsCount = 30;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
+  learningInfo.optimizationMethod.regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.regularizationStrength = 0.01;
   learningInfo.samplesCount = 100;
   learningInfo.distATGivenS = Distribution::LOCAL;
   learningInfo.customDistribution = &hmmModel;
@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
   learningInfo.tgtVocabDecoder = &tgtTypes;
   learningInfo.ibm1ForwardLogProbs = &ibm1ForwardModel.params;
   learningInfo.ibm1BackwardLogProbs = &ibm1BackwardModel.params;
-  LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, regularizationType, regularizationConst, learningInfo);
+  LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
 
   // train model parameters
   model.Train();

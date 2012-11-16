@@ -15,19 +15,14 @@ void LogLinearModel::InitParams() {
 LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename, 
 			       const string& tgtIntCorpusFilename, 
 			       const string& outputFilenamePrefix, 
-			       const Regularizer::Regularizer& regularizationType, 
-			       const float regularizationConst, 
 			       const LearningInfo& learningInfo) : params(*learningInfo.srcVocabDecoder,
   									  *learningInfo.tgtVocabDecoder,
   									  *learningInfo.ibm1ForwardLogProbs,
   									  *learningInfo.ibm1BackwardLogProbs) {
-
   // set member variables
   this->srcCorpusFilename = srcIntCorpusFilename;
   this->tgtCorpusFilename = tgtIntCorpusFilename;
   this->outputPrefix = outputFilenamePrefix;
-  this->regularizationType = regularizationType;
-  this->regularizationConst = regularizationConst;
   this->learningInfo = learningInfo;
   
   // initialize the model parameters
@@ -42,8 +37,10 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   // for each line
   string srcLine, tgtLine;
   map<int,int> tgtTokenIdFreq;
+  int sentsCounter = 0;
   while(getline(srcCorpus, srcLine)) {
     getline(tgtCorpus, tgtLine);
+    sentsCounter++;
     // read the list of integers representing target tokens
     vector< int > srcTokens, tgtTokens;
     StringUtils::ReadIntTokens(srcLine, srcTokens);
@@ -62,6 +59,9 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
       }
     }
   }
+  // initialize corpusSize
+  corpusSize = sentsCounter;
+
   // add the null alignments to the grammar
   map<int,int>& tgtFreq = srcTgtFreq[NULL_SRC_TOKEN_ID];
   for(map<int,int>::const_iterator tgtTokenIter = tgtTokenIdFreq.begin(); tgtTokenIter != tgtTokenIdFreq.end(); tgtTokenIter++) {
@@ -72,6 +72,17 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
 
   // grammar is unweighted, so there's no need to change from one iteration to the next (unless we want to prune it)
   CreateGrammarFst();
+
+  // some configurations are not unsupported:
+  if(learningInfo.optimizationMethod.algorithm == OptUtils::STOCHASTIC_GRADIENT_DESCENT &&
+     learningInfo.optimizationMethod.regularizer == Regularizer::L2) {
+    // - SGD with L2
+    assert(false);
+  } else if(learningInfo.optimizationMethod.algorithm == OptUtils::GRADIENT_DESCENT &&
+	    learningInfo.optimizationMethod.regularizer == Regularizer::L1) {
+    // - GD with L1
+    assert(false);
+  }
 
   // bool vectors indicating which feature types to use
   assert(enabledFeatureTypesSimple.size() == 0 && enabledFeatureTypesFirstOrder.size() == 0);
@@ -661,7 +672,7 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
 
   // compute ||params||_2
   float l2 = 0;
-  if(regularizationType == Regularizer::L2) {
+  if(learningInfo.optimizationMethod.regularizer == Regularizer::L2) {
     for(map<string, float>::const_iterator featureIter = params.params.begin();
 	featureIter != params.params.end();
 	featureIter++) {
@@ -674,9 +685,9 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
       featureIter != params.params.end();
       featureIter++) {
     float term;
-    switch(regularizationType) {
+    switch(learningInfo.optimizationMethod.regularizer) {
     case Regularizer::L2:
-      term = 2.0 * regularizationConst * featureIter->second / l2;
+      term = 2.0 * learningInfo.optimizationMethod.regularizationStrength * featureIter->second / l2;
       gradient.params[featureIter->first] += term;
       assert(gradient.params[featureIter->first] == term);
       break;
@@ -711,14 +722,26 @@ void LogLinearModel::Train() {
     ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
 
     // IMPORTANT NOTE: this is the gradient of the regualarized log-likelihood, in the real-domain, not in the log-domain.
-    // in other words, when the equations on paper say we should gradient[feature] += x, we usually have x in the log-domain -log(x),
-    // so effectively we need to add (rather than log-add) e^{- -log(x) } which is equivalent to += x
+    // in other words, when the equations on paper say we should gradient[feature] += x, we effectively need to add 
+    // (rather than log-add) e^{- -log(x) } (because we only have x in the log-domain -log(x)) which is equivalent to += x.
     // TODO OPTIMIZATION: instead of defining gradient here, define it as a class member.
+    // TODO (refactoring): LogLinearParams requires initialization thru this constructor, but we don't need them for the gradient
     LogLinearParams gradient(params.srcTypes, params.tgtTypes, params.ibmModel1ForwardScores, params.ibmModel1BackwardScores);
+
+    // this is needed only for the cumulative L1 regularizer. it reprsents the total actual l1 penalty each feature has received
+    // so far (i.e. it's updated every batchsize sentences) in this iteration
+    // TODO (refactoring): LogLinearParams requires initialization thru this constructor, but we don't need them for this instance
+    LogLinearParams appliedL1Penalty(params.srcTypes, params.tgtTypes, params.ibmModel1ForwardScores, params.ibmModel1BackwardScores);
+    
+    // this is needed only for the cumulative L1 regularizer. it represents the total l1 penalty any feature should have receive so far.
+    // it's updated every batchsize sentences.
+    double correctL1Penalty = 0;
 
     // first, compute the regularizer's term for each feature in the gradient
     clock_t timestamp2 = clock();
-    AddRegularizerTerm(gradient);
+    if(learningInfo.optimizationMethod.algorithm == OptUtils::GRADIENT_DESCENT) {
+      AddRegularizerTerm(gradient);
+    }
     accRegularizationClocks += clock() - timestamp2;
     
     // for each line
@@ -838,14 +861,22 @@ void LogLinearModel::Train() {
       //      cerr << "====================constrainedATGivenSProbs==============" << endl;
       //      cerr << FstUtils::PrintFstSummary(constrainedATGivenSProbs) << endl;
       //      cerr << "=============sentence's likelihood===========" << endl;
-            cerr << "-log p(ref translation|s) = " << constrainedATGivenSBeta0.Value() << endl;
+      cerr << "-log p(ref translation|s) = " << constrainedATGivenSBeta0.Value() << endl;
       //      cerr << "iteration's loglikelihood now = " << logLikelihood << endl << endl;
+
+      // if using cumulative L1, update correctL1Penalty
+      if(learningInfo.optimizationMethod.regularizer == Regularizer::L1) {
+	correctL1Penalty += learningInfo.optimizationMethod.learningRate * learningInfo.optimizationMethod.regularizationStrength / this->corpusSize;
+      }
 
       // if the optimization algorithm is stochastic, update the parameters here.
       cerr << "s";
       if(IsStochastic(learningInfo.optimizationMethod.algorithm) && sentsCounter % learningInfo.optimizationMethod.miniBatchSize == 0) {
 	cerr << "u";
 	params.UpdateParams(gradient, learningInfo.optimizationMethod);
+	if(learningInfo.optimizationMethod.regularizer == Regularizer::L1) {
+	  params.ApplyCumulativeL1Penalty(gradient, appliedL1Penalty, correctL1Penalty);
+	}
 	gradient.Clear();
       }
       accUpdateClocks += clock() - timestamp6;
@@ -869,7 +900,13 @@ void LogLinearModel::Train() {
 
       timestamp3 = clock();
     }
-    
+
+    // if cumulative L1 regularization is being used, now is the time to update all weights with the difference between
+    // the correctL1Penalty and the appliedL1Penalty 
+    if(learningInfo.optimizationMethod.regularizer == Regularizer::L1) {
+      params.ApplyCumulativeL1Penalty(params, appliedL1Penalty, correctL1Penalty);
+    }
+
     // if the optimization algorithm isn't stochastic, update the parameters here.
     clock_t timestamp7 = clock();
     if(IsStochastic(learningInfo.optimizationMethod.algorithm)) {
@@ -912,6 +949,7 @@ void LogLinearModel::Train() {
 	cerr << "===============================================" << endl;
       }
     }
+   
   } while(!done);
 
   // persist parameters

@@ -29,7 +29,11 @@ namespace DiscriminativeLexicon {
 }
 
 namespace Regularizer {
-  enum Regularizer {NONE, L2};
+  enum Regularizer {
+    NONE, 
+    L2, 
+    // the cumulative L1 approximation of Tsuruoka et al. 2009
+    L1};
 }
 
 namespace OptUtils {
@@ -47,11 +51,15 @@ namespace OptUtils {
     OptAlgorithm algorithm;
     float learningRate;
     int miniBatchSize;
+    Regularizer::Regularizer regularizer;
+    float regularizationStrength;
 
     OptMethod() {
       algorithm = STOCHASTIC_GRADIENT_DESCENT;
       learningRate = 0.01;
       miniBatchSize = 1;
+      regularizer = Regularizer::NONE;
+      regularizationStrength = 1000;
     }
   }; 
 }

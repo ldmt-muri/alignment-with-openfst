@@ -236,12 +236,30 @@ void LogLinearParams::UpdateParams(const LogLinearParams& gradient, const OptMet
     for(map<string, float>::const_iterator gradientIter = gradient.params.begin();
 	gradientIter != gradient.params.end();
 	gradientIter++) {
-      params[gradientIter->first] -= gradientIter->second;
+      params[gradientIter->first] -= optMethod.learningRate * gradientIter->second;
     }
     break;
   default:
     assert(false);
     break;
+  }
+}
+
+// if using a cumulative L1 regularizer, apply the cumulative l1 penalty
+void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
+					       LogLinearParams& appliedL1Penalty,
+					       const double correctL1Penalty) {
+  for(map<string, float>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
+      featuresIter != applyToFeaturesHere.params.end();
+      featuresIter++) {
+    float currentFeatureWeight = params[featuresIter->first];
+    if(currentFeatureWeight >= 0) {
+      currentFeatureWeight = max(0.0, currentFeatureWeight - (correctL1Penalty + appliedL1Penalty.params[featuresIter->first]));
+    } else {
+      currentFeatureWeight = min(0.0, currentFeatureWeight + (correctL1Penalty - appliedL1Penalty.params[featuresIter->first]));
+    }
+    appliedL1Penalty.params[featuresIter->first] += currentFeatureWeight - params[featuresIter->first];
+    params[featuresIter->first] = currentFeatureWeight;
   }
 }
 

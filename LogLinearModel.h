@@ -60,8 +60,6 @@ class LogLinearModel {
   LogLinearModel(const string& srcIntCorpusFilename, 
 		 const string& tgtIntCorpusFilename, 
 		 const string& outputFilenamePrefix, 
-		 const Regularizer::Regularizer& regularizationType, 
-		 const float regularizationConst, 
 		 const LearningInfo& learningInfo);
 
   void PrintParams();
@@ -92,14 +90,14 @@ class LogLinearModel {
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
   LogLinearParams params;
   VectorFst<LogQuadArc> grammarFst;
+  // lots of configurations, including but not limited to reguarlization, optimization method ...etc
   LearningInfo learningInfo;
   // maps a srcTokenId to a map of tgtTokenIds and the number of times they co-occurred in a sent pair
   std::map<int, std::map<int, int> > srcTgtFreq;
-  float regularizationConst;
-  Regularizer::Regularizer regularizationType;
-  OptUtils::OptMethod optimizationMethod;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;
+  // number of sentences in the corpus
+  int corpusSize;
 };
 
 #endif
