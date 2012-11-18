@@ -71,7 +71,7 @@ class LogLinearModel {
 
   void Train();
 
-  void Align();
+  string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
   void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
 			 bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 

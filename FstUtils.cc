@@ -383,3 +383,55 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
     }
   }
 }
+
+// returns a gizapp-style alignment string compatible with the alignment represented in the transducer bestAlignment
+// assumption:
+// - bestAlignment is a linear chain transducer. 
+// - the input labels are tgt positions
+// - the output labels are the corresponding src positions according to the alignment
+string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
+  stringstream output;
+
+  // traverse the transducer beginning with the start state
+  int startState = bestAlignment.Start();
+  int currentState = startState;
+  int tgtPos = 0;
+  while(bestAlignment.Final(currentState) == LogWeight::Zero()) {
+    
+    // get hold of the arc
+    ArcIterator< VectorFst< StdArc > > aiter(bestAlignment, currentState);
+
+    // identify the next state
+    int nextState = aiter.Value().nextstate;
+
+    // skip epsilon arcs
+    if(aiter.Value().ilabel == EPSILON && aiter.Value().olabel == EPSILON) {
+      currentState = nextState;
+      continue;
+    }
+
+    // check the tgt position (shouldn't be a surprise)
+    tgtPos++;
+    assert(aiter.Value().ilabel == tgtPos);
+
+    // check the src position (should be >= 0)
+    assert(aiter.Value().olabel >= 0);
+
+    // print the alignment giza-style
+    int srcPos = aiter.Value().olabel;
+    // giza++ does not write null alignments
+    if(srcPos != 0) {
+      // giza++ uses zero-based src and tgt positions, and writes the src position first
+      output << (srcPos - 1) << "-" << (tgtPos - 1) << " ";
+    }
+
+    // this state shouldn't have other arcs!
+    aiter.Next();
+    assert(aiter.Done());
+
+    // move forward to the next state
+    currentState = nextState;
+  }
+
+  return output.str();
+}

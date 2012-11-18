@@ -966,8 +966,25 @@ void LogLinearModel::Train() {
   cerr << "accumulated generic time = " << (float) accGenericClocks / CLOCKS_PER_SEC << " sec." << endl;
 }
 
-// TODO: not implemented
-// given the current model, align the corpus
-void LogLinearModel::Align() {
+// given the current model, align a test sent
+// assumptions: 
+// - the null token has *NOT* been inserted yet
+string LogLinearModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
+  static int sentCounter = 0;
+  
+  // insert the null token
+  assert(srcTokens.size() > 0 && srcTokens[0] != NULL_SRC_TOKEN_ID);
+  srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
+  
+  // build aGivenTS
+  VectorFst< LogQuadArc > aGivenTS, dummy;
+  BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, DiscriminativeLexicon::COOCC, sentCounter, Distribution::TRUE, dummy);
+  VectorFst< LogArc > aGivenTSProbs;
+  ArcMap(aGivenTS, &aGivenTSProbs, LogQuadToLogPositionMapper());
+  // tropical has the path property
+  VectorFst< StdArc > aGivenTSProbsWithPathProperty, bestAlignment;
+  ArcMap(aGivenTSProbs, &aGivenTSProbsWithPathProperty, LogToTropicalMapper());
+  ShortestPath(aGivenTSProbsWithPathProperty, &bestAlignment);
+  return FstUtils::PrintAlignment(bestAlignment);
 }

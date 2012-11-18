@@ -33,24 +33,30 @@ class HmmModel : public IAlignmentSampler {
   void NormalizeParams(ConditionalMultinomialParam& params);
   
   // creates an fst for each target sentence
-  void CreateTgtFsts(vector< VectorFst< LogTripleArc > >& targetFsts);
+  void CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts);
 
   // creates a 1st order markov fst for each source sentence
-  void CreateSrcFsts(vector< VectorFst< LogTripleArc > >& srcFsts);
+  void CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts);
 
   // creates an fst for each src sentence, which remembers the last visited src token
-  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogTripleArc>& srcFst);
+  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
 
   void CreateGrammarFst();
 
-  void CreatePerSentGrammarFsts(vector< VectorFst< LogTripleArc > >& perSentGrammarFsts);
+  void CreatePerSentGrammarFsts(vector< VectorFst< LogQuadArc > >& perSentGrammarFsts);
   
   // zero all parameters
   void ClearParams(ConditionalMultinomialParam& params);
   void ClearFractionalCounts();
   
-  void LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts);
+  void LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts);
   
+  void BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst, 
+			 const VectorFst< LogQuadArc > &srcFst, 
+			 VectorFst< LogQuadArc > &alignmentFst);
+
+  void CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc > &tgtFst);
+    
  public:
 
   HmmModel(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
@@ -66,7 +72,7 @@ class HmmModel : public IAlignmentSampler {
 
   void Train();
 
-  void Align();
+  string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);
@@ -85,7 +91,7 @@ class HmmModel : public IAlignmentSampler {
 
   // Compose(perSentTgtFst * grammarFst * perSentSrcFst) => alignment fst
   // weight = (currentSrcPos, prevSrcPos, arcWeight)
-  VectorFst<LogTripleArc> grammarFst;
+  VectorFst<LogQuadArc> grammarFst;
 
   // configurations
   LearningInfo learningInfo;

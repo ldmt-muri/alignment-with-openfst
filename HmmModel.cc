@@ -34,7 +34,7 @@ void HmmModel::Train() {
 
   // create tgt fsts
   cerr << "create tgt fsts" << endl;
-  vector< VectorFst <LogTripleArc> > tgtFsts;
+  vector< VectorFst <LogQuadArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
   // training iterations
@@ -47,7 +47,7 @@ void HmmModel::Train() {
 }
 
 // src fsts are 1st order markov models
-void HmmModel::CreateSrcFsts(vector< VectorFst< LogTripleArc > >& srcFsts) {
+void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
   ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
   
   // for each line
@@ -60,7 +60,7 @@ void HmmModel::CreateSrcFsts(vector< VectorFst< LogTripleArc > >& srcFsts) {
     StringUtils::ReadIntTokens(line, intTokens);
     
     // create the fst
-    VectorFst< LogTripleArc > srcFst;
+    VectorFst< LogQuadArc > srcFst;
     Create1stOrderSrcFst(intTokens, srcFst);
     srcFsts.push_back(srcFst);
     
@@ -70,8 +70,28 @@ void HmmModel::CreateSrcFsts(vector< VectorFst< LogTripleArc > >& srcFsts) {
   srcCorpus.close();
 }
 
+// assumptions:
+// - tgtFst is empty
+void HmmModel::CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc > &tgtFst) {
+  assert(tgtFst.NumStates() == 0);
+  int statesCount = tgtTokens.size() + 1;
+  for(int stateId = 0; stateId < tgtTokens.size()+1; stateId++) {
+    int temp = tgtFst.AddState();
+    assert(temp == stateId);
+    if(stateId == 0) continue;
+    int tgtPos = stateId - 1;
+    tgtFst.AddArc(stateId-1, 
+		  LogQuadArc(tgtTokens[stateId-1], 
+			       tgtTokens[stateId-1], 
+			       FstUtils::EncodeQuad(tgtPos, 0, 0, 0), 
+			       stateId));
+  }
+  tgtFst.SetStart(0);
+  tgtFst.SetFinal(tgtTokens.size(), LogQuadWeight::One());
+  ArcSort(&tgtFst, ILabelCompare<LogQuadArc>());
+}
 
-void HmmModel::CreateTgtFsts(vector< VectorFst< LogTripleArc > >& targetFsts) {
+void HmmModel::CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts) {
   ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
   
   // for each line
@@ -83,21 +103,8 @@ void HmmModel::CreateTgtFsts(vector< VectorFst< LogTripleArc > >& targetFsts) {
     StringUtils::ReadIntTokens(line, intTokens);
     
     // create the fst
-    VectorFst< LogTripleArc > tgtFst;
-    int statesCount = intTokens.size() + 1;
-    for(int stateId = 0; stateId < intTokens.size()+1; stateId++) {
-      int temp = tgtFst.AddState();
-      assert(temp == stateId);
-      if(stateId == 0) continue;
-      tgtFst.AddArc(stateId-1, 
-		    LogTripleArc(intTokens[stateId-1], 
-				 intTokens[stateId-1], 
-				 LogTripleWeight::One(), 
-				 stateId));
-    }
-    tgtFst.SetStart(0);
-    tgtFst.SetFinal(intTokens.size(), LogTripleWeight::One());
-    ArcSort(&tgtFst, ILabelCompare<LogTripleArc>());
+    VectorFst< LogQuadArc > tgtFst;
+    CreateTgtFst(intTokens, tgtFst);
     targetFsts.push_back(tgtFst);
     
     // for debugging
@@ -258,10 +265,10 @@ void HmmModel::CreateGrammarFst() {
   }
   
   // create the only state in this fst, and make it initial and final
-  LogTripleArc::StateId dummy = grammarFst.AddState();
+  LogQuadArc::StateId dummy = grammarFst.AddState();
   assert(dummy == 0);
   grammarFst.SetStart(0);
-  grammarFst.SetFinal(0, LogTripleWeight::One());
+  grammarFst.SetFinal(0, LogQuadWeight::One());
   int fromState = 0, toState = 0;
   for(ConditionalMultinomialParam::const_iterator srcIter = tFractionalCounts.begin(); srcIter != tFractionalCounts.end(); srcIter++) {
     for(MultinomialParam::const_iterator tgtIter = (*srcIter).second.begin(); tgtIter != (*srcIter).second.end(); tgtIter++) {
@@ -269,13 +276,13 @@ void HmmModel::CreateGrammarFst() {
       int srcToken = (*srcIter).first;
       float paramValue = (*tgtIter).second;
       grammarFst.AddArc(fromState, 
-			LogTripleArc(tgtToken, 
+			LogQuadArc(tgtToken, 
 				     srcToken, 
-				     FstUtils::EncodeTriple(0,0,paramValue), 
+				     FstUtils::EncodeQuad(0, 0, 0, paramValue), 
 				     toState));
     }
   }
-  ArcSort(&grammarFst, ILabelCompare<LogTripleArc>());
+  ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
   //  PrintFstSummary(grammarFst);
 }
 
@@ -291,7 +298,7 @@ void HmmModel::CreateGrammarFst() {
 // - the "1stOrder" part of the function name indicates this FST represents a first order markov process
 //   for alignment transitions.
 //
-void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogTripleArc>& srcFst) {
+void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
   // enforce assumptions
   assert(srcTokens.size() > 0 && srcTokens[0] == NULL_SRC_TOKEN_ID);
   assert(srcFst.NumStates() == 0);
@@ -313,23 +320,23 @@ void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogT
     if(i == 0) {
       srcFst.SetStart(i);
     } else {
-      srcFst.SetFinal(i, LogTripleWeight::One());
+      srcFst.SetFinal(i, LogQuadWeight::One());
     }
 
     // we don't allow prevAlignment to be null alignment in our markov model. if a null alignment happens after alignment = 5, we use 5 as prevAlignment, not the null alignment. if null alignment happens before any non-null alignment, we use a special src position INITIAL_SRC_POS to indicate the prevAlignment
     int prevAlignment = i == 0? INITIAL_SRC_POS : i;
 
     // each state can go to itself with the null src token
-    srcFst.AddArc(i, LogTripleArc(srcTokens[0], srcTokens[0], FstUtils::EncodeTriple(i, prevAlignment, aParams[prevAlignment][i]), i));
+    srcFst.AddArc(i, LogQuadArc(srcTokens[0], srcTokens[0], FstUtils::EncodeQuad(0, i, prevAlignment, aParams[prevAlignment][i]), i));
 
     // each state can go to states representing non-null alignments
     for(int j = 1; j < srcTokens.size(); j++) {
-      srcFst.AddArc(i, LogTripleArc(srcTokens[j], srcTokens[j], FstUtils::EncodeTriple(j, prevAlignment, aParams[prevAlignment][j]), j));
+      srcFst.AddArc(i, LogQuadArc(srcTokens[j], srcTokens[j], FstUtils::EncodeQuad(0, j, prevAlignment, aParams[prevAlignment][j]), j));
     }
   }
  
   // arc sort to enable composition
-  ArcSort(&srcFst, ILabelCompare<LogTripleArc>());
+  ArcSort(&srcFst, ILabelCompare<LogQuadArc>());
 
   // for debugging
   //  cerr << "=============SRC FST==========" << endl;
@@ -350,7 +357,15 @@ void HmmModel::ClearParams(ConditionalMultinomialParam& params) {
   }
 }
 
-void HmmModel::LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts) {
+void HmmModel::BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst, 
+				 const VectorFst< LogQuadArc > &srcFst, 
+				 VectorFst< LogQuadArc > &alignmentFst) {
+  VectorFst< LogQuadArc > temp;
+  Compose(tgtFst, grammarFst, &temp);
+  Compose(temp, srcFst, &alignmentFst);  
+}
+
+void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
   clock_t compositionClocks = 0, forwardBackwardClocks = 0, updatingFractionalCountsClocks = 0, normalizationClocks = 0;
   clock_t t00 = clock();
   do {
@@ -358,7 +373,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts) {
 
     // create src fsts (these encode the aParams as weights on their arcs)
     cerr << "create src fsts" << endl;
-    vector< VectorFst <LogTripleArc> > srcFsts;
+    vector< VectorFst <LogQuadArc> > srcFsts;
     CreateSrcFsts(srcFsts);
 
     clock_t t10 = clock();
@@ -370,26 +385,25 @@ void HmmModel::LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts) {
     
     // iterate over sentences
     int sentsCounter = 0;
-    for( vector< VectorFst< LogTripleArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(); 
+    for( vector< VectorFst< LogQuadArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(); 
 	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end(); 
 	 tgtIter++, srcIter++) {
 
       // build the alignment fst
       clock_t t20 = clock();
-      const VectorFst< LogTripleArc > &tgtFst = *tgtIter, &srcFst = *srcIter;
-      VectorFst< LogTripleArc > alignmentFst, temp;
-      Compose(tgtFst, grammarFst, &temp);
-      Compose(temp, srcFst, &alignmentFst);
+      const VectorFst< LogQuadArc > &tgtFst = *tgtIter, &srcFst = *srcIter;
+      VectorFst< LogQuadArc > alignmentFst;
+      BuildAlignmentFst(tgtFst, srcFst, alignmentFst);
       compositionClocks += clock() - t20;
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
-      vector<LogTripleWeight> alphas, betas;
+      vector<LogQuadWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
       float fSentLogLikelihood, dummy;
-      FstUtils::DecodeTriple(betas[alignmentFst.Start()], 
-			     dummy, dummy, fSentLogLikelihood);
+      FstUtils::DecodeQuad(betas[alignmentFst.Start()], 
+			     dummy, dummy, dummy, fSentLogLikelihood);
       forwardBackwardClocks += clock() - t30;
       
       // compute and accumulate fractional counts for model parameters
@@ -398,21 +412,21 @@ void HmmModel::LearnParameters(vector< VectorFst< LogTripleArc > >& tgtFsts) {
 	learningInfo.useEarlyStopping && 
 	sentsCounter % learningInfo.trainToDevDataSize == 0;
       for (int stateId = 0; !excludeFractionalCountsInThisSent && stateId < alignmentFst.NumStates() ;stateId++) {
-	for (ArcIterator<VectorFst< LogTripleArc > > arcIter(alignmentFst, stateId);
+	for (ArcIterator<VectorFst< LogQuadArc > > arcIter(alignmentFst, stateId);
 	     !arcIter.Done();
 	     arcIter.Next()) {
 
 	  // decode arc information
 	  int srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
 	  int fromState = stateId, toState = arcIter.Value().nextstate;
-	  float fCurrentSrcPos, fPrevSrcPos, arcLogProb;
-	  FstUtils::DecodeTriple(arcIter.Value().weight, fCurrentSrcPos, fPrevSrcPos, arcLogProb);
+	  float fCurrentTgtPos, fCurrentSrcPos, fPrevSrcPos, arcLogProb;
+	  FstUtils::DecodeQuad(arcIter.Value().weight, fCurrentTgtPos, fCurrentSrcPos, fPrevSrcPos, arcLogProb);
 	  int currentSrcPos = (int) fCurrentSrcPos, prevSrcPos = (int) fPrevSrcPos;
 
 	  // probability of using this parameter given this sentence pair and the previous model
 	  float alpha, beta, dummy;
-	  FstUtils::DecodeTriple(alphas[fromState], dummy, dummy, alpha);
-	  FstUtils::DecodeTriple(betas[toState], dummy, dummy, beta);
+	  FstUtils::DecodeQuad(alphas[fromState], dummy, dummy, dummy, alpha);
+	  FstUtils::DecodeQuad(betas[toState], dummy, dummy, dummy, beta);
 	  float fNormalizedPosteriorLogProb = (alpha + arcLogProb + beta) - fSentLogLikelihood;
 	    
 	  // update tFractionalCounts
@@ -545,8 +559,27 @@ void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>
   assert(hmmLogProb >= 0);
 }
 
-// TODO: not implemented
-// given the current model, align the corpus
-void HmmModel::Align() {
+// given the current model, align a test sentence
+// assumptions: 
+// - the null token has *NOT* been inserted yet
+string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
+  static int sentCounter = 0;
+  
+  // insert the null token
+  assert(srcTokens.size() > 0 && srcTokens[0] != NULL_SRC_TOKEN_ID);
+  srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
+  
+  // build aGivenTS
+  VectorFst<LogQuadArc> tgtFst, srcFst, alignmentFst;
+  CreateTgtFst(tgtTokens, tgtFst);  
+  Create1stOrderSrcFst(srcTokens, srcFst);
+  BuildAlignmentFst(tgtFst, srcFst, alignmentFst);
+  VectorFst< LogArc > alignmentFstProbs;
+  ArcMap(alignmentFst, &alignmentFstProbs, LogQuadToLogPositionMapper());
+  // tropical has the path property
+  VectorFst< StdArc > alignmentFstProbsWithPathProperty, bestAlignment;
+  ArcMap(alignmentFstProbs, &alignmentFstProbsWithPathProperty, LogToTropicalMapper());
+  ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
+  return FstUtils::PrintAlignment(bestAlignment);
 }

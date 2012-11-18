@@ -58,6 +58,8 @@ class FstUtils {
   static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);
   static int FindFinalState(const fst::VectorFst<LogQuadArc>& fst);
   static void MakeOneFinalState(fst::VectorFst<LogQuadArc>& fst);
+  
+  static string PrintAlignment(const fst::VectorFst< fst::StdArc > &bestAlignment);
 
   template<class WeightType, class ArcType>
     inline static void ComputeTotalProb(const fst::VectorFst<ArcType>& prob, fst::VectorFst<ArcType>& totalProbs, WeightType& beta0) {
@@ -123,6 +125,20 @@ struct LogTripleToLogMapper {
   uint64 Properties(uint64 props) const { return props; }
 };
 
+// an arc mapper that doesn't change anything in the FST layout, but replaces each LogTripleWeight 
+// with a LogWeight equal to the third component in LogTripleWeight
+struct LogTripleToLogPositionMapper {
+  fst::LogArc operator()(const LogTripleArc &arc) const {
+    float v1, v2, v3;
+    FstUtils::DecodeTriple(arc.weight, v1, v2, v3);
+    return fst::LogArc(arc.ilabel, arc.olabel, v3, arc.nextstate);
+  }
+  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  uint64 Properties(uint64 props) const { return props; }
+};
+
 // an arc mapper that doesn't change anything in the FST layout, but replaces each LogQuadWeight 
 // with a LogWeight equal to the last component in LogQuadWeight
 struct LogQuadToLogMapper {
@@ -130,6 +146,21 @@ struct LogQuadToLogMapper {
     float v1, v2, v3, v4;
     FstUtils::DecodeQuad(arc.weight, v1, v2, v3, v4);
     return fst::LogArc(arc.ilabel, arc.olabel, v4, arc.nextstate);
+  }
+  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+  uint64 Properties(uint64 props) const { return props; }
+};
+
+// an arc mapper that doesn't change anything in the FST layout, but replaces each LogQuadWeight 
+// with a LogWeight equal to the last component in LogQuadWeight, and also changes the input/output
+// labels on each arc from tgtToken/srcToken to tgtPos/srcPos
+struct LogQuadToLogPositionMapper {
+  fst::LogArc operator()(const LogQuadArc &arc) const {
+    float tgtPos, srcPos, v3, v4;
+    FstUtils::DecodeQuad(arc.weight, tgtPos, srcPos, v3, v4);
+    return fst::LogArc((int)tgtPos, (int)srcPos, v4, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
