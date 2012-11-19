@@ -11,7 +11,8 @@
 
 class VocabDecoder {
  public:
-  VocabDecoder(const std::string& vocabFilename) {
+ VocabDecoder(const std::string& vocabFilename) {
+    UNK = "_unk_";
     std::ifstream vocabFile(vocabFilename.c_str(), std::ios::in);
     std::string line;
     while(getline(vocabFile, line)) {
@@ -31,11 +32,15 @@ class VocabDecoder {
   }
 
   const std::string& Decode(int wordId) const {
-    assert(vocab.count(wordId) > 0);
-    return vocab.find(wordId)->second;
+    if(vocab.count(wordId) == 0) {
+      return this->UNK;
+    } else {
+      return vocab.find(wordId)->second;
+    }
   }
 
   std::map<int, std::string> vocab;
+  std::string UNK;
 };
 
 #endif

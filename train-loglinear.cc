@@ -14,7 +14,7 @@ void ParseParameters(int argc, char **argv,
 		     string &srcVocabFilename, 
 		     string &tgtVocabFilename, 
 		     string &outputFilepathPrefix) {
-  assert(argc == 6);
+  assert(argc == 8);
   srcTrainSetFilename = argv[1];
   tgtTrainSetFilename = argv[2];
   srcTestSetFilename = argv[3];

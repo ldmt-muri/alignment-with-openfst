@@ -968,25 +968,35 @@ void LogLinearModel::Train() {
 
 // given the current model, align a test sent
 // assumptions: 
-// - the null token has *NOT* been inserted yet
+// - the null token has been inserted as the first token in srcTokens
+// - each of srcTokens and tgtTokens has, at least, one token (excluding the null src token)
 string LogLinearModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   static int sentCounter = 0;
   
-  // insert the null token
-  assert(srcTokens.size() > 0 && srcTokens[0] != NULL_SRC_TOKEN_ID);
-  srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
+  // assumptions
+  assert(srcTokens.size() > 0 && srcTokens[0] == NULL_SRC_TOKEN_ID);
+  assert(srcTokens.size() > 1 && tgtTokens.size() > 0);
   
   // build aGivenTS
   VectorFst< LogQuadArc > aGivenTS, dummy;
   BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, DiscriminativeLexicon::COOCC, sentCounter, Distribution::TRUE, dummy);
+  cerr << "====================alignmnt fst=================" << endl;
+  cerr << FstUtils::PrintFstSummary(aGivenTS);
   VectorFst< LogArc > aGivenTSProbs;
   ArcMap(aGivenTS, &aGivenTSProbs, LogQuadToLogPositionMapper());
+  cerr << "====================alignmnt fst of positions and probs=================" << endl;
+  cerr << FstUtils::PrintFstSummary(aGivenTSProbs);
   // tropical has the path property
   VectorFst< StdArc > aGivenTSProbsWithPathProperty, bestAlignment;
   ArcMap(aGivenTSProbs, &aGivenTSProbsWithPathProperty, LogToTropicalMapper());
+  cerr << "====================alignmnt fst of positions and probs with path property=================" << endl;
+  cerr << FstUtils::PrintFstSummary(aGivenTSProbs);
+  cerr << "before shortest path" << endl;
   ShortestPath(aGivenTSProbsWithPathProperty, &bestAlignment);
+  cerr << "before FstUtils::PrintAlignment" << endl;
   return FstUtils::PrintAlignment(bestAlignment);
+  cerr << "finished AlignSent" << endl;
 }
 
 void LogLinearModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
@@ -997,12 +1007,18 @@ void LogLinearModel::AlignTestSet(const string &srcTestSetFilename, const string
   // for each parallel line
   string srcLine, tgtLine, alignmentsLine;
   int sentsCounter = 0;
+  cerr << "reading the test set from " << srcTestSetFilename << " and " << tgtTestSetFilename << " writing to " << outputAlignmentsFilename << endl;
   while(getline(srcTestSet, srcLine) && getline(tgtTestSet, tgtLine)) {
     vector< int > srcTokens, tgtTokens;
-    srcTokens.push_back(NULL_SRC_TOKEN_ID);
     StringUtils::ReadIntTokens(srcLine, srcTokens);
     StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
     alignmentsLine = AlignSent(srcTokens, tgtTokens);
-    outputAlignments << alignmentsLine;
+    outputAlignments << alignmentsLine << endl;
+    cerr << alignmentsLine << endl;
   }
+  cerr << "done aligning hte test set" << endl;
+  srcTestSet.close();
+  tgtTestSet.close();
+  outputAlignments.close();
 }

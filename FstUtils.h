@@ -158,9 +158,14 @@ struct LogQuadToLogMapper {
 // labels on each arc from tgtToken/srcToken to tgtPos/srcPos
 struct LogQuadToLogPositionMapper {
   fst::LogArc operator()(const LogQuadArc &arc) const {
-    float tgtPos, srcPos, v3, v4;
-    FstUtils::DecodeQuad(arc.weight, tgtPos, srcPos, v3, v4);
-    return fst::LogArc((int)tgtPos, (int)srcPos, v4, arc.nextstate);
+    float tgtPos, srcPos, v3, logprob;
+    FstUtils::DecodeQuad(arc.weight, tgtPos, srcPos, v3, logprob);
+    if(arc.ilabel == FstUtils::EPSILON && arc.olabel == FstUtils::EPSILON) {
+      return fst::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, logprob, arc.nextstate);
+    }
+    cerr << " arc was " << arc.ilabel << ":" << arc.olabel << " (" << tgtPos << ", " << srcPos << ", " << v3 << ", " << logprob << ") =>" << arc.nextstate << endl;
+    cerr << " arc became " << (int)tgtPos << ":" << (int)srcPos << " (" << logprob << ") =>" << arc.nextstate << endl;
+    return fst::LogArc((int)tgtPos, (int)srcPos, logprob, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
