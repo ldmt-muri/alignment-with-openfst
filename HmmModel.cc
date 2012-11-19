@@ -583,3 +583,21 @@ string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
   return FstUtils::PrintAlignment(bestAlignment);
 }
+
+void HmmModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
+
+  ifstream srcTestSet(srcTestSetFilename.c_str(), ios::in); 
+  ifstream tgtTestSet(tgtTestSetFilename.c_str(), ios::in); 
+  ofstream outputAlignments(outputAlignmentsFilename.c_str(), ios::out);
+  // for each parallel line
+  string srcLine, tgtLine, alignmentsLine;
+  int sentsCounter = 0;
+  while(getline(srcTestSet, srcLine) && getline(tgtTestSet, tgtLine)) {
+    vector< int > srcTokens, tgtTokens;
+    srcTokens.push_back(NULL_SRC_TOKEN_ID);
+    StringUtils::ReadIntTokens(srcLine, srcTokens);
+    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    alignmentsLine = AlignSent(srcTokens, tgtTokens);
+    outputAlignments << alignmentsLine;
+  }
+}

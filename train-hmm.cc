@@ -6,18 +6,20 @@
 using namespace fst;
 using namespace std;
 
-void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &outputFilepathPrefix) {
+void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &srcTestSetFilename, string &tgtTestSetFilename, string &outputFilepathPrefix) {
   assert(argc == 4);
   srcCorpusFilename = argv[1];
   tgtCorpusFilename = argv[2];
-  outputFilepathPrefix = argv[3];
+  srcTestSetFilename = argv[3];
+  tgtTestSetFilename = argv[4];
+  outputFilepathPrefix = argv[5];
 }
 
 int main(int argc, char **argv) {
   // parse arguments
   cout << "parsing arguments" << endl;
-  string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
+  string srcCorpusFilename, tgtCorpusFilename, srcTestSetFilename, tgtTestSetFilename, outputFilenamePrefix;
+  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, srcTestSetFilename, tgtTestSetFilename, outputFilenamePrefix);
 
   // specify stopping criteria
   LearningInfo learningInfo;
@@ -32,6 +34,10 @@ int main(int argc, char **argv) {
 
   // train model parameters
   model.Train();
+
+  // align the test set
+  string outputAlignmentsFilename = outputFilenamePrefix + ".align";
+  model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename
 
   // sample a few translations
   vector<int> srcTokens;

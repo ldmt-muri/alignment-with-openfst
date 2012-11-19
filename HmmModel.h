@@ -74,6 +74,8 @@ class HmmModel : public IAlignmentSampler {
 
   string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
+  void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &alignmentsFilename);
+
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);
 
