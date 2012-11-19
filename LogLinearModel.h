@@ -73,6 +73,8 @@ class LogLinearModel {
 
   string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
+  void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
+
   void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
 			 bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 			 int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst);

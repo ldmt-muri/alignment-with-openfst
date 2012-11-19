@@ -7,17 +7,21 @@ using namespace fst;
 using namespace std;
 
 void ParseParameters(int argc, char **argv, 
-		     string &srcCorpusFilename, 
-		     string &tgtCorpusFilename, 
+		     string &srcTrainSetFilename, 
+		     string &tgtTrainSetFilename, 
+		     string &srcTestSetFilename,
+		     string &tgtTestSetFilename,
 		     string &srcVocabFilename, 
 		     string &tgtVocabFilename, 
 		     string &outputFilepathPrefix) {
   assert(argc == 6);
-  srcCorpusFilename = argv[1];
-  tgtCorpusFilename = argv[2];
-  srcVocabFilename = argv[3];
-  tgtVocabFilename = argv[4];
-  outputFilepathPrefix = argv[5];
+  srcTrainSetFilename = argv[1];
+  tgtTrainSetFilename = argv[2];
+  srcTestSetFilename = argv[3];
+  tgtTestSetFilename = argv[4];
+  srcVocabFilename = argv[5];
+  tgtVocabFilename = argv[6];
+  outputFilepathPrefix = argv[7];
 }
 
 void Experimental() {
@@ -57,8 +61,8 @@ int main(int argc, char **argv) {
 
   // parse arguments
   cerr << "parsing arguments" << endl;
-  string srcCorpusFilename, tgtCorpusFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix);
+  string srcCorpusFilename, tgtCorpusFilename, srcTestFilename, tgtTestFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix;
+  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, srcTestFilename, tgtTestFilename, srcVocabFilename, tgtVocabFilename, outputFilenamePrefix);
 
   // train the hmm model
   LearningInfo hmmLearningInfo;
@@ -119,4 +123,7 @@ int main(int argc, char **argv) {
   // train model parameters
   model.Train();
 
+  // use the trained model to align the testset
+  string outputAlignmentsFilename = outputFilenamePrefix + ".align";
+  model.AlignTestSet(srcTestFilename, tgtTestFilename, outputAlignmentsFilename);
 }
