@@ -2,7 +2,7 @@
 
 using namespace fst;
 
-const float FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME = -0.01;
+const float FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME = -0.1;
 
 LogPairWeight FstUtils::EncodePairInfinity() {
   return EncodePair(numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
@@ -287,6 +287,8 @@ bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::
 void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize) {
   assert(sampledFst.NumStates() == 0 && fst.NumStates() > 0);
   
+  int aliasSamplingClocks = 0, dumbSamplingClocks = 0;
+
   // for debugging only
   //cerr << "sampling" << endl;
   
@@ -309,14 +311,19 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   // as weights on the fst
   sampledFst.SetFinal(sampledFstFinalState, EncodeQuad(0.0, 0.0, 0.0, 0.0 - betas[probFst.Start()].Value()));
 
+  // storage for the alias samplers
+  std::map<int,AliasSampler> stateToSampler;
+
   // now we have all the necessary ingredients to start sampling. lets go!
   int samplesCounter = 0;
+ 
+
   // Note: seed with time(0) if you don't care about reproducibility
   srand(1234);
   assert(sampleSize > 0);
   while(samplesCounter++ < sampleSize) {
-    int currentFstState = fst.Start();
-    int currentSampledFstState = sampledFstStartState;
+    clock_t currentFstState = fst.Start();
+    clock_t currentSampledFstState = sampledFstStartState;
     
     // for debugging only
     //cerr << endl << "sample #" << samplesCounter << endl;
@@ -339,26 +346,38 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
 	arcScores.push_back(score);
 	totalScores += score;
       }
+      
+      // sample the index of the sampled arc
+      unsigned chosenArcIndex = -1;
+      bool useAliasSampling = true;
+      bool useDumbSampling = false;
 
-      // generate a random number between 0 and totalScores
-      double randomScore = ((double) rand() / (RAND_MAX)) * totalScores;
+      if(useAliasSampling) {
+	clock_t from = clock();
+	// if this is the first time to visit currentFstState, create an alias sampler for it
+	if(stateToSampler.count(currentFstState) == 0) {
+	  stateToSampler[currentFstState].Init(arcScores);
+	}
+	chosenArcIndex = stateToSampler[currentFstState].Draw();
+	aliasSamplingClocks += clock() - from;
+      }	
+      
+      if(useDumbSampling) {
+	clock_t from = clock();
+	MultinomialSampler sampler(arcScores);
+	chosenArcIndex = sampler.Draw();
+	dumbSamplingClocks += clock() - from;
+      }
+      assert(chosenArcIndex >= 0 && chosenArcIndex < arcScores.size());
       
       // choose one of the available arcs based on the generated number
-      std::vector<double>::const_iterator scoreIterator = arcScores.begin();
       LogQuadArc chosenArc;
-      bool chosenArcIsSet = false;
-      for(ArcIterator< VectorFst<LogQuadArc> > aiter(fst, currentFstState); 
-	  !aiter.Done() && scoreIterator != arcScores.end(); 
-	  aiter.Next(), scoreIterator++) {
-	if(randomScore <= *scoreIterator) {
-	  chosenArc = aiter.Value();
-	  chosenArcIsSet = true;
-	  break;
-	} else {
-	  randomScore -= *scoreIterator;
-	}
+      ArcIterator< VectorFst<LogQuadArc> > aiter(fst, currentFstState);
+      while(chosenArcIndex > 0) {
+	aiter.Next();
+	chosenArcIndex--;
       }
-      assert(chosenArcIsSet);
+      chosenArc = aiter.Value();
 
       // for debugging only
       //cerr << "chosen arc->" << chosenArc.nextstate << " with stopping weight " << PrintQuad(fst.Final(chosenArc.nextstate)) << " " << chosenArc.ilabel << ":" << chosenArc.olabel << " / " << PrintQuad(chosenArc.weight) << endl;
@@ -382,6 +401,9 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
       currentSampledFstState = chosenArc.nextstate;      
     }
   }
+
+  cerr << "dumbSampling took " << (float) dumbSamplingClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "aliasSampling took " << (float) aliasSamplingClocks / CLOCKS_PER_SEC << " sec." << endl;
 }
 
 // returns a gizapp-style alignment string compatible with the alignment represented in the transducer bestAlignment

@@ -26,4 +26,11 @@ python utils/trie-encode-corpus.py example/wmt10czen-test.cz.auto example/wmt10c
 make
 
 # run
-./train-loglinear example/wmt10czen.en.int example/wmt10czen.cz.int example/wmt10czen-test.en.int example/wmt10czen-test.cz.int example/wmt10czen.en.vocab example/wmt10czen.cz.vocab example/wmt10czen.out 
+./train-loglinear \
+    example/wmt10czen.en.int \
+    example/wmt10czen.cz.int \
+    example/wmt10czen-test.en.int \
+    example/wmt10czen-test.cz.int \
+    example/wmt10czen.en.vocab \
+    example/wmt10czen.cz.vocab \
+    example/wmt10czen.out 

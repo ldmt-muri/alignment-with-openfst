@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
   // align the test set
   string outputAlignmentsFilename = outputFilenamePrefix + ".align";
-  model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename
+  model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename);
 
   // sample a few translations
   vector<int> srcTokens;

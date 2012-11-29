@@ -6,10 +6,38 @@
 #PBS -j oe
 #PBS -o /mal2/wammar/exp/tgt-rep/align/example/small.pbs.log
 
-python utils/trie-encode-corpus.py example/tiny.eng example/tiny.eng.vocab example/tiny.eng.int
-python utils/trie-encode-corpus.py example/tiny.kin example/tiny.kin.vocab example/tiny.kin.int
-python utils/trie-encode-corpus.py example/tiny.eng-test example/tiny.eng.vocab example/tiny.eng-test.int ready
-python utils/trie-encode-corpus.py example/tiny.kin-test example/tiny.kin.vocab example/tiny.kin-test.int ready
+# encode training data
+python utils/trie-encode-corpus.py \
+    example/tiny.eng \
+    example/tiny.eng.vocab \
+    example/tiny.eng.int
+python utils/trie-encode-corpus.py \
+    example/tiny.kin \
+    example/tiny.kin.vocab \
+    example/tiny.kin.int
+
+# encode test data
+python utils/trie-encode-corpus.py \
+    example/tiny.eng-test \
+    example/tiny.eng.vocab \
+    example/tiny.eng-test.int \
+    ready
+python utils/trie-encode-corpus.py \
+    example/tiny.kin-test \
+    example/tiny.kin.vocab \
+    example/tiny.kin-test.int \
+    ready
+
+# compile
 make
-./train-loglinear example/tiny.eng.int example/tiny.kin.int example/tiny.eng-test.int example/tiny.kin-test.int example/tiny.eng.vocab example/tiny.kin.vocab example/tiny.out
+
+# train a loglinear model and evaluate
+./train-loglinear \
+    example/tiny.eng.int \
+    example/tiny.kin.int \
+    example/tiny.eng-test.int \
+    example/tiny.kin-test.int \
+    example/tiny.eng.vocab \
+    example/tiny.kin.vocab \
+    example/tiny.out
 #./train-hmm example/tiny.eng.int example/tiny.kin.int example/tiny.out

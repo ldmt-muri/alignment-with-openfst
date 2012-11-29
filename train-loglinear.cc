@@ -66,21 +66,23 @@ int main(int argc, char **argv) {
 
   // train the hmm model
   LearningInfo hmmLearningInfo;
-  hmmLearningInfo.maxIterationsCount = 1;
+  hmmLearningInfo.maxIterationsCount = 300;
   hmmLearningInfo.useMaxIterationsCount = true;
-  hmmLearningInfo.minLikelihoodDiff = 0.01;
+  hmmLearningInfo.minLikelihoodDiff = 1;
   hmmLearningInfo.useMinLikelihoodDiff = true;
-  string proposalTrainingOutputFilenamePrefix = outputFilenamePrefix + ".proposal";
-  HmmModel hmmModel(srcCorpusFilename, tgtCorpusFilename, proposalTrainingOutputFilenamePrefix, hmmLearningInfo);
-  hmmModel.Train();
-  cerr << "finished HMM training." << endl << endl;
+  string proposalTrainingOutputFilenamePrefix = outputFilenamePrefix + ".hmm";
+  //HmmModel hmmModel(srcCorpusFilename, tgtCorpusFilename, proposalTrainingOutputFilenamePrefix, hmmLearningInfo);
+  //hmmModel.Train();
+  //cerr << "finished HMM training." << endl << endl;
   string dummy;
   //  cin >> dummy;
 
   // initialize ibm 1 forward logprobs
   LearningInfo model1LearningInfo;
-  model1LearningInfo.minLikelihoodDiff = 0.01;
   model1LearningInfo.useMinLikelihoodDiff = true;
+  model1LearningInfo.minLikelihoodDiff = 0.01;
+  model1LearningInfo.useMaxIterationsCount= true;
+  model1LearningInfo.maxIterationsCount = 10;
   string ibm1ForwardOutputFilenamePrefix = outputFilenamePrefix + ".ibm1fwd";
   IbmModel1 ibm1ForwardModel(srcCorpusFilename, tgtCorpusFilename, ibm1ForwardOutputFilenamePrefix, model1LearningInfo);
   ibm1ForwardModel.Train();
@@ -105,14 +107,14 @@ int main(int argc, char **argv) {
   learningInfo.useMaxIterationsCount = true;
   learningInfo.useMinLikelihoodDiff = false;
   learningInfo.minLikelihoodDiff = 0.01;
-  learningInfo.maxIterationsCount = 30;
+  learningInfo.maxIterationsCount = 1;
   learningInfo.optimizationMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
   learningInfo.optimizationMethod.miniBatchSize = 1;
-  learningInfo.optimizationMethod.regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.regularizationStrength = 0.01;
   learningInfo.samplesCount = 100;
   learningInfo.distATGivenS = Distribution::LOCAL;
-  learningInfo.customDistribution = &hmmModel;
+  //learningInfo.customDistribution = &hmmModel;
   learningInfo.unionAllCompatibleAlignments = true;
   learningInfo.srcVocabDecoder = &srcTypes;
   learningInfo.tgtVocabDecoder = &tgtTypes;

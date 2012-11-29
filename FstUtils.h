@@ -6,6 +6,8 @@
 #include <fst/fstlib.h>
 #include <typeinfo>
 
+#include "alias_sampler.h"
+
 // pair typedef
 typedef fst::ProductWeight<fst::LogWeight, fst::LogWeight> LogPairWeight;
 typedef fst::ProductArc<fst::LogWeight, fst::LogWeight> LogPairArc;
@@ -163,8 +165,8 @@ struct LogQuadToLogPositionMapper {
     if(arc.ilabel == FstUtils::EPSILON && arc.olabel == FstUtils::EPSILON) {
       return fst::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, logprob, arc.nextstate);
     }
-    cerr << " arc was " << arc.ilabel << ":" << arc.olabel << " (" << tgtPos << ", " << srcPos << ", " << v3 << ", " << logprob << ") =>" << arc.nextstate << endl;
-    cerr << " arc became " << (int)tgtPos << ":" << (int)srcPos << " (" << logprob << ") =>" << arc.nextstate << endl;
+    //    cerr << " arc was " << arc.ilabel << ":" << arc.olabel << " (" << tgtPos << ", " << srcPos << ", " << v3 << ", " << logprob << ") =>" << arc.nextstate << endl;
+    //    cerr << " arc became " << (int)tgtPos << ":" << (int)srcPos << " (" << logprob << ") =>" << arc.nextstate << endl;
     return fst::LogArc((int)tgtPos, (int)srcPos, logprob, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }

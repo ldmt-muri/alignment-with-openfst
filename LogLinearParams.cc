@@ -106,10 +106,10 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   const std::string& srcTokenString = srcTypes.Decode(srcToken);
   const std::string& tgtTokenString = tgtTypes.Decode(tgtToken);
   //  cerr << "computing ortho-similarity(" << srcToken << " (" << srcTokenString << ") " << ", " << tgtToken << " (" << tgtTokenString << ") )" << endl;
-  float orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
-  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
-    activeFeatures["F7:orthographic-similarity"] = orthographicSimilarity;
-  }
+  //  float orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
+  //  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
+  //    activeFeatures["F7:orthographic-similarity"] = orthographicSimilarity;
+  //  }
 
   // F8: <srcToken, tgtPrefix1> (subset of word association features in Chris et al. 2011)
   string tgtPrefix1 = tgtTokenString.length() > 0? tgtTokenString.substr(0,1) : "";
@@ -208,13 +208,13 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   // F24: is this a named entity translated twice? (subset of tgt string features in Chris et al. 2011)
   // note: in this implementation, the feature fires when the current translation is ortho-similar, and a[i] == a[i-1].
   //       ideally, it should also fire when the current translation is orth-similar, and a[i] == a[i+1]
-  if(enabledFeatureTypes.size() > 24 && enabledFeatureTypes[24]) {
-    if(orthographicSimilarity > 0 && prevSrcPos == srcPos) {
-      temp.str("");
-      temp << "F24:repeated-NE";
-      activeFeatures[temp.str()] = orthographicSimilarity;
-    }
-  }
+  //  if(enabledFeatureTypes.size() > 24 && enabledFeatureTypes[24]) {
+  //    if(orthographicSimilarity > 0 && prevSrcPos == srcPos) {
+  //      temp.str("");
+  //      temp << "F24:repeated-NE";
+  //      activeFeatures[temp.str()] = orthographicSimilarity;
+  //    }
+  //}
 }
 
 // each line consists of: <featureStringId><space><featureWeight>\n

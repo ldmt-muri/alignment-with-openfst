@@ -102,7 +102,7 @@ class LearningInfo {
     
     // check for convergnece conditions
     if(useMaxIterationsCount && 
-       maxIterationsCount < iterationsCount) {
+       maxIterationsCount <= iterationsCount) {
       return true;
     } 
     if(useMinLikelihoodDiff && 
