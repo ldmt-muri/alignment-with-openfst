@@ -78,7 +78,7 @@ void FstUtils::DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v
   v4 = w.Value2().Value();
 }
 
-string FstUtils::PrintFstSummary(VectorFst<LogArc>& fst) {
+string FstUtils::PrintFstSummary(const VectorFst<LogArc>& fst) {
   stringstream ss;
   ss << "states:" << endl;
   for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
@@ -95,7 +95,7 @@ string FstUtils::PrintFstSummary(VectorFst<LogArc>& fst) {
   return ss.str();
 }
 
-string FstUtils::PrintFstSummary(VectorFst<StdArc>& fst) {
+string FstUtils::PrintFstSummary(const VectorFst<StdArc>& fst) {
   stringstream ss;
   ss << "states:" << endl;
   for(StateIterator< VectorFst<StdArc> > siter(fst); !siter.Done(); siter.Next()) {
@@ -112,7 +112,7 @@ string FstUtils::PrintFstSummary(VectorFst<StdArc>& fst) {
   return ss.str();
 }
 
-string FstUtils::PrintFstSummary(VectorFst<LogPairArc>& fst) {
+string FstUtils::PrintFstSummary(const VectorFst<LogPairArc>& fst) {
   stringstream ss;
   ss << "=======" << endl;
   ss << "states:" << endl;
@@ -132,7 +132,7 @@ string FstUtils::PrintFstSummary(VectorFst<LogPairArc>& fst) {
   return ss.str();
 }
 
-string FstUtils::PrintFstSummary(VectorFst<LogTripleArc>& fst) {
+string FstUtils::PrintFstSummary(const VectorFst<LogTripleArc>& fst) {
   stringstream ss;
   ss << "=======" << endl;
   ss << "states:" << endl;
@@ -152,7 +152,7 @@ string FstUtils::PrintFstSummary(VectorFst<LogTripleArc>& fst) {
   return ss.str();
 }
 
-string FstUtils::PrintFstSummary(VectorFst<LogQuadArc>& fst) {
+string FstUtils::PrintFstSummary(const VectorFst<LogQuadArc>& fst) {
   stringstream ss;
   ss << "=======" << endl;
   ss << "states:" << endl;
@@ -287,7 +287,7 @@ bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::
 void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize) {
   assert(sampledFst.NumStates() == 0 && fst.NumStates() > 0);
   
-  int aliasSamplingClocks = 0, dumbSamplingClocks = 0;
+  int dumbSamplingClocks = 0;
 
   // for debugging only
   //cerr << "sampling" << endl;
@@ -298,13 +298,17 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   int sampledFstFinalState = sampledFst.AddState();
 
   // create a LogArc shadow fst of 'fst' which can be later used to compute potentials (LogQuadArc is too complex to compute potentials with)
+  clock_t timestamp = clock();
   fst::VectorFst<fst::LogArc> probFst;
   fst::ArcMap(fst, &probFst, LogQuadToLogMapper());
   assert(AreShadowFsts(fst, probFst));
+  cerr << "ArcMap took " << 1.0 * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 
   // compute the potential of each state in fst towards the final state (i.e. unnormalized p(state->final))
+  timestamp = clock();
   std::vector<fst::LogWeight> betas;
   fst::ShortestDistance(probFst, &betas, true);
+  cerr << "ShortestDistance took " << 1.0  * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 
   // set the stopping weight of the sampledFst's final state to the inverse of beta[0] = \sum_{path \in fst} weight(path), 
   // effectively making each complete path in the sampledFst has a proper probability according to the path distribution defined
@@ -315,12 +319,12 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   std::map<int,AliasSampler> stateToSampler;
 
   // now we have all the necessary ingredients to start sampling. lets go!
-  int samplesCounter = 0;
- 
+  int samplesCounter = 0; 
 
   // Note: seed with time(0) if you don't care about reproducibility
   srand(1234);
   assert(sampleSize > 0);
+  timestamp = clock();
   while(samplesCounter++ < sampleSize) {
     clock_t currentFstState = fst.Start();
     clock_t currentSampledFstState = sampledFstStartState;
@@ -334,44 +338,35 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
       // for debugging only
       //cerr << "currentFstState = " << currentFstState << endl;
 
-      // enumerate the arcs leaving the current fst state, and calculate their respective scores
-      // which define the likelihood of taking that arc now. The arc score is 
-      // Times(arc's unconditional prob, toState's beta potential)
-      std::vector<double> arcScores;
-      double totalScores = 0;
-      for(ArcIterator< VectorFst<LogQuadArc> > aiter(fst, currentFstState); !aiter.Done(); aiter.Next()) {
-	float dummy, arcProb;
-	DecodeQuad(aiter.Value().weight, dummy, dummy, dummy, arcProb);
-	double score = nExp(Times(arcProb, betas[aiter.Value().nextstate]).Value());
-	arcScores.push_back(score);
-	totalScores += score;
-      }
-      
-      // sample the index of the sampled arc
+      // we want to sample the index of the sampled arc
       unsigned chosenArcIndex = -1;
-      bool useAliasSampling = true;
-      bool useDumbSampling = false;
 
-      if(useAliasSampling) {
-	clock_t from = clock();
-	// if this is the first time to visit currentFstState, create an alias sampler for it
-	if(stateToSampler.count(currentFstState) == 0) {
-	  stateToSampler[currentFstState].Init(arcScores);
+      clock_t timestamp = clock();
+      // if this is the first time to visit currentFstState, create an alias sampler for it
+      if(stateToSampler.count(currentFstState) == 0) {
+	// enumerate the arcs leaving the current fst state, and calculate their respective scores
+	// which define the likelihood of taking that arc now. The arc score is 
+	// Times(arc's unconditional prob, toState's beta potential)
+      	std::vector<double> arcScores;
+	double totalScores = 0;
+	for(ArcIterator< VectorFst<LogQuadArc> > aiter(fst, currentFstState); !aiter.Done(); aiter.Next()) {
+	  float dummy, arcProb;
+	  DecodeQuad(aiter.Value().weight, dummy, dummy, dummy, arcProb);
+	  double score = nExp(Times(arcProb, betas[aiter.Value().nextstate]).Value());
+	  arcScores.push_back(score);
+	  totalScores += score;
 	}
-	chosenArcIndex = stateToSampler[currentFstState].Draw();
-	aliasSamplingClocks += clock() - from;
-      }	
-      
-      if(useDumbSampling) {
-	clock_t from = clock();
-	MultinomialSampler sampler(arcScores);
-	chosenArcIndex = sampler.Draw();
-	dumbSamplingClocks += clock() - from;
+	
+	stateToSampler[currentFstState].Init(arcScores);
       }
-      assert(chosenArcIndex >= 0 && chosenArcIndex < arcScores.size());
+
+      // now we can sample the arc index
+      chosenArcIndex = stateToSampler[currentFstState].Draw();
+      assert(chosenArcIndex >= 0);
       
-      // choose one of the available arcs based on the generated number
+      // choose the arc based on the generated arc index
       LogQuadArc chosenArc;
+      timestamp = clock();
       ArcIterator< VectorFst<LogQuadArc> > aiter(fst, currentFstState);
       while(chosenArcIndex > 0) {
 	aiter.Next();
@@ -401,18 +396,19 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
       currentSampledFstState = chosenArc.nextstate;      
     }
   }
-
-  cerr << "dumbSampling took " << (float) dumbSamplingClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "aliasSampling took " << (float) aliasSamplingClocks / CLOCKS_PER_SEC << " sec." << endl;
+  cerr << "sampling loop took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 }
 
-// returns a gizapp-style alignment string compatible with the alignment represented in the transducer bestAlignment
+// returns a moses-style alignment string compatible with the alignment represented in the transducer bestAlignment
 // assumption:
 // - bestAlignment is a linear chain transducer. 
 // - the input labels are tgt positions
 // - the output labels are the corresponding src positions according to the alignment
 string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
   stringstream output;
+  
+  cerr << "best alignment FST summary: " << endl;
+  cerr << PrintFstSummary(bestAlignment) << endl;
 
   // traverse the transducer beginning with the start state
   int startState = bestAlignment.Start();
@@ -434,6 +430,9 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
 
     // check the tgt position (shouldn't be a surprise)
     tgtPos++;
+    if(aiter.Value().ilabel != tgtPos) {
+      cerr << "aiter.Value().ilabel = " << aiter.Value().ilabel << ", whereas tgtPos = " << tgtPos << endl;
+    }
     assert(aiter.Value().ilabel == tgtPos);
 
     // check the src position (should be >= 0)

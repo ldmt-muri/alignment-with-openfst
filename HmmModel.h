@@ -9,6 +9,7 @@
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "IAlignmentSampler.h"
+#include "alias_sampler.h"
 
 using namespace fst;
 using namespace std;

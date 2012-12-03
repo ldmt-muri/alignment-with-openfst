@@ -7,7 +7,7 @@ using namespace fst;
 using namespace std;
 
 void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &srcTestSetFilename, string &tgtTestSetFilename, string &outputFilepathPrefix) {
-  assert(argc == 4);
+  assert(argc == 6);
   srcCorpusFilename = argv[1];
   tgtCorpusFilename = argv[2];
   srcTestSetFilename = argv[3];
@@ -23,9 +23,9 @@ int main(int argc, char **argv) {
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 100;
+  learningInfo.maxIterationsCount = 1;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.minLikelihoodDiff = 1.0;
+  learningInfo.minLikelihoodDiff = 10.0;
   learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.useEarlyStopping = true;
 

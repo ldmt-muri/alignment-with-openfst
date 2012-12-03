@@ -22,3 +22,6 @@ make
     example/czen-aer-tokenized.en.vocab \
     example/czen-aer-tokenized.cz.vocab \
     example/czen-aer-tokenized.out 
+
+# compute aer
+./example/czen-manual-alignments/eval-czen.pl ./example/encz-aer-tokenized.out.align ./example/czen-manual-alignments/czen.wal  > example/encz-aer-tokenized.out.align.aer

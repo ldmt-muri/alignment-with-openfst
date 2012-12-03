@@ -30,6 +30,10 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
   stringstream initialModelFilename;
   initialModelFilename << outputPrefix << ".param.init";
   params.PersistParams(initialModelFilename.str());
+
+  // resize tgtLengthToSentTranslationFst with a reasonable length (we think a maximum of 200 tgttokens/sent is reasonable) to avoid copying later
+  int REASONABLY_LARGE_TGT_SENT_LENGTH = 200;
+  tgtLengthToSentTranslationFst.resize(REASONABLY_LARGE_TGT_SENT_LENGTH);
   
   // populate srcTgtFreq
   ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
@@ -45,13 +49,15 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
     vector< int > srcTokens, tgtTokens;
     StringUtils::ReadIntTokens(srcLine, srcTokens);
     StringUtils::ReadIntTokens(tgtLine, tgtTokens);
-    // update tgtTokenIdFreq (i.e. how many times each target token id has been repeated in the corpus)
+    // update tgtTypes and tgtTokenIdFreq (i.e. how many times each target token id has been repeated in the corpus)
     for(vector<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
+      tgtTypes.insert(*tgtTokenIter);
       if(tgtTokenIdFreq.count(*tgtTokenIter) == 0) { tgtTokenIdFreq[*tgtTokenIter] = 0; }
       tgtTokenIdFreq[*tgtTokenIter]++;
     }
-    // fill srcTgtFreq with frequency of co-occurence of each srcToken-tgtToken pair
+    // update srcTypes and fill srcTgtFreq with frequency of co-occurence of each srcToken-tgtToken pair
     for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+      srcTypes.insert(*srcTokenIter);
       map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
       for(vector<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
 	if(tgtFreq.count(*tgtTokenIter) == 0) { tgtFreq[*tgtTokenIter] = 0; }
@@ -130,7 +136,7 @@ void LogLinearModel::CreateGrammarFst() {
 }
 
 // create a transducer that represents possible translations of the source sentence of a given length
-void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens, 
+void LogLinearModel::CreateAllTgtFst(const set<int>& srcTokens, 
 				     int tgtSentLen, 
 				     DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 				     VectorFst<LogQuadArc>& allTgtFst,
@@ -140,7 +146,7 @@ void LogLinearModel::CreateAllTgtFst(const vector<int>& srcTokens,
   switch(lexicon)
     {
     case DiscriminativeLexicon::ALL:
-      for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+      for(set<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
 	map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
 	for(map<int,int>::const_iterator tgtTokenIter = tgtFreq.begin(); tgtTokenIter != tgtFreq.end(); tgtTokenIter++) {
 	  uniqueTgtTokens.insert(tgtTokenIter->first);
@@ -322,7 +328,8 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       if(tgtLineIsGiven) {
 	CreateTgtFst(tgtTokens, tgtFst, uniqueTgtTokens);
       } else {
-	CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst, uniqueTgtTokens);
+	set<int> dummy;
+	CreateAllTgtFst(set<int>(srcTokens.begin(), srcTokens.end()), tgtTokens.size(), lexicon, tgtFst, dummy);
       }
       
       // src transducer(s)
@@ -341,26 +348,33 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
     // build the alignment FST according to the distribution LOCAL (which uses the local subset of features in the loglinear model)
     } else if (distribution == Distribution::LOCAL) {
 
-      // tgt transducer
-      VectorFst<LogQuadArc> tgtFst;
       // unique target tokens used in tgtFst. this is populated by CreateTgtFst or CreateAllTgtFst and later used by CreatePerSentGrammarFst
       set<int> uniqueTgtTokens;
 
       // this distribution is only used to generate alignment Fsts, without conditioning on the reference translation.
       assert(!tgtLineIsGiven);
-      cerr << "CreateAllTgtFst()" << endl;
-      CreateAllTgtFst(srcTokens, tgtTokens.size(), lexicon, tgtFst, uniqueTgtTokens);
-      
+
+      // so, we reuse the composition of (allTgtFsts o grammarFst) throughout training, indexed by tgt sent length
+      cerr << "FYI: |tgtSent| = " << tgtTokens.size() << endl;
+      if(tgtLengthToSentTranslationFst.size() <= tgtTokens.size()) {
+	cerr << "expanding tgtLengthToSentTranslationFst to be of size " << tgtTokens.size() + 1 <<endl;
+	tgtLengthToSentTranslationFst.resize(tgtTokens.size() + 1);
+      }
+      // if this is the first time to process this tgtSentLength, build the sent translation FST
+      if(tgtLengthToSentTranslationFst[tgtTokens.size()].NumStates() == 0) {
+	cerr << "creating the general translation fst of size " << tgtTokens.size() <<endl;
+	BuildAllSentTranslationFst(tgtTokens.size(), tgtLengthToSentTranslationFst[tgtTokens.size()]);
+      }      
+
       // src transducer(s)
       VectorFst<LogQuadArc> simpleSrcFst;
-      cerr << "CreateSimpleSrcFst()" << endl;
       CreateSimpleSrcFst(srcTokens, simpleSrcFst);
       
-      // compose the three transducers (tgt, grammar, src) to get the alignmentFst with weights representing tgt/src positions
-      VectorFst<LogQuadArc> temp, simpleAlignmentFst;
-      cerr << "simpleAlignmentFst = tgtFst o grammarFst o simpleSrcFst" << endl;
-      Compose(tgtFst, grammarFst, &temp);
-      Compose(temp, simpleSrcFst, &simpleAlignmentFst);
+      // compose the sentence translation FST with the src fst to get the alignmentFst with weights representing tgt/src positions
+      VectorFst<LogQuadArc> simpleAlignmentFst;
+      timestamp = clock();
+      Compose(tgtLengthToSentTranslationFst[tgtTokens.size()], simpleSrcFst, &simpleAlignmentFst);
+      cerr << "composition: translationsFst o simpleSrcFst took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
 
       // sample from the simple alignment fst, producing an fst of sample alignments (and translations). each state in the sample FST
       // should have exactly one incoming arc and one outgoing arc, except for the initial and final states. it should look like:
@@ -370,13 +384,16 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       // []--|--[]--[]--|--[]
       VectorFst<LogQuadArc>& sampleAlignmentFst = alignmentFst;
       cerr << "sampleAlignmentFst = " << this->learningInfo.samplesCount << " samples drawn from simpleAlignmentFst" << endl;
+      timestamp = clock();
       FstUtils::SampleFst(simpleAlignmentFst, sampleAlignmentFst, this->learningInfo.samplesCount);
+      cerr << "sampling simpleAlignmentFst -> sampleAlignmentFst took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
 
       // for debugging only
       //cerr << FstUtils::PrintFstSummary(sampleAlignmentFst);
 
       // add context information to the weight of the sampled FST, and calculate the true distribution's weights accordingly
       cerr << "set arc weights for sampleAlignmentFst, encoding contextual info" << endl;
+      timestamp = clock();
       vector<int> previousAlignment;
       previousAlignment.reserve(sampleAlignmentFst.NumStates());
       previousAlignment[0] = 0;
@@ -434,6 +451,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 	  previousAlignment[toState] = srcTokenPos;
 	}
       }
+      cerr << "evaluating feature weights on the arcs of the sampleAlignmentFst took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
 
       // for debugging only
       //cerr << "=================SAMPLED ALIGNMENT FST============" << endl;
@@ -758,14 +776,15 @@ void LogLinearModel::Train() {
     string srcLine, tgtLine;
     int sentsCounter = 1;
     clock_t timestamp3 = clock();
+    clock_t timestamp4 = clock();
     while(getline(srcCorpus, srcLine)) {
       getline(tgtCorpus, tgtLine);
       accReadClocks += clock() - timestamp3;
-
+      
       //for debugging
       //cerr << "srcLine: " << srcLine << endl;
       //cerr << "tgtLine: " << tgtLine << endl << endl;
-
+      
       // read the list of integers representing target tokens
       vector< int > srcTokens, tgtTokens;
       StringUtils::ReadIntTokens(srcLine, srcTokens);
@@ -774,18 +793,23 @@ void LogLinearModel::Train() {
       srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
       
       // build FST(a|t,s) and build FST(a,t|s)
-      clock_t timestamp4 = clock();
+      timestamp4 = clock();
+      
       VectorFst< LogQuadArc > aGivenTS, aTGivenS, tgtFst, dummy;
-      cerr << "building aGivenTS" << endl;
+      clock_t timestamp4d1 = clock();
       BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE, tgtFst);
-      cerr << "building aTGivenS" << endl;
+      cerr << "building aGivenTS took " << (float) (clock() - timestamp4d1) / CLOCKS_PER_SEC << " sec. " << endl;
+      clock_t timestamp4d2 =  clock();
       BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
+      cerr << "building aTGivenS took " << (float) (clock() - timestamp4d2) / CLOCKS_PER_SEC << " sec. " << endl;
       // union aGivenTS into aTGivenS so that we have good samples as well as bad samples
       // TODO: currently, we don't control how much weight goes to (a,t) pairs coming from aGivenTS vs. aTGivenS when we do this
       //       union. It would be better if we control it in a smart way.  
       if(learningInfo.distATGivenS != Distribution::TRUE && learningInfo.unionAllCompatibleAlignments) {
 	cerr << "aTGivenS = aTGivenS U aGivenTS" << endl;
+	clock_t timestamp4d3 = clock();
       	Union(&aTGivenS, aGivenTS);
+	cerr << "fst Union took " << (float) (clock() - timestamp4d3) / CLOCKS_PER_SEC << " sec. " << endl;
       }
 
       // for debugging
@@ -794,9 +818,13 @@ void LogLinearModel::Train() {
       // change the LogQuadWeight semiring to LogWeight using LogQuadToLogMapper
       VectorFst< LogArc > aGivenTSProbs, aTGivenSProbs;
       cerr << "building aGivenTSProbs" << endl;
+      clock_t timestamp4d4 = clock();
       ArcMap(aGivenTS, &aGivenTSProbs, LogQuadToLogMapper());
+      cerr << "arcmap aGivenTS => aGivenTSProbs took " << (float) (clock() - timestamp4d4) / CLOCKS_PER_SEC << " sec. " << endl;
       cerr << "building aTGivenSProbs" << endl;
+      clock_t timestamp4d5 = clock();
       ArcMap(aTGivenS, &aTGivenSProbs, LogQuadToLogMapper());
+      cerr << "arcmap aTGivenS => aTGivenSProbs took " << (float) (clock() - timestamp4d5) / CLOCKS_PER_SEC << " sec. " << endl;
       //cerr << "aTGivenS's start state = " << aTGivenS.Start() << " while aTGivenSProbs's start state = " << aTGivenSProbs.Start() << endl;
 
       // output alignments (after the model converges)
@@ -896,17 +924,18 @@ void LogLinearModel::Train() {
 	gradient.Clear();
       }
       accUpdateClocks += clock() - timestamp6;
-
+      cerr << "processing of this sentence took a total of " << (float) (clock() - timestamp4) / CLOCKS_PER_SEC << " sec."<<endl;
+      
       // for debugging only
       // report accumulated times
-      //      cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
-      //      cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
+            cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
+            cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
       
       // logging
       if (sentsCounter % 1 == 0) {
@@ -1040,4 +1069,18 @@ void LogLinearModel::AlignTestSet(const string &srcTestSetFilename, const string
   srcTestSet.close();
   tgtTestSet.close();
   outputAlignments.close();
+}
+
+// assumptions: 
+// - tgtSentLength >= 1
+// - sentTranslationFst.NumStates() == 0
+// this method fills in sentTranslationFst by composition of two transducers: the fst of all tgt sentences of a particular length, and
+// the grammar fst
+void LogLinearModel::BuildAllSentTranslationFst(int tgtSentLength, fst::VectorFst<LogQuadArc>& sentTranslationFst) {
+  assert(tgtSentLength > 0);
+  assert(sentTranslationFst.NumStates() == 0);
+  
+  VectorFst<LogQuadArc> allTgtSentFst;
+  CreateAllTgtFst(srcTypes, tgtSentLength, DiscriminativeLexicon::ALL, allTgtSentFst, tgtTypes);
+  Compose(allTgtSentFst, grammarFst, &sentTranslationFst);  
 }

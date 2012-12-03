@@ -34,8 +34,8 @@ class FstUtils {
     return exp(-1.0 * exponent);
   }
 
-  static string PrintFstSummary(fst::VectorFst<fst::LogArc>& fst);
-  static string PrintFstSummary(fst::VectorFst<fst::StdArc>& fst);
+  static string PrintFstSummary(const fst::VectorFst<fst::LogArc>& fst);
+  static string PrintFstSummary(const fst::VectorFst<fst::StdArc>& fst);
   static int FindFinalState(const fst::VectorFst<fst::LogArc>& fst);
   static void MakeOneFinalState(fst::VectorFst<fst::LogArc>& fst);
 
@@ -43,19 +43,19 @@ class FstUtils {
   static LogPairWeight EncodePair(float val1, float val2);
   static void DecodePair(const LogPairWeight& w, float& v1, float& v2);
   static string PrintPair(const LogPairWeight& w);
-  static string PrintFstSummary(fst::VectorFst<LogPairArc>& fst);
+  static string PrintFstSummary(const fst::VectorFst<LogPairArc>& fst);
   
   static LogTripleWeight EncodeTripleInfinity();
   static LogTripleWeight EncodeTriple(float val1, float val2, float val3);
   static void DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3);
   static string PrintTriple(const LogTripleWeight& w);
-  static string PrintFstSummary(fst::VectorFst<LogTripleArc>& fst);
+  static string PrintFstSummary(const fst::VectorFst<LogTripleArc>& fst);
 
   static LogQuadWeight EncodeQuadInfinity();
   static LogQuadWeight EncodeQuad(float val1, float val2, float val3, float val4);
   static void DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4);
   static string PrintQuad(const LogQuadWeight& w);
-  static string PrintFstSummary(fst::VectorFst<LogQuadArc>& fst);
+  static string PrintFstSummary(const fst::VectorFst<LogQuadArc>& fst);
   static void SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize);
   static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);
   static int FindFinalState(const fst::VectorFst<LogQuadArc>& fst);

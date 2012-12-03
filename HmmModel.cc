@@ -79,7 +79,7 @@ void HmmModel::CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc >
     int temp = tgtFst.AddState();
     assert(temp == stateId);
     if(stateId == 0) continue;
-    int tgtPos = stateId - 1;
+    int tgtPos = stateId;
     tgtFst.AddArc(stateId-1, 
 		  LogQuadArc(tgtTokens[stateId-1], 
 			       tgtTokens[stateId-1], 
@@ -567,7 +567,8 @@ string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   static int sentCounter = 0;
   
   // insert the null token
-  assert(srcTokens.size() > 0 && srcTokens[0] != NULL_SRC_TOKEN_ID);
+  assert(srcTokens.size() > 0);
+  assert(srcTokens[0] != NULL_SRC_TOKEN_ID);
   srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
   
   // build aGivenTS
@@ -594,9 +595,9 @@ void HmmModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtT
   int sentsCounter = 0;
   while(getline(srcTestSet, srcLine) && getline(tgtTestSet, tgtLine)) {
     vector< int > srcTokens, tgtTokens;
-    srcTokens.push_back(NULL_SRC_TOKEN_ID);
     StringUtils::ReadIntTokens(srcLine, srcTokens);
     StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    cout << "sent #" << sentsCounter << " |srcTokens| = " << srcTokens.size() << endl;
     alignmentsLine = AlignSent(srcTokens, tgtTokens);
     outputAlignments << alignmentsLine;
   }

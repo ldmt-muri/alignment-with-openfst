@@ -28,8 +28,7 @@ struct MultinomialSampler {
   double totalProb;
   UniformSampler uniformSampler;
 
-  MultinomialSampler(std::vector<double>& probs) {
-    this->probs = probs;
+MultinomialSampler(std::vector<double>& probs) : probs(probs) {
     totalProb = 0;
     for(int i = 0; i < probs.size(); i++) {
       assert(probs[i] > 0);
@@ -37,7 +36,7 @@ struct MultinomialSampler {
     }
   }
 
-  unsigned Draw() const {
+  virtual unsigned Draw() const {
     double shoot = uniformSampler.Draw() * totalProb;
     for(int i = 0; i < probs.size(); i++) {
       if(probs[i] >= shoot) {
@@ -47,6 +46,23 @@ struct MultinomialSampler {
       }
     }
     assert(false);
+  }
+};
+
+// rich in the sense that users can specify values for the multinomial variable, instead of assuming the first 
+// probability corresponds to value 0, next to value 1, ...etc.
+struct RichMultinomialSampler : public MultinomialSampler {
+  std::vector<unsigned> labels;
+
+ RichMultinomialSampler(std::vector<double>& probs, std::vector<unsigned>& labels) : MultinomialSampler(probs), labels(labels) {
+    assert(probs.size() == labels.size());
+    this->labels = labels;
+  }
+  
+  virtual unsigned Draw() const {
+    unsigned labelIndex = MultinomialSampler::Draw();
+    assert(labelIndex < labels.size());
+    return labels[labelIndex];
   }
 };
 
