@@ -300,7 +300,9 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   // create a LogArc shadow fst of 'fst' which can be later used to compute potentials (LogQuadArc is too complex to compute potentials with)
   clock_t timestamp = clock();
   fst::VectorFst<fst::LogArc> probFst;
-  fst::ArcMap(fst, &probFst, LogQuadToLogMapper());
+  fst::ArcMap(fst, &probFst, LogQuadToLogMapper
+
+());
   assert(AreShadowFsts(fst, probFst));
   cerr << "ArcMap took " << 1.0 * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 

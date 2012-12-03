@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.miniBatchSize = 1;
   learningInfo.optimizationMethod.regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.regularizationStrength = 0.01;
-  learningInfo.samplesCount = 100;
+  learningInfo.samplesCount = 10;
   learningInfo.distATGivenS = Distribution::LOCAL;
   //learningInfo.customDistribution = &hmmModel;
   learningInfo.unionAllCompatibleAlignments = true;
@@ -120,6 +120,7 @@ int main(int argc, char **argv) {
   learningInfo.tgtVocabDecoder = &tgtTypes;
   learningInfo.ibm1ForwardLogProbs = &ibm1ForwardModel.params;
   learningInfo.ibm1BackwardLogProbs = &ibm1BackwardModel.params;
+  learningInfo.neighborhood = DiscriminativeLexicon::IBM1FWD_BCK;
   LogLinearModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
 
   // train model parameters

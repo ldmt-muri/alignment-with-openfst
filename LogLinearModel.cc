@@ -121,16 +121,38 @@ void LogLinearModel::CreateGrammarFst() {
   grammarFst.SetStart(stateId);
   grammarFst.SetFinal(stateId, LogQuadWeight::One());
 
+  double maxIbm1FwdNLogScore = FstUtils::nLog(learningInfo.neighborhoodMinIbm1FwdScore);
+  double maxIbm1BckNLogScore = FstUtils::nLog(learningInfo.neighborhoodMinIbm1BckScore);
   // for each src type
   for(map<int, map<int, int> >::const_iterator srcIter = srcTgtFreq.begin();
       srcIter != srcTgtFreq.end();
       srcIter++) {
+    int srcToken = srcIter->first;
     // for each tgt type that cooccurs with that src type
     for(map<int, int>::const_iterator tgtIter = srcIter->second.begin(); 
 	tgtIter != srcIter->second.end();
 	tgtIter++) {
-      // for each cooccuring tgt-src pair in the corpus, add an arc
-      grammarFst.AddArc(stateId, LogQuadArc(tgtIter->first, srcIter->first, LogQuadWeight::One(), stateId));
+      int tgtToken = tgtIter->first;
+      int cooccFrequency = tgtIter->second;
+
+      // add an arc input:tgtToken output:srcToken (or not) depending on the neighborhood specified
+      switch(learningInfo.neighborhood) {
+      case DiscriminativeLexicon::ALL:
+	// for each cooccuring tgt-src pair in the corpus, add an arc
+	grammarFst.AddArc(stateId, LogQuadArc(tgtToken, srcToken, LogQuadWeight::One(), stateId));
+	break;
+      case DiscriminativeLexicon::COOCC:
+	if(cooccFrequency >= learningInfo.neighborhoodMinCoocc) {
+	  grammarFst.AddArc(stateId, LogQuadArc(tgtToken, srcToken, LogQuadWeight::One(), stateId));
+	}
+	break;
+      case DiscriminativeLexicon::IBM1FWD_BCK:
+	if( (*learningInfo.ibm1ForwardLogProbs)[srcToken][tgtToken] <= maxIbm1FwdNLogScore ||
+	    (*learningInfo.ibm1BackwardLogProbs)[tgtToken][srcToken] <= maxIbm1BckNLogScore) {
+	  grammarFst.AddArc(stateId, LogQuadArc(tgtToken, srcToken, LogQuadWeight::One(), stateId));	  
+	}
+	break;
+      }
     }
   }
 }
@@ -138,12 +160,11 @@ void LogLinearModel::CreateGrammarFst() {
 // create a transducer that represents possible translations of the source sentence of a given length
 void LogLinearModel::CreateAllTgtFst(const set<int>& srcTokens, 
 				     int tgtSentLen, 
-				     DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 				     VectorFst<LogQuadArc>& allTgtFst,
 				     set<int>& uniqueTgtTokens) {
   // determine the set of possible target tokens allowed to be in a translation
   uniqueTgtTokens.clear();
-  switch(lexicon)
+  switch(learningInfo.neighborhood)
     {
     case DiscriminativeLexicon::ALL:
       for(set<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
@@ -154,8 +175,29 @@ void LogLinearModel::CreateAllTgtFst(const set<int>& srcTokens,
       }
       break;
     case DiscriminativeLexicon::COOCC:
-      // TODO
-      assert(false);
+      for(set<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+	map<int,int>& tgtFreq = srcTgtFreq[*srcTokenIter];
+	for(map<int,int>::const_iterator tgtTokenIter = tgtFreq.begin(); tgtTokenIter != tgtFreq.end(); tgtTokenIter++) {
+	  if(tgtTokenIter->second >= learningInfo.neighborhoodMinCoocc) {
+	    uniqueTgtTokens.insert(tgtTokenIter->first);
+	  }
+	}
+      }
+      break;
+    case DiscriminativeLexicon::IBM1FWD_BCK:
+      double maxIbm1FwdNLogScore = FstUtils::nLog(learningInfo.neighborhoodMinIbm1FwdScore);
+      double maxIbm1BckNLogScore = FstUtils::nLog(learningInfo.neighborhoodMinIbm1BckScore);
+      for(set<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+	int srcToken = *srcTokenIter;
+	map<int,int>& tgtFreq = srcTgtFreq[srcToken];
+	for(map<int,int>::const_iterator tgtTokenIter = tgtFreq.begin(); tgtTokenIter != tgtFreq.end(); tgtTokenIter++) {
+	  int tgtToken = tgtTokenIter->first;
+	  if((*learningInfo.ibm1ForwardLogProbs)[srcToken][tgtToken] <= maxIbm1FwdNLogScore ||
+	     (*learningInfo.ibm1BackwardLogProbs)[tgtToken][srcToken] <= maxIbm1BckNLogScore) {
+	    uniqueTgtTokens.insert(tgtToken);
+	  }
+	}
+      }
       break;
     }
 
@@ -293,9 +335,13 @@ void LogLinearModel::CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<
 // may be a translation of the source sentence. Effectively, this FST represents p(alignment, tgtSent | srcSent, L_t).
 // lexicon is only used when tgtLineIsGiven=false. Depending on its value, the constructed FST may represent a subset of 
 // possible translations (cuz it's usually too expensive to represnet all translations). 
-void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
-				       bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
-				       int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst) {
+void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, 
+				       const vector<int>& tgtTokens, 
+				       VectorFst<LogQuadArc>& alignmentFst, 
+				       bool tgtLineIsGiven,  
+				       int sentId, 
+				       Distribution::Distribution distribution, 
+				       VectorFst<LogQuadArc>& tgtFst) {
 
   assert(alignmentFst.NumStates() == 0);
 
@@ -329,7 +375,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
 	CreateTgtFst(tgtTokens, tgtFst, uniqueTgtTokens);
       } else {
 	set<int> dummy;
-	CreateAllTgtFst(set<int>(srcTokens.begin(), srcTokens.end()), tgtTokens.size(), lexicon, tgtFst, dummy);
+	CreateAllTgtFst(set<int>(srcTokens.begin(), srcTokens.end()), tgtTokens.size(), tgtFst, dummy);
       }
       
       // src transducer(s)
@@ -339,7 +385,12 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       // compose the three transducers (tgt, grammar, src) to get the alignmentFst with weights representing tgt/src positions
       VectorFst<LogQuadArc> temp;
       Compose(tgtFst, grammarFst, &temp);
+      cerr << "(tgtFst o grammarFst).NumStates() == " << temp.NumStates() << endl;
+      //cerr << FstUtils::PrintFstSummary(temp) << endl;
       Compose(temp, firstOrderSrcFst, &alignmentFst);
+      cerr << "(tgtFst o grammarFst o 1stOrderSrcFst).NumStates() == " << alignmentFst.NumStates() << endl;
+      //      cerr << "1stOrderSrcFst:" << endl;
+      //      cerr << FstUtils::PrintFstSummary(firstOrderSrcFst) << endl;
 
       // for debugging
       //      cerr << "====================== ALIGNMENT FST | TRUE ===========================" << endl;
@@ -357,13 +408,13 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       // so, we reuse the composition of (allTgtFsts o grammarFst) throughout training, indexed by tgt sent length
       cerr << "FYI: |tgtSent| = " << tgtTokens.size() << endl;
       if(tgtLengthToSentTranslationFst.size() <= tgtTokens.size()) {
-	cerr << "expanding tgtLengthToSentTranslationFst to be of size " << tgtTokens.size() + 1 <<endl;
 	tgtLengthToSentTranslationFst.resize(tgtTokens.size() + 1);
+	cerr << "expanded tgtLengthToSentTranslationFst to be of size " << tgtTokens.size() + 1 <<endl;
       }
       // if this is the first time to process this tgtSentLength, build the sent translation FST
       if(tgtLengthToSentTranslationFst[tgtTokens.size()].NumStates() == 0) {
-	cerr << "creating the general translation fst of size " << tgtTokens.size() <<endl;
 	BuildAllSentTranslationFst(tgtTokens.size(), tgtLengthToSentTranslationFst[tgtTokens.size()]);
+	cerr << "created the general translation fst of size " << tgtLengthToSentTranslationFst[tgtTokens.size()].NumStates() <<endl;
       }      
 
       // src transducer(s)
@@ -372,7 +423,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       
       // compose the sentence translation FST with the src fst to get the alignmentFst with weights representing tgt/src positions
       VectorFst<LogQuadArc> simpleAlignmentFst;
-      timestamp = clock();
+      clock_t timestamp = clock();
       Compose(tgtLengthToSentTranslationFst[tgtTokens.size()], simpleSrcFst, &simpleAlignmentFst);
       cerr << "composition: translationsFst o simpleSrcFst took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
 
@@ -384,6 +435,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
       // []--|--[]--[]--|--[]
       VectorFst<LogQuadArc>& sampleAlignmentFst = alignmentFst;
       cerr << "sampleAlignmentFst = " << this->learningInfo.samplesCount << " samples drawn from simpleAlignmentFst" << endl;
+      //      cerr << FstUtils::PrintFstSummary(sampleAlignmentFst) << endl;
       timestamp = clock();
       FstUtils::SampleFst(simpleAlignmentFst, sampleAlignmentFst, this->learningInfo.samplesCount);
       cerr << "sampling simpleAlignmentFst -> sampleAlignmentFst took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
@@ -512,6 +564,9 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens, const vecto
   
   // if another distribution were used to generate the alignmentFst, then we have already set the weights appropriately
   if(distribution == Distribution::TRUE) {
+    if(alignmentFst.NumStates() == 0) {
+      return;
+    }
     // compute the probability of each transition on the alignment FST according to the current model parameters
     // set the fourth value in the LogQuadWeights on the arcs = the computed prob for that arc
     for(StateIterator< VectorFst<LogQuadArc> > siter(alignmentFst); !siter.Done(); siter.Next()) {
@@ -797,10 +852,14 @@ void LogLinearModel::Train() {
       
       VectorFst< LogQuadArc > aGivenTS, aTGivenS, tgtFst, dummy;
       clock_t timestamp4d1 = clock();
-      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, learningInfo.neighborhood, sentsCounter, Distribution::TRUE, tgtFst);
+      BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, sentsCounter, Distribution::TRUE, tgtFst);
       cerr << "building aGivenTS took " << (float) (clock() - timestamp4d1) / CLOCKS_PER_SEC << " sec. " << endl;
+      if(aGivenTS.NumStates() == 0) {
+	cerr << "SENTENCE SKIPPED cuz aGivenTS is empty" << endl << endl;
+	continue;
+      }
       clock_t timestamp4d2 =  clock();
-      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, learningInfo.neighborhood, sentsCounter, learningInfo.distATGivenS, dummy);
+      BuildAlignmentFst(srcTokens, tgtTokens, aTGivenS, false, sentsCounter, learningInfo.distATGivenS, dummy);
       cerr << "building aTGivenS took " << (float) (clock() - timestamp4d2) / CLOCKS_PER_SEC << " sec. " << endl;
       // union aGivenTS into aTGivenS so that we have good samples as well as bad samples
       // TODO: currently, we don't control how much weight goes to (a,t) pairs coming from aGivenTS vs. aTGivenS when we do this
@@ -928,18 +987,18 @@ void LogLinearModel::Train() {
       
       // for debugging only
       // report accumulated times
-            cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
-            cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
+      //            cerr << "accumulated runtime = " << (float) accRuntimeClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //            cerr << "accumulated disk write time = " << (float) accWriteClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //            cerr << "accumulated disk read time = " << (float) accReadClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //            cerr << "accumulated fst construction time = " << (float) accBuildingFstClocks / CLOCKS_PER_SEC << " sec." << endl;
+      //            cerr << "accumulated fst shortest-distance time = " << (float) accShortestDistanceClocks / CLOCKS_PER_SEC << " sec." << endl;
+//            cerr << "accumulated param update time = " << (float) accUpdateClocks / CLOCKS_PER_SEC << " sec." << endl;
+//            cerr << "accumulated regularization time = " << (float) accRegularizationClocks / CLOCKS_PER_SEC << " sec." << endl;
+//            cerr << "=========finished processing sentence " << sentsCounter << "=============" << endl;
       
       // logging
       if (sentsCounter % 1 == 0) {
-      	cerr << endl << sentsCounter << " sents processed.." << endl;
+      	cerr << sentsCounter << " sents processed.." << endl << endl;
       }
       sentsCounter++;
 
@@ -1028,7 +1087,7 @@ string LogLinearModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   // build aGivenTS
   VectorFst< LogQuadArc > aGivenTS, dummy;
-  BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, DiscriminativeLexicon::COOCC, sentCounter, Distribution::TRUE, dummy);
+  BuildAlignmentFst(srcTokens, tgtTokens, aGivenTS, true, sentCounter, Distribution::TRUE, dummy);
   //  cerr << "====================alignmnt fst=================" << endl;
   //  cerr << FstUtils::PrintFstSummary(aGivenTS);
   VectorFst< LogArc > aGivenTSProbs;
@@ -1081,6 +1140,8 @@ void LogLinearModel::BuildAllSentTranslationFst(int tgtSentLength, fst::VectorFs
   assert(sentTranslationFst.NumStates() == 0);
   
   VectorFst<LogQuadArc> allTgtSentFst;
-  CreateAllTgtFst(srcTypes, tgtSentLength, DiscriminativeLexicon::ALL, allTgtSentFst, tgtTypes);
+  CreateAllTgtFst(srcTypes, tgtSentLength, allTgtSentFst, tgtTypes);  
+  cerr << "allTgtSentFst.NumStates() == " << allTgtSentFst.NumStates() << endl;
   Compose(allTgtSentFst, grammarFst, &sentTranslationFst);  
+  cerr << "(allTgtSent o grammarFst).NumStates() == " << sentTranslationFst.NumStates() << endl;
 }

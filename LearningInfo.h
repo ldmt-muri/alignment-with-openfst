@@ -25,7 +25,7 @@ namespace Distribution {
 }
 
 namespace DiscriminativeLexicon {
-  enum DiscriminativeLexicon {ALL, COOCC};
+  enum DiscriminativeLexicon {ALL, COOCC, IBM1FWD_BCK};
 }
 
 namespace Regularizer {
@@ -79,6 +79,9 @@ class LearningInfo {
     samplesCount = 1000;
     distATGivenS = Distribution::TRUE;
     customDistribution = 0;
+    neighborhoodMinIbm1FwdScore = 0.001;
+    neighborhoodMinIbm1BckScore = 0.001;
+    neighborhoodMinCoocc = 3;
   }
 
   bool IsModelConverged() {
@@ -139,6 +142,9 @@ class LearningInfo {
 
   // discriminative lexicon
   DiscriminativeLexicon::DiscriminativeLexicon neighborhood;
+  float neighborhoodMinIbm1FwdScore;
+  float neighborhoodMinIbm1BckScore;
+  float neighborhoodMinCoocc;
 
   // save alignment FSTs on disk
   bool saveAlignmentFstsOnDisk;
@@ -165,9 +171,11 @@ class LearningInfo {
   VocabDecoder *tgtVocabDecoder;
 
   // ibm 1 forward log probs
+  // [srcToken][tgtToken]
   std::map<int, std::map<int, float> > *ibm1ForwardLogProbs;
 
   // ibm 1 backward log probs
+  // [tgtToken][srcToken]
   std::map<int, std::map<int, float> > *ibm1BackwardLogProbs;
 };
 

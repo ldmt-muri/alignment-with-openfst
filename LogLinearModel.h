@@ -30,9 +30,8 @@ class LogLinearModel {
   void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQuadArc>& tgtFst, set<int>& uniqueTgtTokens);
 
   // create an acceptor of many possible translations of the source sentence
-  void CreateAllTgtFst(const vector<int>& srcTokens, 
+  void CreateAllTgtFst(const set<int>& srcTokens, 
 		       int tgtSentLen, 
-		       DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
 		       VectorFst<LogQuadArc>& allTgtFst,
 		       set<int>& uniqueTgtTokens);
 
@@ -76,7 +75,7 @@ class LogLinearModel {
   void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
   void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
-			 bool tgtLineIsGiven, DiscriminativeLexicon::DiscriminativeLexicon lexicon, 
+			 bool tgtLineIsGiven, 
 			 int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst);
 
   void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
@@ -87,6 +86,7 @@ class LogLinearModel {
 					 bool subtract);
   
   void AddRegularizerTerm(LogLinearParams& gradient);
+  void BuildAllSentTranslationFst(int tgtSentLength, fst::VectorFst<LogQuadArc>& sentTranslationFst);
 
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
@@ -100,6 +100,12 @@ class LogLinearModel {
   std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;
   // number of sentences in the corpus
   int corpusSize;
+  // vector of (allTgtSentenceFst o grammarFst), indexed by target length
+  std::vector<fst::VectorFst<LogQuadArc> > tgtLengthToSentTranslationFst;
+  // set of tgt types
+  std::set<int> tgtTypes;
+  // set of src types
+  std::set<int> srcTypes;
 };
 
 #endif
