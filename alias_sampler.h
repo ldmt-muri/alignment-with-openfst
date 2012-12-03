@@ -28,7 +28,12 @@ struct MultinomialSampler {
   double totalProb;
   UniformSampler uniformSampler;
 
-MultinomialSampler(std::vector<double>& probs) : probs(probs) {
+MultinomialSampler(std::vector<double>& probs, bool copyParams=false) {
+  if(copyParams) {
+    this->probs.assign(probs.begin(), probs.end());
+  } else {
+    this->probs = probs;
+  }
     totalProb = 0;
     for(int i = 0; i < probs.size(); i++) {
       assert(probs[i] > 0);
@@ -54,9 +59,14 @@ MultinomialSampler(std::vector<double>& probs) : probs(probs) {
 struct RichMultinomialSampler : public MultinomialSampler {
   std::vector<unsigned> labels;
 
- RichMultinomialSampler(std::vector<double>& probs, std::vector<unsigned>& labels) : MultinomialSampler(probs), labels(labels) {
+ RichMultinomialSampler(std::vector<double>& probs, std::vector<unsigned>& labels, bool copyParams=false) 
+   : MultinomialSampler(probs, copyParams) {
     assert(probs.size() == labels.size());
-    this->labels = labels;
+    if(copyParams) {
+      this->labels.assign(labels.begin(), labels.end());
+    } else {
+      this->labels = labels;
+    }
   }
   
   virtual unsigned Draw() const {
