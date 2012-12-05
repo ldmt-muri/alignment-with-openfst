@@ -10,9 +10,11 @@
 #include "FstUtils.h"
 #include "IAlignmentSampler.h"
 #include "alias_sampler.h"
+#include "MultinomialParams.h"
 
 using namespace fst;
 using namespace std;
+using namespace MultinomialParams;
 
 // this id is reserved for the unique source word (NULL). no other source word is allowed to take this id.
 #define NULL_SRC_TOKEN_ID 1
@@ -22,16 +24,10 @@ using namespace std;
 // But, when i == 0, there's no a_{-1}. we can use this constant whenever we need a_{-1}
 #define INITIAL_SRC_POS -1
 
-// parameters for describing a multinomial distribution p(x)=y such that x is the key and y is a log probability
-typedef map<int, float> MultinomialParam;
-// parameters for describing a set of conditional multinomial distributions p(x|y)=z such that y is the first key, x is the nested key, z is a log probability
-typedef map<int, MultinomialParam> ConditionalMultinomialParam;
-
 class HmmModel : public IAlignmentSampler {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeFractionalCounts();
-  void NormalizeParams(ConditionalMultinomialParam& params);
   
   // creates an fst for each target sentence
   void CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts);
@@ -47,7 +43,6 @@ class HmmModel : public IAlignmentSampler {
   void CreatePerSentGrammarFsts(vector< VectorFst< LogQuadArc > >& perSentGrammarFsts);
   
   // zero all parameters
-  void ClearParams(ConditionalMultinomialParam& params);
   void ClearFractionalCounts();
   
   void LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts);
@@ -63,10 +58,8 @@ class HmmModel : public IAlignmentSampler {
   HmmModel(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
 
   void PrintParams();
-  void PrintParams(const ConditionalMultinomialParam& params);
 
   void PersistParams(const string& outputFilename);
-  void PersistParams(ofstream& paramsFile, const ConditionalMultinomialParam& params);
 
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
   void InitParams();
@@ -79,8 +72,6 @@ class HmmModel : public IAlignmentSampler {
 
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);
-
-  int SampleFromMultinomial(const MultinomialParam params);
 
   virtual void SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
 

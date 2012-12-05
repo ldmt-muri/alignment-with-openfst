@@ -2,6 +2,7 @@
 
 using namespace std;
 using namespace fst;
+using namespace MultinomialParams;
 
 // initialize model 1 scores
 HmmModel::HmmModel(const string& srcIntCorpusFilename, 
@@ -114,70 +115,22 @@ void HmmModel::CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts) {
 }
 
 void HmmModel::NormalizeFractionalCounts() {
-  NormalizeParams(aFractionalCounts);
-  NormalizeParams(tFractionalCounts);
-}
-
-// refactor variable names here (e.g. translations)
-// normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
-void HmmModel::NormalizeParams(ConditionalMultinomialParam& params) {
-  // iterate over src tokens in the model
-  for(ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    map< int, float > &translations = (*srcIter).second;
-    float fTotalProb = 0.0;
-    // iterate over tgt tokens logsumming over the logprob(tgt|src) 
-    for(map< int, float >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-      float temp = (*tgtIter).second;
-      fTotalProb += FstUtils::nExp(temp);
-    }
-    // exponentiate to find p(*|src) before normalization
-    // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
-    float fVerifyTotalProb = 0.0;
-    for(map< int, float >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-      float fUnnormalized = FstUtils::nExp((*tgtIter).second);
-      float fNormalized = fUnnormalized / fTotalProb;
-      fVerifyTotalProb += fNormalized;
-      float fLogNormalized = FstUtils::nLog(fNormalized);
-      (*tgtIter).second = fLogNormalized;
-    }
-  }
+  MultinomialParams::NormalizeParams(aFractionalCounts);
+  MultinomialParams::NormalizeParams(tFractionalCounts);
 }
 
 void HmmModel::PrintParams() {
-  PrintParams(aParams);
-  PrintParams(tFractionalCounts);
-}
-
-// refactor variable names here (e.g. translations)
-void HmmModel::PrintParams(const ConditionalMultinomialParam& params) {
-  // iterate over src tokens in the model
-  int counter = 0;
-  for(ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    const map< int, float > &translations = (*srcIter).second;
-    // iterate over tgt tokens 
-    for(map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-      cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=log(" << FstUtils::nExp((*tgtIter).second) << ")=" << (*tgtIter).second << endl;
-    }
-  } 
-}
-
-void HmmModel::PersistParams(ofstream& paramsFile, const ConditionalMultinomialParam& params) {
-  for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-      // line format: 
-      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-      paramsFile << srcIter->first << " " << tgtIter->first << " " << tgtIter->second << " " << FstUtils::nExp(tgtIter->second) << endl;
-    }
-  }
+  MultinomialParams::PrintParams(aParams);
+  MultinomialParams::PrintParams(tFractionalCounts);
 }
 
 void HmmModel::PersistParams(const string& outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   cerr << "writing model params at " << outputFilename << endl;
   paramsFile << "=============== translation parameters p(tgtWord|srcWord) ============" << endl;
-  PersistParams(paramsFile, tFractionalCounts);
+  MultinomialParams::PersistParams(paramsFile, tFractionalCounts);
   paramsFile << endl << "=============== alignment parameters p(a_i|a_{i-1}) ==================" << endl;
-  PersistParams(paramsFile, aParams);
+  MultinomialParams::PersistParams(paramsFile, aParams);
   paramsFile.close();
 }
 
@@ -242,7 +195,7 @@ void HmmModel::InitParams() {
 void HmmModel::DeepCopy(const ConditionalMultinomialParam& original, 
 			ConditionalMultinomialParam& duplicate) {
   // zero duplicate
-  ClearParams(duplicate);
+  MultinomialParams::ClearParams(duplicate);
 
   // copy original into duplicate
   for(ConditionalMultinomialParam::const_iterator contextIter = original.begin(); 
@@ -344,17 +297,8 @@ void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQ
 }
 
 void HmmModel::ClearFractionalCounts() {
-  ClearParams(tFractionalCounts);
-  ClearParams(aFractionalCounts);
-}
-
-// zero all parameters
-void HmmModel::ClearParams(ConditionalMultinomialParam& params) {
-  for (ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-      tgtIter->second = FstUtils::LOG_ZERO;
-    }
-  }
+  MultinomialParams::ClearParams(tFractionalCounts);
+  MultinomialParams::ClearParams(aFractionalCounts);
 }
 
 void HmmModel::BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst, 
@@ -492,27 +436,6 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
   cerr << "fractionalCounts = " << (float) updatingFractionalCountsClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
   cerr << endl;
-}
-
-// sample an integer from a multinomial
-int HmmModel::SampleFromMultinomial(const MultinomialParam params) {
-  // generate a pseudo random number between 0 and 1
-  double randomProb = ((double) rand() / (RAND_MAX));
-
-  // find the lucky value
-  for(MultinomialParam::const_iterator paramIter = params.begin(); 
-      paramIter != params.end(); 
-      paramIter++) {
-    double valueProb = FstUtils::nExp(paramIter->second);
-    if(randomProb <= valueProb) {
-      return paramIter->first;
-    } else {
-      randomProb -= valueProb;
-    }
-  }
-
-  // if you get here, one of the following two things happened: \sum valueProb_i > 1 OR randomProb > 1
-  assert(false);
 }
 
 // assumptions:
