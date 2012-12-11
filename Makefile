@@ -10,5 +10,5 @@ all:
 #	gcc -x c++ alias_sampler.h MultinomialParams.h  MultinomialParams.cc LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc HmmModel.h HmmModel.cc train-hmm.cc -lfst -ldl -O0 -o train-hmm
 
 #	echo #autoencoders
-	gcc -x c++ alias_sampler.h MultinomialParams.h MultinomialParams.cc LearningInfo.h StringUtils.h VocabEncoder.h FstUtils.h FstUtils.cc LogLinearParams.h LogLinearParams.cc train-autoencoder.cc -lfst -ldl -O0 -o train-autoencoder
+	gcc -x c++ alias_sampler.h MultinomialParams.h MultinomialParams.cc LearningInfo.h StringUtils.h VocabEncoder.h FstUtils.h FstUtils.cc LogLinearParams.h LogLinearParams.cc AutoEncoder.h AutoEncoder.cc train-autoencoder.cc -lfst -ldl -O0 -o train-autoencoder
 

@@ -21,6 +21,8 @@ class LogLinearParams {
 		  const std::map<int, std::map<int, float> > &ibmModel1ForwardLogProbs,
 		  const std::map<int, std::map<int, float> > &ibmModel1BackwardLogProbs);
 
+  LogLinearParams(const VocabDecoder &types);
+
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
   // note: pos here is short for position
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
@@ -28,11 +30,10 @@ class LogLinearParams {
 		    int srcSentLength, int tgtSentLength, 
 		    const std::vector<bool>& enabledFeatureTypes, std::map<std::string, float>& activeFeatures);
 
-  void FireFeatures(int y_i, int y_iM1, vector<int> x, int i, 
-		    const vector<bool>& enabledFeatureTypes, 
-		    map<string, float>& activeFeatures);
-  
-
+  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+		    const std::vector<bool> &enabledFeatureTypes, 
+		    std::map<string, float> &activeFeatures);
+    
   // compute dot product of two sparse vectors, each represented with a map. 
   float DotProduct(const std::map<std::string, float>& values, const std::map<std::string, float>& weights);
 
@@ -44,7 +45,10 @@ class LogLinearParams {
 		       const std::vector<bool>& enabledFeatureTypes);
 
   // updates the model parameters given the gradient and an optimization method
-  void UpdateParams(const LogLinearParams& gradient, const OptUtils::OptMethod& optMethod);
+  void UpdateParams(const map<string, float> &gradient, const OptUtils::OptMethod &optMethod);
+
+  // use gradient based methods to update the model parameter weights
+  void UpdateParams(const LogLinearParams &gradient, const OptUtils::OptMethod &optMethod);
 
   // applies the accumulative l1 penalty on feature weights, also updates the appliedL1Penalty values
   void ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,

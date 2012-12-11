@@ -21,6 +21,9 @@ int main(int argc, char **argv) {
   string textFilename, outputFilenamePrefix;
   ParseParameters(argc, argv, textFilename, outputFilenamePrefix);
 
-  // TODO
+  // configurations
+  LearningInfo learningInfo;
 
+  AutoEncoder model(textFilename, outputFilenamePrefix, learningInfo);
+  model.Train();
 }

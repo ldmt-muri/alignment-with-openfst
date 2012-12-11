@@ -14,6 +14,19 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
 {
 }
 
+LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
+  srcTypes(types), 
+  tgtTypes(types),
+  ibmModel1ForwardScores(map<int, map<int, float> >()),
+  ibmModel1BackwardScores(map<int, map<int, float> >())  
+{
+}
+
+float LogLinearParams::DotProduct(const map<string, float>& values) {
+  return DotProduct(values, params);
+}
+
+
 float LogLinearParams::DotProduct(const map<string, float>& values, const map<string, float>& weights) {
   // for effeciency
   if(values.size() > weights.size()) {
@@ -45,6 +58,61 @@ float LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtTok
 
   return result;
 }
+
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+				   const std::vector<bool> &enabledFeatureTypes, 
+				   std::map<string, float> &activeFeatures) {
+
+  stringstream temp;
+
+  // F51: yIM1-yI pair
+  if(enabledFeatureTypes.size() > 51 && enabledFeatureTypes[51]) {
+    temp.str("");
+    temp << "F51:" << yIM1 << ":" << yI;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
+  // F52: yI-xIM2 pair
+  if(enabledFeatureTypes.size() > 52 && enabledFeatureTypes[52]) {
+    temp.str("");
+    int xIM2 = i-2 >= 0? x[i-2] : -1;
+    temp << "F52:" << yI << ":" << xIM2;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
+  // F53: yI-xIM1 pair
+  if(enabledFeatureTypes.size() > 53 && enabledFeatureTypes[53]) {
+    temp.str("");
+    int xIM1 = i-1 >= 0? x[i-1] : -1;
+    temp << "F53:" << yI << ":" << xIM1;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
+  // F54: yI-xI pair
+  if(enabledFeatureTypes.size() > 54 && enabledFeatureTypes[54]) {
+    temp.str("");
+    temp << "F54:" << yI << ":" << x[i];
+    activeFeatures[temp.str()] = 1.0;
+  }
+  
+  // F55: yI-xIP1 pair
+  if(enabledFeatureTypes.size() > 55 && enabledFeatureTypes[55]) {
+    temp.str("");
+    int xIP1 = i+1 < x.size()? x[i+1] : -1;
+    temp << "F55:" << yI << ":" << xIP1;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
+  // F56: yI-xIP2 pair
+  if(enabledFeatureTypes.size() > 56 && enabledFeatureTypes[56]) {
+    temp.str("");
+    int xIP2 = i+2 < x.size()? x[i+2] : -1;
+    temp << "F56:" << yI << ":" << xIP2;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
+}
+
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 
@@ -229,14 +297,19 @@ void LogLinearParams::PersistParams(const string& outputFilename) {
 }
 
 // use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const LogLinearParams& gradient, const OptMethod& optMethod) {
+void LogLinearParams::UpdateParams(const LogLinearParams &gradient, const OptMethod& optMethod) {
+  UpdateParams(gradient.params, optMethod);
+}
+
+// use gradient based methods to update the model parameter weights
+void LogLinearParams::UpdateParams(const map<string, float> &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
   case GRADIENT_DESCENT:
   case STOCHASTIC_GRADIENT_DESCENT:
-    for(map<string, float>::const_iterator gradientIter = gradient.params.begin();
-	gradientIter != gradient.params.end();
+    for(map<string, float>::const_iterator gradientIter = gradient.begin();
+	gradientIter != gradient.end();
 	gradientIter++) {
-      params[gradientIter->first] -= optMethod.learningRate * gradientIter->second;
+      this->params[gradientIter->first] -= optMethod.learningRate * gradientIter->second;
     }
     break;
   default:

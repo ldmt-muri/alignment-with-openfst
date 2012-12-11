@@ -61,9 +61,36 @@ class VocabEncoder {
     assert(ids.size() == tokens.size());
   }
 
-  std::map<int, std::string> intToToken;
-  std::map<std::string, int> tokenToInt;
+  // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
+  void Read(const std::string &textFilename, vector<vector<int> > &data) {
+
+    // open data file
+    std::ifstream textFile(textFilename.c_str(), std::ios::in);
+
+    // for each line
+    std::string line;
+    int lineNumber = -1;
+    while(getline(textFile, line)) {
+
+      // skip empty lines
+      if(line.size() == 0) {
+	continue;
+      }
+      lineNumber++;
+
+      // split tokens
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+
+      // encode tokens    
+      data.resize(lineNumber+1);
+      Encode(splits, data[lineNumber]);
+    }
+  }
+
   int nextId;
+  map<string, int> tokenToInt;
+  map<int, string> intToToken;
   std::string UNK;
 };
 
