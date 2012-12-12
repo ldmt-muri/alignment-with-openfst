@@ -1,3 +1,6 @@
 [submodule "utils"]
 	path = utils
 	url = git@github.com:wammar/wammar-utils.git
+[submodule "liblbfgs"]
+	path = liblbfgs
+	url = git://github.com/chokkan/liblbfgs.git
