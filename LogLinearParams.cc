@@ -5,8 +5,8 @@ using namespace OptUtils;
 
 LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes, 
 				 const VocabDecoder &tgtTypes, 
-				 const std::map<int, std::map<int, float> > &ibmModel1ForwardLogProbs,
-				 const std::map<int, std::map<int, float> > &ibmModel1BackwardLogProbs) :
+				 const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
+				 const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs) :
   srcTypes(srcTypes), 
   tgtTypes(tgtTypes), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
@@ -17,26 +17,26 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
 LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
   srcTypes(types), 
   tgtTypes(types),
-  ibmModel1ForwardScores(map<int, map<int, float> >()),
-  ibmModel1BackwardScores(map<int, map<int, float> >())  
+  ibmModel1ForwardScores(map<int, map<int, double> >()),
+  ibmModel1BackwardScores(map<int, map<int, double> >())  
 {
 }
 
-float LogLinearParams::DotProduct(const map<string, float>& values) {
+double LogLinearParams::DotProduct(const map<string, double>& values) {
   return DotProduct(values, params);
 }
 
 
-float LogLinearParams::DotProduct(const map<string, float>& values, const map<string, float>& weights) {
+double LogLinearParams::DotProduct(const map<string, double>& values, const map<string, double>& weights) {
   // for effeciency
   if(values.size() > weights.size()) {
     return DotProduct(weights, values);
   }
 
-  float dotProduct = 0;
-  for (map<string, float>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
-    float weight = 0;
-    map<string, float>::const_iterator weightIter = weights.find(valuesIter->first);
+  double dotProduct = 0;
+  for (map<string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
+    double weight = 0;
+    map<string, double>::const_iterator weightIter = weights.find(valuesIter->first);
     if (weightIter != weights.end()) {
       weight = weightIter->second;
     }
@@ -45,14 +45,14 @@ float LogLinearParams::DotProduct(const map<string, float>& values, const map<st
   return dotProduct;
 }
 
-float LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
+double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				      int srcSentLength, int tgtSentLength, 
 				      const std::vector<bool>& enabledFeatureTypes) {
 
-  map<string, float> activeFeatures;
+  map<string, double> activeFeatures;
   FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
   // compute log prob
-  float result = DotProduct(activeFeatures, params);
+  double result = DotProduct(activeFeatures, params);
   
     //  cerr << "RESULT=" << result << endl << endl;
 
@@ -61,7 +61,7 @@ float LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtTok
 
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
-				   std::map<string, float> &activeFeatures) {
+				   std::map<string, double> &activeFeatures) {
 
   stringstream temp;
 
@@ -117,7 +117,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 
 				   const std::vector<bool>& enabledFeatureTypes, 
-				   std::map<string, float>& activeFeatures) {
+				   std::map<string, double>& activeFeatures) {
   
   // for debugging
   //    cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
@@ -135,7 +135,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 
   // F2: diagonal-bias (positional features in Chris et al. 2011, which follows Blunsom and Cohn 2006)
   if(enabledFeatureTypes.size() > 2 && enabledFeatureTypes[2]) {
-    activeFeatures["F2:diagonal-bias"] = fabs((float) srcPos / srcSentLength) - ((float) tgtPos / tgtSentLength);
+    activeFeatures["F2:diagonal-bias"] = fabs((double) srcPos / srcSentLength) - ((double) tgtPos / tgtSentLength);
   }
 
   // F3: src token (source features in Chris et al. 2011)
@@ -174,7 +174,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   const std::string& srcTokenString = srcTypes.Decode(srcToken);
   const std::string& tgtTokenString = tgtTypes.Decode(tgtToken);
   //  cerr << "computing ortho-similarity(" << srcToken << " (" << srcTokenString << ") " << ", " << tgtToken << " (" << tgtTokenString << ") )" << endl;
-  //  float orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
+  //  double orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
   //  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
   //    activeFeatures["F7:orthographic-similarity"] = orthographicSimilarity;
   //  }
@@ -212,7 +212,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   }
 
   // F12: ibm model 1 forward logprob (subset of word association features in Chris et al. 2011)
-  float ibm1Forward = ibmModel1ForwardScores.find(srcToken)->second.find(tgtToken)->second;
+  double ibm1Forward = ibmModel1ForwardScores.find(srcToken)->second.find(tgtToken)->second;
   if(enabledFeatureTypes.size() > 12 && enabledFeatureTypes[12]) {
     temp.str("");
     temp << "F12:" << srcToken << ":" << tgtToken;
@@ -220,7 +220,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   }
 
   // F13: ibm model 1 backward logprob (subset of word association features in Chris et al. 2011)
-  float ibm1Backward = ibmModel1BackwardScores.find(tgtToken)->second.find(srcToken)->second;
+  double ibm1Backward = ibmModel1BackwardScores.find(tgtToken)->second.find(srcToken)->second;
   if(enabledFeatureTypes.size() > 13 && enabledFeatureTypes[13]) {
     temp.str("");
     temp << "F13:" << srcToken << ":" << tgtToken;
@@ -289,7 +289,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 void LogLinearParams::PersistParams(const string& outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   
-  for (map<string, float>::const_iterator paramsIter = params.begin(); paramsIter != params.end(); paramsIter++) {
+  for (map<string, double>::const_iterator paramsIter = params.begin(); paramsIter != params.end(); paramsIter++) {
     paramsFile << paramsIter->first << " " << paramsIter->second << endl;
   }
 
@@ -302,15 +302,18 @@ void LogLinearParams::UpdateParams(const LogLinearParams &gradient, const OptMet
 }
 
 // use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const map<string, float> &gradient, const OptMethod& optMethod) {
+void LogLinearParams::UpdateParams(const map<string, double> &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
   case GRADIENT_DESCENT:
   case STOCHASTIC_GRADIENT_DESCENT:
-    for(map<string, float>::const_iterator gradientIter = gradient.begin();
+    for(map<string, double>::const_iterator gradientIter = gradient.begin();
 	gradientIter != gradient.end();
 	gradientIter++) {
       this->params[gradientIter->first] -= optMethod.learningRate * gradientIter->second;
     }
+    break;
+  case LBFGS:
+    assert(false);
     break;
   default:
     assert(false);
@@ -322,10 +325,10 @@ void LogLinearParams::UpdateParams(const map<string, float> &gradient, const Opt
 void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
 					       LogLinearParams& appliedL1Penalty,
 					       const double correctL1Penalty) {
-  for(map<string, float>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
+  for(map<string, double>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
       featuresIter != applyToFeaturesHere.params.end();
       featuresIter++) {
-    float currentFeatureWeight = params[featuresIter->first];
+    double currentFeatureWeight = params[featuresIter->first];
     if(currentFeatureWeight >= 0) {
       currentFeatureWeight = max(0.0, currentFeatureWeight - (correctL1Penalty + appliedL1Penalty.params[featuresIter->first]));
     } else {
@@ -337,7 +340,7 @@ void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFea
 }
 
 // compute a measure of orthographic similarity between two words
-float LogLinearParams::ComputeOrthographicSimilarity(const std::string& srcWord, const std::string& tgtWord) {
+double LogLinearParams::ComputeOrthographicSimilarity(const std::string& srcWord, const std::string& tgtWord) {
   if(srcWord.length() == 0 || tgtWord.length() == 0) {
     return 0.0;
   }
@@ -345,7 +348,7 @@ float LogLinearParams::ComputeOrthographicSimilarity(const std::string& srcWord,
   if(levenshteinDistance > (srcWord.length() + tgtWord.length()) / 2) {
     return 0.0;
   } else {
-    float similarity = (srcWord.length() + tgtWord.length()) / ((float)levenshteinDistance + 1);
+    double similarity = (srcWord.length() + tgtWord.length()) / ((double)levenshteinDistance + 1);
     return similarity;
   }
 }

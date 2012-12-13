@@ -6,23 +6,34 @@
 #include <math.h>
 #include <time.h>
 #include <set>
+#include <algorithm>
 
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
+#include "liblbfgs/include/lbfgs.h"
 
 using namespace fst;
 using namespace std;
 
 class AutoEncoder {
-
- public:
+ private:
 
   AutoEncoder(const string &textFilename, 
 	      const string &outputPrefix, 
 	      LearningInfo &learningInfo);
 
+  static AutoEncoder *instance;
+
+ public:
+
+  static AutoEncoder& GetInstance();
+
+  static AutoEncoder& GetInstance(const string &textFilename, 
+				  const string &outputPrefix, 
+				  LearningInfo &learningInfo);
+  
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const vector<int> &x); // much slower
   double ComputeNLogZ_lambda(const VectorFst<LogArc> &fst, const vector<fst::LogWeight> &betas); // much faster
@@ -55,8 +66,8 @@ class AutoEncoder {
     
   // assumptions:
   // - fst, betas are populated using BuildThetaLambdaFst()
-  double ComputeC(const VectorFst<LogArc> &fst,
-		  const vector<fst::LogWeight> &betas);
+  double ComputeNLogC(const VectorFst<LogArc> &fst,
+		      const vector<fst::LogWeight> &betas);
     
   // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
   // assumptions: 
@@ -78,7 +89,27 @@ class AutoEncoder {
   // block coordinate gradient descent
   void BlockCoordinateGradientDescent();
 
+  // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
+  static double EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
+						   const double *lambdasArray,
+						   double *gradient,
+						   const int lambdasCount,
+						   const double step);
+    
+  // lbfgs call back functiont to report optimizaton progress 
+  static int lbfgsProgressReport(void *instance,
+			  const lbfgsfloatval_t *x, 
+			  const lbfgsfloatval_t *g,
+			  const lbfgsfloatval_t fx,
+			  const lbfgsfloatval_t xnorm,
+			  const lbfgsfloatval_t gnorm,
+			  const lbfgsfloatval_t step,
+			  int n,
+			  int k,
+			  int ls);
+
  private:
+  VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE;
   string textFilename, outputPrefix;
   vector<vector<int> > data;

@@ -38,6 +38,8 @@ namespace MultinomialParams {
 
   void PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params);
 
+  void PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params);
+
   // sample an integer from a multinomial
   int SampleFromMultinomial(const MultinomialParam params);
 }

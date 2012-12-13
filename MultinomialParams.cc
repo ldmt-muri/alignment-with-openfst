@@ -59,14 +59,21 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params) {
   
 
 void MultinomialParams::PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params) {
-    for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      for (std::map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// line format: 
-	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << srcIter->first << " " << tgtIter->first << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
-      }
+  for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      // line format: 
+      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+      paramsFile << srcIter->first << " " << tgtIter->first << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
     }
   }
+}
+
+void MultinomialParams::PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params) {
+  std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+  PersistParams(paramsFile, params);
+  paramsFile.close();
+}
+
 
   // sample an integer from a multinomial
 int MultinomialParams::SampleFromMultinomial(const MultinomialParam params) {

@@ -37,25 +37,36 @@ namespace Regularizer {
 }
 
 namespace OptUtils {
-  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT};
+  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, BLOCK_COORD_GRADIENT_DESCENT, LBFGS};
 
   inline bool IsStochastic(OptAlgorithm a) {
-    if (a == STOCHASTIC_GRADIENT_DESCENT) {
+    if (a == STOCHASTIC_GRADIENT_DESCENT || a == LBFGS) {
       return true;
     } else {
       return false;
     }
   }
 
+  // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
+  struct LbfgsParams {
+    int max_iterations;
+
+    LbfgsParams() {
+      max_iterations = 10;
+    }
+  };
+
   struct OptMethod {
-    OptAlgorithm algorithm;
+    OptAlgorithm algorithm, secondaryAlgorithm;
     float learningRate;
     int miniBatchSize;
     Regularizer::Regularizer regularizer;
     float regularizationStrength;
+    LbfgsParams lbfgsParams;
 
     OptMethod() {
       algorithm = STOCHASTIC_GRADIENT_DESCENT;
+      secondaryAlgorithm = LBFGS;
       learningRate = 0.01;
       miniBatchSize = 1;
       regularizer = Regularizer::NONE;

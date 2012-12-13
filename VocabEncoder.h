@@ -88,6 +88,14 @@ class VocabEncoder {
     }
   }
 
+  void PersistVocab(string filename) {
+    std::ofstream vocabFile(filename.c_str(), std::ios::out);
+    for(map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
+      vocabFile << intToTokenIter->first << " " << intToTokenIter->second << endl;
+    }
+    vocabFile.close();
+  }
+
   int nextId;
   map<string, int> tokenToInt;
   map<int, string> intToToken;
