@@ -88,7 +88,7 @@ AutoEncoder::AutoEncoder(const string &textFilename, const string &outputPrefix,
   MultinomialParams::NormalizeParams(nLogTheta);
 
   // lambdas are initialized to all zeros
-  assert(lambda.params.size() == 0);
+  assert(lambda.GetParamsCount() == 0);
 }
 
 // compute the partition function Z_\lambda(x)
@@ -619,12 +619,19 @@ double AutoEncoder::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentI
     }
   }
   // write the gradient in the (hopefully) pre-allocated array 'gradient'
-  model.lambda.MapToArray(derivativeWRTLambda, gradient);
+  model.lambda.ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient);
   // return the to-be-minimized objective function
+  cerr << "Evaluate returning " << nlogLikelihood << endl;
+  //  cerr << "gradient: ";
+  //  for(map<string, double>::const_iterator gradientIter = derivativeWRTLambda.begin(); 
+  //      gradientIter != derivativeWRTLambda.end(); gradientIter++) {
+  //    cerr << gradientIter->first << ":" << gradientIter->second << " ";
+  //  }
+  //  cerr << endl;
   return nlogLikelihood;
 }
 
-int AutoEncoder::lbfgsProgressReport(void *instance,
+int AutoEncoder::LbfgsProgressReport(void *instance,
 				     const lbfgsfloatval_t *x, 
 				     const lbfgsfloatval_t *g,
 				     const lbfgsfloatval_t fx,
@@ -634,13 +641,169 @@ int AutoEncoder::lbfgsProgressReport(void *instance,
 				     int n,
 				     int k,
 				     int ls) {
-  cerr << "Iteration " << k << ": nLogLikelihood = " << fx << ",xnorm = " << xnorm << ",gnorm = " << gnorm << ",step = " << step << endl;
+  cerr << "lbfgs Iteration " << k << ": nLogLikelihood = " << fx << ",xnorm = " << xnorm << ",gnorm = " << gnorm << ",step = " << step << endl;
   return 0;
 }
 
+string AutoEncoder::LbfgsStatusIntToString(int status) {
+  switch(status) {
+  case LBFGS_SUCCESS:
+    return "LBFGS_SUCCESS";
+    break;
+  case LBFGS_ALREADY_MINIMIZED:
+    return "LBFGS_ALREADY_MINIMIZED";
+    break;
+  case LBFGSERR_UNKNOWNERROR:
+    return "LBFGSERR_UNKNOWNERROR";
+    break;
+  case LBFGSERR_LOGICERROR:
+    return "LBFGSERR_LOGICERROR";
+    break;
+  case LBFGSERR_OUTOFMEMORY:
+    return "LBFGSERR_OUTOFMEMORY";
+    break;
+  case LBFGSERR_CANCELED:
+    return "LBFGSERR_CANCELED";
+    break;
+  case LBFGSERR_INVALID_N:
+    return "LBFGSERR_INVALID_N";
+    break;
+  case LBFGSERR_INVALID_N_SSE:
+    return "LBFGSERR_INVALID_N_SSE";
+    break;
+  case LBFGSERR_INVALID_X_SSE:
+    return "LBFGSERR_INVALID_X_SSE";
+    break;
+  case LBFGSERR_INVALID_EPSILON:
+    return "LBFGSERR_INVALID_EPSILON";
+    break;
+  case LBFGSERR_INVALID_TESTPERIOD:
+    return "LBFGSERR_INVALID_TESTPERIOD";
+    break;
+  case LBFGSERR_INVALID_DELTA:
+    return "LBFGSERR_INVALID_DELTA";
+    break;
+  case LBFGSERR_INVALID_LINESEARCH:
+    return "LBFGSERR_INVALID_LINESEARCH";
+    break;
+  case LBFGSERR_INVALID_MINSTEP:
+    return "LBFGSERR_INVALID_MINSTEP";
+    break;
+  case LBFGSERR_INVALID_MAXSTEP:
+    return "LBFGSERR_INVALID_MAXSTEP";
+    break;
+  case LBFGSERR_INVALID_FTOL:
+    return "LBFGSERR_INVALID_FTOL";
+    break;
+  case LBFGSERR_INVALID_WOLFE:
+    return "LBFGSERR_INVALID_WOLFE";
+    break;
+  case LBFGSERR_INVALID_GTOL:
+    return "LBFGSERR_INVALID_GTOL";
+    break;
+  case LBFGSERR_INVALID_XTOL:
+    return "LBFGSERR_INVALID_XTOL";
+    break;
+  case LBFGSERR_INVALID_MAXLINESEARCH:
+    return "LBFGSERR_INVALID_MAXLINESEARCH";
+    break;
+  case LBFGSERR_INVALID_ORTHANTWISE:
+    return "LBFGSERR_INVALID_ORTHANTWISE";
+    break;
+  case LBFGSERR_INVALID_ORTHANTWISE_START:
+    return "LBFGSERR_INVALID_ORTHANTWISE_START";
+    break;
+  case LBFGSERR_INVALID_ORTHANTWISE_END:
+    return "LBFGSERR_INVALID_ORTHANTWISE_END";
+    break;
+  case LBFGSERR_OUTOFINTERVAL:
+    return "LBFGSERR_OUTOFINTERVAL";
+    break;
+  case LBFGSERR_INCORRECT_TMINMAX:
+    return "LBFGSERR_INCORRECT_TMINMAX";
+    break;
+  case LBFGSERR_ROUNDING_ERROR:
+    return "LBFGSERR_ROUNDING_ERROR";
+    break;
+  case LBFGSERR_MINIMUMSTEP:
+    return "LBFGSERR_MINIMUMSTEP";
+    break;
+  case LBFGSERR_MAXIMUMSTEP:
+    return "LBFGSERR_MAXIMUMSTEP";
+    break;
+  case LBFGSERR_MAXIMUMLINESEARCH:
+    return "LBFGSERR_MAXIMUMLINESEARCH";
+    break;
+  case LBFGSERR_MAXIMUMITERATION:
+    return "LBFGSERR_MAXIMUMITERATION";
+    break;
+  case LBFGSERR_WIDTHTOOSMALL:
+    return "LBFGSERR_WIDTHTOOSMALL";
+    break;
+  case LBFGSERR_INVALIDPARAMETERS:
+    return "LBFGSERR_INVALIDPARAMETERS";
+    break;
+  case LBFGSERR_INCREASEGRADIENT:
+    return "LBFGSERR_INCREASEGRADIENT";
+    break;
+  default:
+    return "THIS IS NOT A VALID LBFGS STATUS CODE";
+    break;
+  }
+}
 
-void AutoEncoder::BlockCoordinateGradientDescent() {
+// make sure all lambda features which may fire on this training data are added to lambda.params
+void AutoEncoder::WarmUp() {
+  cerr << "warming up...";
+  // for each sentence in this mini batch, aggregate the nloglikelihood derivatives across sentences
+  double nlogLikelihood = 0;
+  map<string, double> derivativeWRTLambda;
+  for(int sentId = 0; sentId < data.size(); sentId++) {
+    // build the FSTs
+    VectorFst<LogArc> thetaLambdaFst, lambdaFst;
+    vector<fst::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+    BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    BuildLambdaFst(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
+    // compute the D map for this sentence
+    map<string, double> D;
+    ComputeD(data[sentId], data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, D);      
+    // compute the C value for this sentence
+    double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+    // add D/C to the gradient
+    for(map<string, double>::const_iterator dIter = D.begin(); dIter != D.end(); dIter++) {
+      double d = dIter->second;
+      double nLogd = MultinomialParams::nLog(d);
+      double dOverC = MultinomialParams::nExp(nLogd - nLogC);
+      derivativeWRTLambda[dIter->first] += dOverC;
+    }
+    // compute the F map fro this sentence
+    map<string, double> F;
+    ComputeF(data[sentId], thetaLambdaFst, lambdaAlphas, lambdaBetas, F);
+    // compute the Z value for this sentence
+    double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+    //      cerr << "nloglikelihood -= " << nLogZ << ", |x| = " << data[sentId].size() << endl;
+    // subtract F/Z from the gradient
+    for(map<string, double>::const_iterator fIter = F.begin(); fIter != F.end(); fIter++) {
+      double f = fIter->second;
+      double nLogf = MultinomialParams::nLog(f);
+      double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
+      derivativeWRTLambda[fIter->first] -= fOverZ;
+    }
+  }
   
+  // now, update the lambda features with stochastic gradient descent
+  OptUtils::OptMethod optMethod = learningInfo.optimizationMethod;
+  optMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
+  lambda.UpdateParams(derivativeWRTLambda, optMethod);
+
+  cerr << "done" << endl;
+}
+
+void AutoEncoder::BlockCoordinateGradientDescent() {  
+  
+  // add all features in this data set to lambda.params
+  WarmUp();
+
   do {
     // log likelihood
     double nlogLikelihood = 0;
@@ -681,7 +844,6 @@ void AutoEncoder::BlockCoordinateGradientDescent() {
     // update the thetas
     nLogTheta = mle;
 
-
     // update the lambdas with mini-batch lbfgs, one full pass over training data
     // needed to call liblbfgs
     double* lambdasArray;
@@ -692,19 +854,29 @@ void AutoEncoder::BlockCoordinateGradientDescent() {
     lbfgsParams.max_iterations = learningInfo.optimizationMethod.lbfgsParams.max_iterations;
     // for each mini-batch
     for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.miniBatchSize) {
+
       // populate lambdasArray and lambasArrayLength
-      lambda.UpdateArray(&lambdasArray, &lambdasArrayLength);
+      lambdasArray = lambda.GetParamWeightsArray();
+      lambdasArrayLength = lambda.GetParamsCount();
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
       int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
-			      EvaluateNLogLikelihoodDerivativeWRTLambda, lbfgsProgressReport, &sentId, &lbfgsParams);
-      cerr << "lbfgsStatusCode = " << lbfgsStatus << endl;
-      assert(lbfgsStatus == 0 || lbfgsStatus == LBFGSERR_MAXIMUMITERATION);
+			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+
+      // debug
+      cerr << "lbfgsStatusCode = " << LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+      if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
+	cerr << "rounding error (" << lbfgsStatus << "). it seems like my gradient is buggy." << endl << "retry..." << endl;
+	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
+			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+	cerr << "the lbfgs status now is " << lbfgsStatus << endl;
+      }
+    
       // update iteration's nloglikelihood
       nlogLikelihood += optimizedMiniBatchNLogLikelihood;
     }
     // debug
-    cerr << "iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
+    cerr << "coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(nlogLikelihood);

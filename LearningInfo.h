@@ -63,6 +63,7 @@ namespace OptUtils {
     Regularizer::Regularizer regularizer;
     float regularizationStrength;
     LbfgsParams lbfgsParams;
+    int lbfgsMemoryBuffer;
 
     OptMethod() {
       algorithm = STOCHASTIC_GRADIENT_DESCENT;
@@ -71,6 +72,7 @@ namespace OptUtils {
       miniBatchSize = 1;
       regularizer = Regularizer::NONE;
       regularizationStrength = 1000;
+      lbfgsMemoryBuffer = 500;
     }
   }; 
 }

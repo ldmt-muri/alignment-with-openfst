@@ -1,0 +1,271 @@
+\documentclass[11pt,onecolumn]{article}
+%\usepackage{naaclhlt2013}
+\usepackage{acl2012-onecolumn}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{dsfont}
+\usepackage{amsmath}
+\usepackage{}
+\usepackage{url}
+\usepackage[pdftex]{graphicx}
+\usepackage{color}
+\usepackage[utf8]{inputenc}
+\newcommand{\cjdcomment}[1]{\textcolor{red}{\bf\small [#1 --CJD]}}
+\newcommand{\nascomment}[1]{\textcolor{green}{\bf\small [#1 --NAS]}}
+\newcommand{\wacomment}[1]{\textcolor{blue}{\bf\small [#1 --WA]}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\setlength\titlebox{6.5cm}    % Expanding the titlebox
+
+\newenvironment{itemizesquish}{\begin{list}{\labelitemi}{\setlength{\itemsep}{0em}\setlength{\labelwidth}{0.5em}\setlength{\leftmargin}{\labelwidth}\addtolength{\leftmargin}{\labelsep}}}{\end{list}}
+
+\newcommand{\kinstring}[1]{\textsf{#1}}
+\newcommand{\engstring}[1]{\texttt{\small{#1}}}
+
+
+\title{Latent CRF}
+
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+abstract...
+\end{abstract}
+
+\section{Problem}
+
+Given a set of sentences \{\textbf{x}\}, find the most probable POS sequence \textbf{y} for each sentence. 
+
+\section{Model}
+
+$x_i$ is the $i^{th}$ word in \textbf{x}. $x^k$ refers to a unique type throughout the sentences. $x$ belongs to discrete domain $\cal{X}$. 
+Similarly, $y_i$ is the $i^{th}$ POS tag in \textbf{y}. $y^k$ refers to a unique POS tag. $y$ belongs to discrete domain $\cal{Y}$. 
+For each sentence, we introduce an additional sequence variable \textbf{z} which belongs to domain $\cal{X}^*$ (similar to $\mathbf{x}$).\\
+
+
+\textbf{Generative story:}
+\begin{itemizesquish}
+\item Given a sentence \textbf{x}, generate a lossy compression \textbf{y} of the sentence.
+\item Given a compression \textbf{y}, generate a sentence \textbf{z}.
+\end{itemizesquish}
+
+The best compression $\hat{\mathbf{y}}$ is the one that produces sentence \textbf{z} similar to the original \textbf{x} with highest probability, according to some model of $p(\mathbf{y} \mid \mathbf{x}, \mathbf{z})$:
+
+\begin{eqnarray}
+\hat{\mathbf{y}} = \argmax_\mathbf{y} p(\mathbf{y} \mid \mathbf{x}, \mathbf{z}) 
+\end{eqnarray}
+
+We choose a CRF model for the first part of the generative story $p(\mathbf{y} \mid \mathbf{x})$:
+
+\begin{eqnarray}
+p_\lambda(\mathbf{y}\mid\mathbf{x}) &=& \frac{f(\mathbf{y}, \mathbf{x})}{Z(\mathbf{x})}; \\
+f(\mathbf{y}, \mathbf{x}) &=& \exp \sum_{i=1}^{|\mathbf{y}|} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}), \\
+Z(\mathbf{x}) &=& \sum_\mathbf{y} \exp \sum_{i=1}^{|\mathbf{y}|} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+\end{eqnarray}
+
+where $\mathbf{h}$ is a vector of feature functions, and $\boldsymbol{\lambda}$ is a vector of feature weights.\\
+
+We choose the following parameterization for $p(\mathbf{z} \mid \mathbf{y})$:
+
+\begin{eqnarray}
+p_\theta(\mathbf{z} \mid \mathbf{y}) &=& \prod_{i=1}^{|\mathbf{z}|} p(z_i\mid y_i) \\
+ &=& \prod_{i=1}^{|\mathbf{z}|} \theta_{z_i|y_i}
+\end{eqnarray}
+
+\section{Inference}
+\label{sec:inference}
+Given certain parameter values for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$, we can compute the probability that an arbitrary compression \textbf{y} of sentence \textbf{x} regenerates $\mathbf{z} = \mathbf{x}$ as follows:
+
+\begin{eqnarray}
+p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}) &=& \frac{p(\mathbf{y}, \mathbf{z} \mid \mathbf{x})}{\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})}; \\
+p(\mathbf{y}, \mathbf{z} \mid \mathbf{x}) &=& p_\lambda(\mathbf{y}\mid\mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y}) \\
+&=& \frac{1}{Z(\mathbf{x})}f(\mathbf{y}, \mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y})
+\end{eqnarray}
+
+Fortunately, those quantities are cheap to compute, assuming $|\cal{Y}|$ is small. $Z(\mathbf{x})$ factorizes as follows, enabling an efficient exact computation with dynamic programming:
+
+\wacomment{how do we verify that a factorization is correct?}
+\cjdcomment{the second step isn't quite right since you'll actually want the feature $\mathbf{h}(\cdot)$ to depend on $i$. See Sha and Pereira (2003) page 3, first column for a nice derivation of $Z_{\boldsymbol{\lambda}}(\mathbf{x})$}
+\begin{eqnarray}
+Z(\mathbf{x}) &=& \sum_\mathbf{y} \exp \sum_{i=1}^{|\mathbf{y}|} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}) \\
+ &=& \prod_{i=1}^{|\mathbf{x}|} \sum_{y_i} \sum_{y_{i-1}} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+\end{eqnarray}
+
+$\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})$ can also be effeciently computed in a similar fashion:
+
+\begin{eqnarray}
+\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x}) &=& \sum_{\mathbf{y'}} p_\lambda(\mathbf{y'} \mid \mathbf{x}).p_\theta(\mathbf{z} \mid \mathbf{y'}) \\
+&=& \sum_{\mathbf{y'}} \prod_{i=1}^{|\mathbf{x}|} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y'_i, y'_{i-1}, \mathbf{x}) . \prod_{i=1}^{|\mathbf{x}|} \theta_{z_i\mid y'_i}\\
+&=& \prod_{i=1}^{|\mathbf{x}|} \sum_{y'_i} \theta_{z_i\mid y'_i} \sum_{y'_{i-1}} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y'_i, y'_{i-1}, \mathbf{x}) \label{eq:marginalizeY}
+\end{eqnarray}
+
+We can use Viterbi to find the most likely compression $\hat{\mathbf{y}}$. All inference algorithms here are quadratic in $|\cal{Y}|$ and linear in $|\mathbf{x}|$. For small POS tag sets, this is ~3000 cheap operations per sentence.
+
+\section{Learning}
+
+Our objective is to maximize the corpus ($\cal{T}$) log-likelihood of regenerating \textbf{z} from \textbf{x}, according to the generative story.
+
+\begin{eqnarray}
+\ell\ell(\boldsymbol{\lambda}, \boldsymbol{\theta}) &=& \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log p(\mathbf{z}\mid\mathbf{x}) \\
+ &=& \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} p_\lambda(\mathbf{y}\mid\mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y})\\
+\end{eqnarray}
+
+Unfortunately, there's no closed-form MLE solution for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$ due to the latent variables. However, we can use EM to iteratively improve the likelihood\footnote{we run the risk of getting stuck at a local optimum}. Instead of directly optimizing the log-likelihood, we will be optimizing:
+
+\begin{eqnarray}
+G(\boldsymbol{\lambda}, \boldsymbol{\theta}) &=& 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      \log
+        p(\mathbf{y}, \mathbf{z} \mid \mathbf{x}; \boldsymbol{\lambda}, \boldsymbol{\theta}) \\
+&=& 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      \log
+        p_\lambda(\mathbf{y} \mid \mathbf{x}) 
+        . p_\theta(\mathbf{z} \mid \mathbf{y}) \\
+\end{eqnarray}
+
+In the expectation step, we compute $p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})$ as in \ref{sec:inference}. \\
+
+The maximization step computes new values of the model parameters which maximize $G(\boldsymbol{\lambda}, \boldsymbol{\theta})$ as follows:
+
+\begin{align}
+\frac{\partial G(\boldsymbol{\lambda}, \boldsymbol{\theta})}{\partial \theta_{z^*\mid y^*}} &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      \frac
+        { 
+          \frac{\partial}{\partial \theta_{z^*\mid y^*}}  p_\theta(\mathbf{z} \mid \mathbf{y}) 
+        }
+        {
+          p_\theta(\mathbf{z} \mid \mathbf{y})
+        } \\
+\theta_{z^*\mid y^*}.\frac{\partial G(\boldsymbol{\lambda}, \boldsymbol{\theta})}{\partial \theta_{z^*\mid y^*}} &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y}
+      \delta_{\exists i:y_i=y^*, z_i=z^*}
+      . p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})
+      . \frac
+        { 
+          p_\theta(\mathbf{z} \mid \mathbf{y})
+        }
+        {
+          p_\theta(\mathbf{z} \mid \mathbf{y})
+        } \\
+&=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y}
+      \delta_{\exists i:y_i=y^*, z_i=z^*}
+      . p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) \\
+&= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y}
+      \delta_{\exists i:y_i=y^*, z_i=z^*}
+      . \frac{p(\mathbf{y}, \mathbf{z} \mid \mathbf{x}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})}{\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})} \\
+&= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y}
+      \delta_{\exists i:y_i=y^*, z_i=z^*}
+      . \frac{f(\mathbf{y},\mathbf{x}).p_{\theta^{old}}(\mathbf{z}\mid\mathbf{y})}{Z(\mathbf{x}).\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})}\\
+&\text{We remove $\lambda^{old}$ and $\theta^{old}$ for brevity since all new $\lambda$ and $\theta$ already cancelled out:} \nonumber \\
+&= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \frac{1}{Z(\mathbf{x}).\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})}
+    . \sum_\mathbf{y}
+      \delta_{\exists i:y_i=y^*, z_i=z^*}
+      . \prod_{i=1}^{|\mathbf{x}|} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+      . \prod_{i=1}^{|\mathbf{x}|} \theta_{z_i \mid y_i} \\
+&= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \frac{1}{Z(\mathbf{x}).\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})}
+    . \delta_{\exists i: z_i=z^*} \nonumber \\
+   &\qquad\qquad. \prod_{i=1}^{|\mathbf{x}|} \{ 
+      \delta_{z_i=z^*}
+      . \theta_{z^*\mid y^*} 
+      . \sum_{y_{i-1}} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y^*, y_{i-1}, \mathbf{x}) \nonumber \\
+   &\qquad\qquad\qquad+
+      \delta_{z_{i-1}=z^*}
+      . \sum_{y_i} \theta_{z_i\mid y_i}  \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y^*, \mathbf{x}) \nonumber \\
+   &\qquad\qquad\qquad+ 
+      \delta_{z_i \neq z^*, z_{i-1} \neq z^*}
+      . \sum_{y_i} \sum_{y_{i-1}} \theta_{z_i\mid y_i} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+    \}  \label{eq:dGByDTheta}\\
+\hat{\theta}_{z^*\mid y^*} &= 
+  c
+  . \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \frac{1}{Z(\mathbf{x}).\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})}
+    . \delta_{\exists i: z_i=z^*} \nonumber \\
+   &\qquad\qquad. \prod_{i=1}^{|\mathbf{x}|} \{ 
+      \delta_{z_i=z^*}
+      . \theta_{z^*\mid y^*} 
+      . \sum_{y_{i-1}} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y^*, y_{i-1}, \mathbf{x}) \nonumber \\
+   &\qquad\qquad\qquad+
+      \delta_{z_{i-1}=z^*}
+      . \sum_{y_i} \theta_{z_i\mid y_i}  \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y^*, \mathbf{x}) \nonumber \\
+   &\qquad\qquad\qquad+ 
+      \delta_{z_i \neq z^*, z_{i-1} \neq z^*}
+      . \sum_{y_i} \sum_{y_{i-1}} \theta_{z_i\mid y_i} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+    \}; \\
+&\text{where} \quad c \quad \text{is a Lagrangian constant to enforce the constraint:} \sum_z \theta_{z|y^*} = 1 \nonumber 
+\end{align}
+
+Note: $y_0$ takes a single unique value in $\cal{Y}$, whenever it appears in $\sum_{y_{i-1}}$.\\
+
+\wacomment{Eq. \ref{eq:dGByDTheta} is only correct when the parameter $\theta_{z^*\mid y^*}$ appears zero or one times in any $\langle \mathbf{y},\mathbf{z} \rangle$. This probably doesn't have a huge impact on optimum parameter values, but it renders the optimization method erroneous.}
+
+While we were able to find a closed form solution for the $\hat{\theta}_{z^*\mid y^*}$ which maximizes the objective $G$, there's no such closed form solution for $\hat{\lambda_k}$. But, fortunately, the objective $G$ is concave in $\lambda$\footnote{$G$ is concave because it can be defined as a linear combination of $log p_\lambda(\mathbf{y}\mid \mathbf{x})$}, which means we can use gradient-based optimization methods and converge to a global optimum (for the problem of optimizing $G$ with respect to $\lambda$ at any one iteration). We just need to find an efficient way to compute the gradient $\frac{\partial G}{\partial \lambda_k}$:
+
+\begin{align}
+G(\boldsymbol{\lambda}, \boldsymbol{\theta}) &= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      [ \log p_\theta(\mathbf{z}\mid\mathbf{y}) 
+        + \log
+          \frac
+            {\prod_i \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})}
+            {\sum_{\mathbf{y'}} \prod_i \exp \boldsymbol{\lambda}^\top \mathbf{h}(y'_i, y'_{i-1}, \mathbf{x})}  ] \\
+&= 
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old})  \nonumber \\
+        &\qquad\qquad\qquad\quad .[ \log p_\theta(\mathbf{z}\mid\mathbf{y}) \nonumber \\
+        &\qquad\qquad\qquad\qquad + \sum_i \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}) \nonumber \\
+        &\qquad\qquad\qquad\qquad - \log \sum_{\mathbf{y'}} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y'_i, y'_{i-1}, \mathbf{x}) ] \\
+\frac{\partial G(\boldsymbol{\lambda}, \boldsymbol{\theta})}{\partial \lambda_k} &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_{\mathbf{y}}
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      . [ \sum_{i} h_k(y_i, y_{i-1}, \mathbf{x}) 
+        - \mathbf{E}_{p(\mathbf{y'}\mid\mathbf{x})}(h_k(.)) ] \\
+\frac{\partial G(\boldsymbol{\lambda}, \boldsymbol{\theta})}{\partial \lambda_k} &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \frac
+      {1}
+      {Z(\mathbf{x}).\sum_\mathbf{y'}p(\mathbf{y'},\mathbf{z}\mid\mathbf{x})} \nonumber \\
+    &\qquad\qquad . \sum_{\mathbf{y}}
+                    \prod_{i=1}^{|\mathbf{x}|} \theta_{z_i\mid y_i} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+                    . [  \sum_{i} h_k(y_i, y_{i-1}, \mathbf{x}) 
+                      - \mathbf{E}_{p(\mathbf{y'}\mid\mathbf{x})}(h_k(.)) ] \\
+\frac{\partial G(\boldsymbol{\lambda}, \boldsymbol{\theta})}{\partial \lambda_k} &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \frac
+      {1}
+      {Z(\mathbf{x}).\sum_\mathbf{y'}p(\mathbf{y'},\mathbf{z}\mid\mathbf{x})} \nonumber \\
+    &\qquad\qquad . [ \sum_{\mathbf{y}} 
+                        \prod_{i=1}^{|\mathbf{x}|} \theta_{z_i\mid y_i} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+                        . \sum_{i} h_k(y_i, y_{i-1}, \mathbf{x}) \quad \} A \nonumber \\
+    &\qquad\qquad   - \sum_{\mathbf{y}}
+                        \prod_{i=1}^{|\mathbf{x}|} \theta_{z_i\mid y_i} \exp \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x})
+                        . \mathbf{E}_{p(\mathbf{y'}\mid\mathbf{x})}(h_k(.)) \qquad \} B \nonumber \\
+    &\qquad\qquad   ] \label{eq:forwardBackward} 
+\end{align}
+
+We can write a forward-backward algorithm to compute the quantities $A$ and $B$ in eq.\ref{eq:forwardBackward}.
+
+
+\end{document}

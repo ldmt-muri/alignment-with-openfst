@@ -97,7 +97,7 @@ class AutoEncoder {
 						   const double step);
     
   // lbfgs call back functiont to report optimizaton progress 
-  static int lbfgsProgressReport(void *instance,
+  static int LbfgsProgressReport(void *instance,
 			  const lbfgsfloatval_t *x, 
 			  const lbfgsfloatval_t *g,
 			  const lbfgsfloatval_t fx,
@@ -107,6 +107,12 @@ class AutoEncoder {
 			  int n,
 			  int k,
 			  int ls);
+
+  // returns a string indicating the LBFGS status code
+  static string LbfgsStatusIntToString(int status);
+  
+  // make sure all lambda features which may fire on this training data are added to lambda.params
+  void WarmUp();
 
  private:
   VocabEncoder vocabEncoder;

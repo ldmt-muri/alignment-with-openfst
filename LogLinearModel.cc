@@ -722,23 +722,16 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
 
       // now, for each feature fired on each arc of aGivenTS
       for(map<string,float>::const_iterator feature = activeFeatures.begin(); feature != activeFeatures.end(); feature++) {
-	if(gradient.params.count(feature->first) == 0) {
-	  gradient.params[feature->first] = 0;
-	}
+	// in case this is the first time the feature fires, add it to the gradient (with zero value)
+	gradient.AddParam(feature->first);
 
-	// for debugging 
-	//	cerr << "val[" << feature->first << "]=" << feature->second << ". gradient[" << feature->first << "] was " << gradient.params[feature->first] << " became ";
-	
 	// the positive contribution to the derivative of this feature by this arc is
 	float contribution = feature->second * FstUtils::nExp(totalProb.Value());
 	if(subtract) {
-	  gradient.params[feature->first] -= contribution;
+	  gradient.UpdateParam(feature->first, GetParam(feature->first) - contribution);
 	} else {
-	  gradient.params[feature->first] += contribution;
+	  gradient.UpdateParam(feature->first, GetParam(feature->first) + contribution);
 	}
-      
-	// for debugging
-	//cerr << gradient.params[feature->first] << endl;
       }
       d5 += clock() - temp;
       temp = clock();
@@ -756,23 +749,19 @@ void LogLinearModel::AddRegularizerTerm(LogLinearParams& gradient) {
   // compute ||params||_2
   float l2 = 0;
   if(learningInfo.optimizationMethod.regularizer == Regularizer::L2) {
-    for(map<string, float>::const_iterator featureIter = params.params.begin();
-	featureIter != params.params.end();
-	featureIter++) {
-      l2 += featureIter->second * featureIter->second;
-    }
+    l2 = params.ComputeL2Norm() * 2.0;
   }
 
   // for each feature
-  for(map<string, float>::const_iterator featureIter = params.params.begin(); 
-      featureIter != params.params.end();
+  for(map<string, int>::const_iterator featureIter = params.paramIndexes.begin(); 
+      featureIter != params.paramIndexes.end();
       featureIter++) {
     float term;
     switch(learningInfo.optimizationMethod.regularizer) {
     case Regularizer::L2:
-      term = 2.0 * learningInfo.optimizationMethod.regularizationStrength * featureIter->second / l2;
-      gradient.params[featureIter->first] += term;
-      assert(gradient.params[featureIter->first] == term);
+      term = 2.0 * learningInfo.optimizationMethod.regularizationStrength * params.GetParam(featureIter->first) / l2;
+      gradient.UpdateParam(featureIter->first, gradient.GetParam(featureIter->first) + term);
+      assert(gradient.GetParam(featureIter->first) == term);
       break;
     case Regularizer::NONE:
       break;

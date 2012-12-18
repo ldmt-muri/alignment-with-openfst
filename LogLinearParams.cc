@@ -22,27 +22,50 @@ LogLinearParams::LogLinearParams(const VocabDecoder &types) :
 {
 }
 
+// if the a parameter with the same ID already exists, do nothing
+bool LogLinearParams::AddParam(string paramId, double paramWeight) {
+  if(paramIndexes.count(paramId) == 0) {
+    // check class's integrity
+    assert(paramIndexes.size() == paramWeights.size());
+    int newParamIndex = paramIndexes.size();
+    paramIndexes[paramId] = newParamIndex;
+    paramWeights.push_back(paramWeight);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
 double LogLinearParams::DotProduct(const map<string, double>& values) {
-  return DotProduct(values, params);
+  double dotProduct = 0;
+  // for each active feature
+  for(map<string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
+    // make sure there's a corresponding feature in paramIndexes and paramWeights
+    AddParam(valuesIter->first);
+    // then update the dot product
+    dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
+  }
+  return dotProduct;
 }
 
 
-double LogLinearParams::DotProduct(const map<string, double>& values, const map<string, double>& weights) {
-  // for effeciency
-  if(values.size() > weights.size()) {
-    return DotProduct(weights, values);
-  }
-
+// assumptions:
+// -both vectors are of the same size
+double LogLinearParams::DotProduct(const vector<double>& values, const vector<double>& weights) {
+  assert(values.size() == weights.size());
   double dotProduct = 0;
-  for (map<string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
-    double weight = 0;
-    map<string, double>::const_iterator weightIter = weights.find(valuesIter->first);
-    if (weightIter != weights.end()) {
-      weight = weightIter->second;
-    }
-    dotProduct += valuesIter->second * weight;
+  for(int i = 0; i < values.size(); i++) {
+    dotProduct += values[i] * weights[i];
   }
   return dotProduct;
+}
+
+// compute the dot product between the values vector (passed) and the paramWeights vector (member)
+// assumptions:
+// - values and paramWeights are both of the same size
+double LogLinearParams::DotProduct(const vector<double>& values) {
+  return DotProduct(values, paramWeights);
 }
 
 double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
@@ -52,9 +75,9 @@ double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtTo
   map<string, double> activeFeatures;
   FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
   // compute log prob
-  double result = DotProduct(activeFeatures, params);
+  double result = DotProduct(activeFeatures);
   
-    //  cerr << "RESULT=" << result << endl << endl;
+  //  cerr << "RESULT=" << result << endl << endl;
 
   return result;
 }
@@ -110,9 +133,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp << "F56:" << yI << ":" << xIP2;
     activeFeatures[temp.str()] = 1.0;
   }
-
 }
-
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 
@@ -289,16 +310,23 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 void LogLinearParams::PersistParams(const string& outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   
-  for (map<string, double>::const_iterator paramsIter = params.begin(); paramsIter != params.end(); paramsIter++) {
-    paramsFile << paramsIter->first << " " << paramsIter->second << endl;
+  for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
+    paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
   }
 
   paramsFile.close();
 }
 
-// use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const LogLinearParams &gradient, const OptMethod& optMethod) {
-  UpdateParams(gradient.params, optMethod);
+void LogLinearParams::PrintFirstNParams(unsigned n) {
+  for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
+    cerr << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
+  }
+}
+
+// each line consists of: <featureStringId><space><featureWeight>\n
+void LogLinearParams::PrintParams() {
+  assert(paramIndexes.size() == paramWeights.size());
+  PrintFirstNParams(paramIndexes.size());
 }
 
 // use gradient based methods to update the model parameter weights
@@ -309,11 +337,11 @@ void LogLinearParams::UpdateParams(const map<string, double> &gradient, const Op
     for(map<string, double>::const_iterator gradientIter = gradient.begin();
 	gradientIter != gradient.end();
 	gradientIter++) {
-      this->params[gradientIter->first] -= optMethod.learningRate * gradientIter->second;
+      // in case this parameter does not exist in paramWeights/paramIndexes
+      AddParam(gradientIter->first);
+      // update the parameter weight
+      paramWeights[ paramIndexes[gradientIter->first] ] -= optMethod.learningRate * gradientIter->second;
     }
-    break;
-  case LBFGS:
-    assert(false);
     break;
   default:
     assert(false);
@@ -321,11 +349,22 @@ void LogLinearParams::UpdateParams(const map<string, double> &gradient, const Op
   }
 }
 
+// override the member weights vector with this array
+void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
+  assert(arrayLength == paramWeights.size());
+  assert(paramWeights.size() == paramIndexes.size());
+  for(int i = 0; i < arrayLength; i++) {
+    paramWeights[i] = array[i];
+  }
+}
+
+// TODO: reimplement l1 penalty
 // if using a cumulative L1 regularizer, apply the cumulative l1 penalty
 void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
 					       LogLinearParams& appliedL1Penalty,
 					       const double correctL1Penalty) {
-  for(map<string, double>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
+  assert(false);
+  /*  for(map<string, double>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
       featuresIter != applyToFeaturesHere.params.end();
       featuresIter++) {
     double currentFeatureWeight = params[featuresIter->first];
@@ -336,7 +375,7 @@ void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFea
     }
     appliedL1Penalty.params[featuresIter->first] += currentFeatureWeight - params[featuresIter->first];
     params[featuresIter->first] = currentFeatureWeight;
-  }
+    }*/
 }
 
 // compute a measure of orthographic similarity between two words
