@@ -8,6 +8,7 @@
 #include "LearningInfo.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
+#include "IAlignmentModel.h"
 
 using namespace fst;
 using namespace std;
@@ -16,7 +17,7 @@ using namespace std;
 
 typedef map<int, map< int, float > >  Model1Param;
 
-class IbmModel1 {
+class IbmModel1 : public IAlignmentModel.h {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeParams();
@@ -37,16 +38,18 @@ class IbmModel1 {
 
   IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
 
-  void PrintParams();
+  virtual void PrintParams();
 
-  void PersistParams(const string& outputFilename);
+  virtual void PersistParams(const string& outputFilename);
   
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-  void InitParams();
+  virtual void InitParams();
 
-  void Train();
+  virtual void Train();
 
-  void Align();
+  virtual void Align();
+
+  virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;

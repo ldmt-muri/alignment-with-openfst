@@ -10,7 +10,7 @@
 #include <math.h>
 #include <cmath>
 
-#include "alias_sampler.h"
+#include "Samplers.h"
 
 namespace MultinomialParams {
 

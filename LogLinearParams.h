@@ -106,12 +106,6 @@ class LogLinearParams {
 				LogLinearParams& appliedL1Penalty,
 				const double correctL1Penalty);
 
-  // compute the orthographic similarity between two strings
-  double ComputeOrthographicSimilarity(const std::string& srcWord, const std::string& tgtWord);
-
-  // levenshtein distance
-  int LevenshteinDistance(const std::string& x, const std::string& y);
-
   // clear model parameters
   inline void Clear() {
     paramIndexes.clear();

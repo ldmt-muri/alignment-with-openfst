@@ -9,7 +9,7 @@
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "IAlignmentSampler.h"
-#include "alias_sampler.h"
+#include "Samplers.h"
 #include "MultinomialParams.h"
 
 using namespace fst;
@@ -24,7 +24,7 @@ using namespace MultinomialParams;
 // But, when i == 0, there's no a_{-1}. we can use this constant whenever we need a_{-1}
 #define INITIAL_SRC_POS -1
 
-class HmmModel : public IAlignmentSampler {
+class HmmModel : public IAlignmentSampler, public IAlignmentModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeFractionalCounts();
@@ -57,18 +57,18 @@ class HmmModel : public IAlignmentSampler {
 
   HmmModel(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
 
-  void PrintParams();
+  virtual void PrintParams();
 
-  void PersistParams(const string& outputFilename);
+  virtual void PersistParams(const string& outputFilename);
 
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-  void InitParams();
+  virtual void InitParams();
 
-  void Train();
+  virtual void Train();
 
   string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
-  void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &alignmentsFilename);
+  virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &alignmentsFilename);
 
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);

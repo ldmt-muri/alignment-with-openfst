@@ -377,36 +377,3 @@ void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFea
     params[featuresIter->first] = currentFeatureWeight;
     }*/
 }
-
-// compute a measure of orthographic similarity between two words
-double LogLinearParams::ComputeOrthographicSimilarity(const std::string& srcWord, const std::string& tgtWord) {
-  if(srcWord.length() == 0 || tgtWord.length() == 0) {
-    return 0.0;
-  }
-  int levenshteinDistance = LevenshteinDistance(srcWord, tgtWord);
-  if(levenshteinDistance > (srcWord.length() + tgtWord.length()) / 2) {
-    return 0.0;
-  } else {
-    double similarity = (srcWord.length() + tgtWord.length()) / ((double)levenshteinDistance + 1);
-    return similarity;
-  }
-}
-
-int LogLinearParams::LevenshteinDistance(const std::string& x, const std::string& y) {
-  if(x.length() == 0 && y.length() == 0) {
-    return 0;
-  }
-
-  if(x.length() == 0) {
-    return y.length();
-  } else if (y.length() == 0) {
-    return x.length();
-  } else {
-    int cost = x[0] != y[0]? 1 : 0;
-    std::string xSuffix = x.substr(1);
-    std::string ySuffix = y.substr(1);
-    return std::min( std::min( LevenshteinDistance(xSuffix, y) + 1,
-			       LevenshteinDistance(x, ySuffix) + 1),
-		     LevenshteinDistance(xSuffix, ySuffix) + cost);
-  }
-}
