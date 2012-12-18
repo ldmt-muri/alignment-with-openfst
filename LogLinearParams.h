@@ -52,7 +52,7 @@ class LogLinearParams {
 		       const std::vector<bool>& enabledFeatureTypes);
 
   // updates the model parameters given the gradient and an optimization method
-  void UpdateParams(const std::map<std::string, double> &gradient, const OptUtils::OptMethod &optMethod);
+  void UpdateParams(const std::map<std::string, double> &gradient, const OptMethod &optMethod);
   
   // override the member weights vector with this array
   void UpdateParams(const double* array, const int arrayLength);

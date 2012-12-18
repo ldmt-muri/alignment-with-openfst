@@ -99,7 +99,7 @@ Our objective is to maximize the corpus ($\cal{T}$) log-likelihood of regenerati
 
 Unfortunately, there's no closed-form MLE solution for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$ due to the latent variables. We will try to reduce the risk of getting stuck at a local optimum, but no guarantees. We explore a number of ways to optimize the parameters:
 
-\subsection{Block coordinate gradient descent}
+\subsection{Block coordinate descent}
 
 We iteratively alternate between optimizing subsets of parameters, holding the remaining parameters fixed. Convergence to a local optimum is guaranteed. We start with optimizing the multinomial parameters using the closed-form solution:
 

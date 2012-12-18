@@ -23,14 +23,18 @@ int main(int argc, char **argv) {
 
   // configurations
   LearningInfo learningInfo;
-  learningInfo.optimizationMethod.algorithm = OptUtils::BLOCK_COORD_GRADIENT_DESCENT;
-  learningInfo.optimizationMethod.miniBatchSize = 10;
+  // block coord 
+  learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.minLikelihoodDiff = 1;
+  learningInfo.optimizationMethod.subOptMethod = new OptMethod();
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
+  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
 
   // train the model
-  AutoEncoder& model = AutoEncoder::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
+  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
   model.Train();
 }

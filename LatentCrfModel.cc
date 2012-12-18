@@ -2,20 +2,20 @@
 
 using namespace std;
 using namespace fst;
-using namespace OptUtils;
+using namespace OptAlgorithm;
 
 // singlenton instance definition and trivial initialization
-AutoEncoder* AutoEncoder::instance = 0;
+LatentCrfModel* LatentCrfModel::instance = 0;
 
 // singleton
-AutoEncoder& AutoEncoder::GetInstance(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) {
-  if(!AutoEncoder::instance) {
-    AutoEncoder::instance = new AutoEncoder(textFilename, outputPrefix, learningInfo);
+LatentCrfModel& LatentCrfModel::GetInstance(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) {
+  if(!LatentCrfModel::instance) {
+    LatentCrfModel::instance = new LatentCrfModel(textFilename, outputPrefix, learningInfo);
   }
-  return *AutoEncoder::instance;
+  return *LatentCrfModel::instance;
 }
 
-AutoEncoder& AutoEncoder::GetInstance() {
+LatentCrfModel& LatentCrfModel::GetInstance() {
   if(!instance) {
     assert(false);
   }
@@ -23,7 +23,7 @@ AutoEncoder& AutoEncoder::GetInstance() {
 }
 
 // initialize model weights to zeros
-AutoEncoder::AutoEncoder(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) : 
+LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) : 
   lambda(*learningInfo.srcVocabDecoder),
   vocabEncoder(textFilename) {
 
@@ -94,12 +94,12 @@ AutoEncoder::AutoEncoder(const string &textFilename, const string &outputPrefix,
 // compute the partition function Z_\lambda(x)
 // assumptions:
 // - fst and betas are populated using BuildLambdaFst()
-double AutoEncoder::ComputeNLogZ_lambda(const VectorFst<LogArc> &fst, const vector<fst::LogWeight> &betas) {
+double LatentCrfModel::ComputeNLogZ_lambda(const VectorFst<LogArc> &fst, const vector<fst::LogWeight> &betas) {
   return betas[fst.Start()].Value();
 }
 
 // compute the partition function Z_\lambda(x)
-double AutoEncoder::ComputeNLogZ_lambda(const vector<int> &x) {
+double LatentCrfModel::ComputeNLogZ_lambda(const vector<int> &x) {
   VectorFst<LogArc> fst;
   vector<fst::LogWeight> alphas;
   vector<fst::LogWeight> betas;
@@ -108,7 +108,7 @@ double AutoEncoder::ComputeNLogZ_lambda(const vector<int> &x) {
 }
 
 // build an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i)
-void AutoEncoder::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -175,7 +175,7 @@ void AutoEncoder::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, v
 // assumptions: 
 // - fst is populated using BuildLambdaFst()
 // - FXZk is cleared
-void AutoEncoder::ComputeF(const vector<int> &x,
+void LatentCrfModel::ComputeF(const vector<int> &x,
 			   const VectorFst<LogArc> &fst,
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 			   map<string, double> &FXZk) {
@@ -235,7 +235,7 @@ void AutoEncoder::ComputeF(const vector<int> &x,
 // assumptions: 
 // - fst is populated using BuildThetaLambdaFst()
 // - DXZk is cleared
-void AutoEncoder::ComputeD(const vector<int> &x, const vector<int> &z, 
+void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z, 
 			   const VectorFst<LogArc> &fst,
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 			   map<string, double> &DXZk) {
@@ -296,7 +296,7 @@ void AutoEncoder::ComputeD(const vector<int> &x, const vector<int> &z,
 
 // assumptions:
 // - fst, betas are populated using BuildThetaLambdaFst()
-double AutoEncoder::ComputeNLogC(const VectorFst<LogArc> &fst,
+double LatentCrfModel::ComputeNLogC(const VectorFst<LogArc> &fst,
 				 const vector<fst::LogWeight> &betas) {
   double nLogC = betas[fst.Start()].Value();
   return nLogC;
@@ -306,7 +306,7 @@ double AutoEncoder::ComputeNLogC(const VectorFst<LogArc> &fst,
 // assumptions: 
 // - BXZ is cleared
 // - fst, alphas, and betas are populated using BuildThetaLambdaFst
-void AutoEncoder::ComputeB(const vector<int> &x, const vector<int> &z, 
+void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
 			   const VectorFst<LogArc> &fst, 
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
 			   map< int, map< int, double > > &BXZ) {
@@ -361,7 +361,7 @@ void AutoEncoder::ComputeB(const vector<int> &x, const vector<int> &z,
 
 // build an FST which path sums to 
 // -log \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ]
-void AutoEncoder::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
 
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
@@ -434,7 +434,7 @@ void AutoEncoder::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z
 }
 
 // compute p(y, z | x) = \frac{\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)}{Z_\lambda(x)}
-double AutoEncoder::ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vector<int>& z) {
+double LatentCrfModel::ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vector<int>& z) {
   assert(x.size() == y.size());
   assert(x.size() == z.size());
 
@@ -464,7 +464,7 @@ double AutoEncoder::ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vector
 // copute p(y | x, z) = \frac  {\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)} 
 //                             -------------------------------------------
 //                             {\sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)}
-double AutoEncoder::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vector<int> &z) {
+double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vector<int> &z) {
   assert(x.size() == y.size());
   assert(x.size() == z.size());
 
@@ -559,21 +559,21 @@ double AutoEncoder::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vector
   return result;
 }
 
-void AutoEncoder::Train() {
-  if(learningInfo.optimizationMethod.algorithm == OptUtils::BLOCK_COORD_GRADIENT_DESCENT) {
-    BlockCoordinateGradientDescent();
+void LatentCrfModel::Train() {
+  if(learningInfo.optimizationMethod.algorithm == BLOCK_COORD_DESCENT) {
+    BlockCoordinateDescent();
   } else {
     assert(false);
   }
 }
 
 // a call back function that computes the gradient and the objective function for the lbfgs minimizer
-double AutoEncoder::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
+double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
 			     const double *lambdasArray,
 			     double *gradient,
 			     const int lambdasCount,
 			     const double step) {
-  AutoEncoder &model = AutoEncoder::GetInstance();
+  LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // update the model parameters, temporarily, so that we can compute the derivative at the required values
   model.lambda.UpdateParams(lambdasArray, lambdasCount);
@@ -631,7 +631,7 @@ double AutoEncoder::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentI
   return nlogLikelihood;
 }
 
-int AutoEncoder::LbfgsProgressReport(void *instance,
+int LatentCrfModel::LbfgsProgressReport(void *instance,
 				     const lbfgsfloatval_t *x, 
 				     const lbfgsfloatval_t *g,
 				     const lbfgsfloatval_t fx,
@@ -645,115 +645,8 @@ int AutoEncoder::LbfgsProgressReport(void *instance,
   return 0;
 }
 
-string AutoEncoder::LbfgsStatusIntToString(int status) {
-  switch(status) {
-  case LBFGS_SUCCESS:
-    return "LBFGS_SUCCESS";
-    break;
-  case LBFGS_ALREADY_MINIMIZED:
-    return "LBFGS_ALREADY_MINIMIZED";
-    break;
-  case LBFGSERR_UNKNOWNERROR:
-    return "LBFGSERR_UNKNOWNERROR";
-    break;
-  case LBFGSERR_LOGICERROR:
-    return "LBFGSERR_LOGICERROR";
-    break;
-  case LBFGSERR_OUTOFMEMORY:
-    return "LBFGSERR_OUTOFMEMORY";
-    break;
-  case LBFGSERR_CANCELED:
-    return "LBFGSERR_CANCELED";
-    break;
-  case LBFGSERR_INVALID_N:
-    return "LBFGSERR_INVALID_N";
-    break;
-  case LBFGSERR_INVALID_N_SSE:
-    return "LBFGSERR_INVALID_N_SSE";
-    break;
-  case LBFGSERR_INVALID_X_SSE:
-    return "LBFGSERR_INVALID_X_SSE";
-    break;
-  case LBFGSERR_INVALID_EPSILON:
-    return "LBFGSERR_INVALID_EPSILON";
-    break;
-  case LBFGSERR_INVALID_TESTPERIOD:
-    return "LBFGSERR_INVALID_TESTPERIOD";
-    break;
-  case LBFGSERR_INVALID_DELTA:
-    return "LBFGSERR_INVALID_DELTA";
-    break;
-  case LBFGSERR_INVALID_LINESEARCH:
-    return "LBFGSERR_INVALID_LINESEARCH";
-    break;
-  case LBFGSERR_INVALID_MINSTEP:
-    return "LBFGSERR_INVALID_MINSTEP";
-    break;
-  case LBFGSERR_INVALID_MAXSTEP:
-    return "LBFGSERR_INVALID_MAXSTEP";
-    break;
-  case LBFGSERR_INVALID_FTOL:
-    return "LBFGSERR_INVALID_FTOL";
-    break;
-  case LBFGSERR_INVALID_WOLFE:
-    return "LBFGSERR_INVALID_WOLFE";
-    break;
-  case LBFGSERR_INVALID_GTOL:
-    return "LBFGSERR_INVALID_GTOL";
-    break;
-  case LBFGSERR_INVALID_XTOL:
-    return "LBFGSERR_INVALID_XTOL";
-    break;
-  case LBFGSERR_INVALID_MAXLINESEARCH:
-    return "LBFGSERR_INVALID_MAXLINESEARCH";
-    break;
-  case LBFGSERR_INVALID_ORTHANTWISE:
-    return "LBFGSERR_INVALID_ORTHANTWISE";
-    break;
-  case LBFGSERR_INVALID_ORTHANTWISE_START:
-    return "LBFGSERR_INVALID_ORTHANTWISE_START";
-    break;
-  case LBFGSERR_INVALID_ORTHANTWISE_END:
-    return "LBFGSERR_INVALID_ORTHANTWISE_END";
-    break;
-  case LBFGSERR_OUTOFINTERVAL:
-    return "LBFGSERR_OUTOFINTERVAL";
-    break;
-  case LBFGSERR_INCORRECT_TMINMAX:
-    return "LBFGSERR_INCORRECT_TMINMAX";
-    break;
-  case LBFGSERR_ROUNDING_ERROR:
-    return "LBFGSERR_ROUNDING_ERROR";
-    break;
-  case LBFGSERR_MINIMUMSTEP:
-    return "LBFGSERR_MINIMUMSTEP";
-    break;
-  case LBFGSERR_MAXIMUMSTEP:
-    return "LBFGSERR_MAXIMUMSTEP";
-    break;
-  case LBFGSERR_MAXIMUMLINESEARCH:
-    return "LBFGSERR_MAXIMUMLINESEARCH";
-    break;
-  case LBFGSERR_MAXIMUMITERATION:
-    return "LBFGSERR_MAXIMUMITERATION";
-    break;
-  case LBFGSERR_WIDTHTOOSMALL:
-    return "LBFGSERR_WIDTHTOOSMALL";
-    break;
-  case LBFGSERR_INVALIDPARAMETERS:
-    return "LBFGSERR_INVALIDPARAMETERS";
-    break;
-  case LBFGSERR_INCREASEGRADIENT:
-    return "LBFGSERR_INCREASEGRADIENT";
-    break;
-  default:
-    return "THIS IS NOT A VALID LBFGS STATUS CODE";
-    break;
-  }
-}
-
 // make sure all lambda features which may fire on this training data are added to lambda.params
-void AutoEncoder::WarmUp() {
+void LatentCrfModel::WarmUp() {
   cerr << "warming up...";
   // for each sentence in this mini batch, aggregate the nloglikelihood derivatives across sentences
   double nlogLikelihood = 0;
@@ -791,15 +684,16 @@ void AutoEncoder::WarmUp() {
     }
   }
   
-  // now, update the lambda features with stochastic gradient descent
-  OptUtils::OptMethod optMethod = learningInfo.optimizationMethod;
-  optMethod.algorithm = OptUtils::STOCHASTIC_GRADIENT_DESCENT;
+  // now, update the lambda features once with gradient descent (just for initialization)
+  OptMethod optMethod = learningInfo.optimizationMethod;
+  optMethod.algorithm = GRADIENT_DESCENT;
+  optMethod.learningRate = 0.0001;
   lambda.UpdateParams(derivativeWRTLambda, optMethod);
 
   cerr << "done" << endl;
 }
 
-void AutoEncoder::BlockCoordinateGradientDescent() {  
+void LatentCrfModel::BlockCoordinateDescent() {  
   
   // add all features in this data set to lambda.params
   WarmUp();
@@ -851,7 +745,8 @@ void AutoEncoder::BlockCoordinateGradientDescent() {
     // lbfgs configurations
     lbfgs_parameter_t lbfgsParams;
     lbfgs_parameter_init(&lbfgsParams);
-    lbfgsParams.max_iterations = learningInfo.optimizationMethod.lbfgsParams.max_iterations;
+    assert(learningInfo.optimizationMethod.subOptMethod != 0);
+    lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
     // for each mini-batch
     for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.miniBatchSize) {
 
@@ -864,7 +759,7 @@ void AutoEncoder::BlockCoordinateGradientDescent() {
 			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 
       // debug
-      cerr << "lbfgsStatusCode = " << LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+      cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
       if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
 	cerr << "rounding error (" << lbfgsStatus << "). it seems like my gradient is buggy." << endl << "retry..." << endl;
 	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,

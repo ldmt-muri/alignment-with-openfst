@@ -29,53 +29,53 @@ namespace DiscriminativeLexicon {
 }
 
 namespace Regularizer {
-  enum Regularizer {
-    NONE, 
-    L2, 
-    // the cumulative L1 approximation of Tsuruoka et al. 2009
-    L1};
+  enum Regularizer {NONE, L2, L1};
 }
 
-namespace OptUtils {
-  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, BLOCK_COORD_GRADIENT_DESCENT, LBFGS};
+namespace OptAlgorithm {
+  enum OptAlgorithm {GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS};
+}
 
-  inline bool IsStochastic(OptAlgorithm a) {
-    if (a == STOCHASTIC_GRADIENT_DESCENT || a == LBFGS) {
-      return true;
-    } else {
-      return false;
-    }
+// documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
+struct LbfgsParams {
+  int maxIterations;
+  int memoryBuffer;
+  
+  LbfgsParams() {
+    maxIterations = 10;
+    memoryBuffer = 500;
   }
+};
 
-  // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
-  struct LbfgsParams {
-    int max_iterations;
+struct OptMethod {
+  // some optimization algorithms (e.g. coordinat descent and expectation maximization) 
+  // iteratively executes a simpler optimization algorithm
+  OptMethod *subOptMethod;
+  // specifies the algorithm used for optimization
+  OptAlgorithm::OptAlgorithm algorithm;
+  // if algorithm = LBFGS, use these LBFGS hyper parameters
+  LbfgsParams lbfgsParams;
+  // some optimization algorithms require specifying a learning rate (e.g. gradient descent)
+  float learningRate;
+  // stochastic = 0 means batch optimization
+  // stochastic = 1 means online optimization
+  bool stochastic;
+  // when stochastic = 1, specifies the minibatch size
+  int miniBatchSize;
+  // regularization details
+  Regularizer::Regularizer regularizer;
+  float regularizationStrength;
 
-    LbfgsParams() {
-      max_iterations = 10;
-    }
-  };
-
-  struct OptMethod {
-    OptAlgorithm algorithm, secondaryAlgorithm;
-    float learningRate;
-    int miniBatchSize;
-    Regularizer::Regularizer regularizer;
-    float regularizationStrength;
-    LbfgsParams lbfgsParams;
-    int lbfgsMemoryBuffer;
-
-    OptMethod() {
-      algorithm = STOCHASTIC_GRADIENT_DESCENT;
-      secondaryAlgorithm = LBFGS;
-      learningRate = 0.01;
-      miniBatchSize = 1;
-      regularizer = Regularizer::NONE;
-      regularizationStrength = 1000;
-      lbfgsMemoryBuffer = 500;
-    }
-  }; 
-}
+  OptMethod() {
+    stochastic = false;
+    algorithm = OptAlgorithm::GRADIENT_DESCENT;
+    learningRate = 0.01;
+    miniBatchSize = 1;
+    regularizer = Regularizer::NONE;
+    regularizationStrength = 1000;
+    subOptMethod = 0;
+  }
+}; 
 
 class LearningInfo {
  public:
@@ -151,7 +151,7 @@ class LearningInfo {
   int trainToDevDataSize;
 
   // optimization method
-  OptUtils::OptMethod optimizationMethod;
+  OptMethod optimizationMethod;
 
   // discriminative lexicon
   DiscriminativeLexicon::DiscriminativeLexicon neighborhood;

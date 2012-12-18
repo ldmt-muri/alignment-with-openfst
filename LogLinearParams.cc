@@ -1,7 +1,6 @@
 #include "LogLinearParams.h"
 
 using namespace std;
-using namespace OptUtils;
 
 LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes, 
 				 const VocabDecoder &tgtTypes, 
@@ -332,8 +331,7 @@ void LogLinearParams::PrintParams() {
 // use gradient based methods to update the model parameter weights
 void LogLinearParams::UpdateParams(const map<string, double> &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
-  case GRADIENT_DESCENT:
-  case STOCHASTIC_GRADIENT_DESCENT:
+  case OptAlgorithm::GRADIENT_DESCENT:
     for(map<string, double>::const_iterator gradientIter = gradient.begin();
 	gradientIter != gradient.end();
 	gradientIter++) {
