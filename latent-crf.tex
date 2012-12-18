@@ -1,1 +1,150 @@
-../papers/waleed/2012-latent-crf/latent-crf.tex
+\documentclass[11pt,onecolumn]{article}
+%\usepackage{naaclhlt2013}
+\usepackage{acl2012-onecolumn}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{dsfont}
+\usepackage{amsmath}
+\usepackage{}
+\usepackage{url}
+\usepackage[pdftex]{graphicx}
+\usepackage{color}
+\usepackage[utf8]{inputenc}
+\newcommand{\cjdcomment}[1]{\textcolor{red}{\bf\small [#1 --CJD]}}
+\newcommand{\nascomment}[1]{\textcolor{green}{\bf\small [#1 --NAS]}}
+\newcommand{\wacomment}[1]{\textcolor{blue}{\bf\small [#1 --WA]}}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\setlength\titlebox{6.5cm}    % Expanding the titlebox
+
+\newenvironment{itemizesquish}{\begin{list}{\labelitemi}{\setlength{\itemsep}{0em}\setlength{\labelwidth}{0.5em}\setlength{\leftmargin}{\labelwidth}\addtolength{\leftmargin}{\labelsep}}}{\end{list}}
+
+\newcommand{\kinstring}[1]{\textsf{#1}}
+\newcommand{\engstring}[1]{\texttt{\small{#1}}}
+
+
+\title{Latent CRF}
+
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+abstract...
+\end{abstract}
+
+\section{Problem}
+
+Given a set of sentences \{\textbf{x}\}, find the most probable POS sequence \textbf{y} for each sentence. 
+
+\section{Model}
+
+$x_i$ is the $i^{th}$ word in \textbf{x}. $x^k$ refers to a unique type throughout the sentences. $x$ belongs to discrete domain $\cal{X}$. 
+Similarly, $y_i$ is the $i^{th}$ POS tag in \textbf{y}. $y^k$ refers to a unique POS tag. $y$ belongs to discrete domain $\cal{Y}$. 
+For each sentence, we introduce an additional sequence variable \textbf{z} which belongs to domain $\cal{X}^*$ (similar to $\mathbf{x}$).\\
+
+
+\textbf{Generative story:}
+\begin{itemizesquish}
+\item Given a sentence \textbf{x}, generate a lossy compression \textbf{y} of the sentence.
+\item Given a compression \textbf{y}, generate a sentence \textbf{z}.
+\end{itemizesquish}
+
+The best compression $\hat{\mathbf{y}}$ is the one that produces sentence \textbf{z} similar to the original \textbf{x} with highest probability, according to some model of $p(\mathbf{y} \mid \mathbf{x}, \mathbf{z})$:
+
+\begin{eqnarray}
+\hat{\mathbf{y}} = \argmax_\mathbf{y} p(\mathbf{y} \mid \mathbf{x}, \mathbf{z}) 
+\end{eqnarray}
+
+We choose a CRF model for the first part of the generative story $p(\mathbf{y} \mid \mathbf{x})$:
+
+\begin{eqnarray}
+p_\lambda(\mathbf{y}\mid\mathbf{x}) &=& \frac{f(\mathbf{y}, \mathbf{x})}{Z_\lambda(\mathbf{x})}; \\
+f(\mathbf{y}, \mathbf{x}) &=& \exp \sum_{i=1}^{|\mathbf{y}|} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i), \\
+Z_\lambda(\mathbf{x}) &=& \sum_\mathbf{y} \exp \sum_{i=1}^{|\mathbf{y}|} \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)
+\end{eqnarray}
+
+where $\mathbf{h}$ is a vector of feature functions, and $\boldsymbol{\lambda}$ is a vector of feature weights.\\
+
+We choose the following parameterization for $p(\mathbf{z} \mid \mathbf{y})$:
+
+\begin{eqnarray}
+p_\theta(\mathbf{z} \mid \mathbf{y}) &=& \prod_{i=1}^{|\mathbf{z}|} p(z_i\mid y_i) \\
+ &=& \prod_{i=1}^{|\mathbf{z}|} \theta_{z_i|y_i}
+\end{eqnarray}
+
+\section{Inference}
+\label{sec:inference}
+Given certain parameter values for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$, we can compute the probability that an arbitrary compression \textbf{y} of sentence \textbf{x} regenerates $\mathbf{z} = \mathbf{x}$ as follows:
+
+\begin{eqnarray}
+p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}) &=& \frac{p(\mathbf{y}, \mathbf{z} \mid \mathbf{x})}{\sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})}; \\
+p(\mathbf{y}, \mathbf{z} \mid \mathbf{x}) &=& p_\lambda(\mathbf{y}\mid\mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y}) \\
+&=& \frac{1}{Z_\lambda(\mathbf{x})}f(\mathbf{y}, \mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y})
+\end{eqnarray}
+
+Fortunately, those quantities are cheap to compute, assuming $|\cal{Y}|$ is small. $Z_\lambda(\mathbf{x})$ can be computed with dynamic programming~\cite{sha:03}. The term $A(\mathbf{x},\mathbf{z}) = \sum_{\mathbf{y'}} p(\mathbf{y'}, \mathbf{z} \mid \mathbf{x})$, $B(\mathbf{x}, \mathbf{z}, z^*, y^*)$, $C(\mathbf{x}, \mathbf{z})$, $D(\mathbf{x}, \mathbf{z}, k)$ and $F(\mathbf{x}, k)$ (defined hereafter) can also be effeciently computed in a similar fashion. We can use the Viterbi algorithm to find the most likely compression $\hat{\mathbf{y}}$. All inference algorithms here are quadratic in $|\cal{Y}|$ and linear in $|\mathbf{x}|$.
+
+\section{Learning}
+
+Our objective is to maximize the corpus ($\cal{T}$) log-likelihood of regenerating \textbf{z} from \textbf{x}, according to the generative story.
+
+\begin{align}
+\ell\ell(\boldsymbol{\lambda}, \boldsymbol{\theta}) &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log p(\mathbf{z}\mid\mathbf{x}) \\
+ &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} p_\lambda(\mathbf{y}\mid\mathbf{x}).p_\theta(\mathbf{z}\mid\mathbf{y}) \\
+ &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} \frac{(\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}{Z_\lambda(\mathbf{x})} \\
+&= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i) \nonumber \\
+ &- \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i) \\
+ &= log C(\mathbf{x}, \mathbf{z}) - log Z_\lambda(\mathbf{x})
+\end{align}
+
+Unfortunately, there's no closed-form MLE solution for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$ due to the latent variables. We will try to reduce the risk of getting stuck at a local optimum, but no guarantees. We explore a number of ways to optimize the parameters:
+
+\subsection{Block coordinate gradient descent}
+
+We iteratively alternate between optimizing subsets of parameters, holding the remaining parameters fixed. Convergence to a local optimum is guaranteed. We start with optimizing the multinomial parameters using the closed-form solution:
+
+\begin{align}
+\frac{\partial \ell\ell}{\partial \theta_{x^*|y^*}} &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T} : \exists \mathit{j} : \mathit{z}^* = \mathit{z}_\mathit{j} } \frac{\sum_{\mathbf{y}:\exists q:y^*=y_q} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i) }{\theta_{x^*|y^*} \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}
+\end{align}
+
+Using the method of Lagrange multipliers to enforce the constraint $\sum \theta_{.|y^l} = 1 \quad \forall l$, the Maximum Liklihood Estimate $\hat{\boldsymbol{\theta}}$ is:
+
+\begin{align}
+\hat{\theta}_{z^*|y^*} &= \frac{1}{m_{y^*}} \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \frac{\sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i} e^{\boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}) \sum_{i=1}^{|\mathbf{y}|}\delta_{y_i=y^*,z_i=z^*} }{\sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i} e^{ \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}) } \\
+&= \frac{1}{m_{y^*}} \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \frac{B(\mathbf{x}, \mathbf{z}, z^*, y^*)}{C(\mathbf{x}, \mathbf{z})}; \\
+B(\mathbf{x}, \mathbf{z}, z^*, y^*) &= \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i} e^{\boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}) \sum_{i=1}^{|\mathbf{y}|}\delta_{y_i=y^*,z_i=z^*}  \\
+C(\mathbf{x}, \mathbf{z}) &= \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i} e^{ \boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)})
+\end{align}
+
+$m_{y^*}$ is the Lagrange multiplier and can be computed by normalizing $\sum \theta_{.|y^l}$ parameters to sum to one.\\
+
+After updating the $\boldsymbol{\theta}$, we turn to $\boldsymbol{\lambda}$. We use L-BFGS to optimize these, which requires computing the gradient:
+
+\begin{align}
+  \frac{\partial \ell\ell}{\partial \lambda_k} &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+  [
+     \frac{\sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) e^{\boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)} \sum_{j} h_k(y_j, y_{j-1}, \mathbf{x}, j) } 
+          {\sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) e^{\boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)} } \nonumber \\
+     &\qquad \qquad \qquad - \frac{\sum_{\mathbf{y}} e^{\boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)} \sum_{j} h_k(y_j, y_{j-1}, \mathbf{x}, j)}
+          {\sum_{\mathbf{y}} e^{\boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)} }
+  ] \\
+  &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}}
+    \frac{D(\mathbf{x}, \mathbf{z}, k)}{C(\mathbf{x}, \mathbf{z})} - \frac{F(\mathbf{x}, k)}{Z_\lambda(\mathbf{x})}; \\
+  D(\mathbf{x}, \mathbf{z}, k) &= \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i} e^{\boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}) \sum_{j} h_k(y_j, y_{j-1}, \mathbf{x}, j) \\
+  F(\mathbf{x}, k) &= \sum_{\mathbf{y}} \prod_{i=1}^{|\mathbf{y}|} e^{\boldsymbol{\lambda}^\top \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)} \sum_{j} h_k(y_j, y_{j-1}, \mathbf{x}, j)
+\end{align} 
+
+
+
+\subsection{Expectation maximization}
+
+
+\subsection{Stochastic gradient descent with softmax parameterization}
+
+
+\subsection{Exponentiated gradient descent}
+
+
+
+
+\end{document}
