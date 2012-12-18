@@ -552,7 +552,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens,
     }
 
     if(!tgtLineIsGiven && sentId == 1) {
-      cerr << FstUtils::PrintFstSummary(alignmentFst);
+      cerr << FstUtils::PrintFstSummary<LogQuadArc>(alignmentFst);
     }
     string dummy;
     cin >> dummy;
@@ -884,7 +884,7 @@ void LogLinearModel::Train() {
 	cerr << "===============best alignment==============================" << endl;
 	cerr << "sent " << sentsCounter << endl;
 	ShortestPath(aGivenTSProbsWithPathProperty, &bestAlignment);
-	cerr << FstUtils::PrintFstSummary(bestAlignment);
+	cerr << FstUtils::PrintFstSummary<StdArc>(bestAlignment);
       }
 
       // prune paths whose probabilities are less than 1/e^3 of the best path

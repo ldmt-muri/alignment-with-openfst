@@ -1,7 +1,7 @@
 #include "LearningInfo.h"
 #include "FstUtils.h"
 #include "StringUtils.h"
-#include "AutoEncoder.h"
+#include "LatentCrfModel.h"
 
 using namespace fst;
 using namespace std;

@@ -1,4 +1,4 @@
-#include "AutoEncoder.h"
+#include "LatentCrfModel.h"
 
 using namespace std;
 using namespace fst;

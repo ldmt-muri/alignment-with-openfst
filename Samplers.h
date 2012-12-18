@@ -56,7 +56,7 @@ struct RichMultinomialSampler : public MultinomialSampler {
   std::vector<unsigned> labels;
   
  RichMultinomialSampler(std::vector<double>& probs, std::vector<unsigned>& labels) 
-   : MultinomialSampler(probs, copyParams) {
+   : MultinomialSampler(probs) {
     assert(probs.size() == labels.size());
     this->labels = labels;
   }

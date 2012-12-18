@@ -38,13 +38,25 @@ LogQuadWeight FstUtils::EncodeQuad(float val1, float val2, float val3, float val
   return LogQuadWeight(EncodeTriple(val1, val2, val3), v4);
 }
 
-string FstUtils::PrintPair(const ProductWeight<LogWeight, LogWeight>& w) {
+string FstUtils::PrintWeight(const TropicalWeightTpl<float>& w) {
+  stringstream ss;
+  ss << w.Value();
+  return ss.str();
+}
+
+string FstUtils::PrintWeight(const LogWeight& w) {
+  stringstream ss;
+  ss << w.Value();
+  return ss.str();
+}
+
+string FstUtils::PrintWeight(const ProductWeight<LogWeight, LogWeight>& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value() << "," << w.Value2().Value() << ")";
   return ss.str();
 }
 
-string FstUtils::PrintTriple(const LogTripleWeight& w) {
+string FstUtils::PrintWeight(const LogTripleWeight& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value1().Value() 
      << "," << w.Value1().Value2().Value() 
@@ -53,7 +65,7 @@ string FstUtils::PrintTriple(const LogTripleWeight& w) {
   return ss.str();
 }
 
-string FstUtils::PrintQuad(const LogQuadWeight& w) {
+string FstUtils::PrintWeight(const LogQuadWeight& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value1().Value1().Value() 
      << "," << w.Value1().Value1().Value2().Value()
@@ -76,100 +88,6 @@ void FstUtils::DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, floa
 void FstUtils::DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4) {
   DecodeTriple(w.Value1(), v1, v2, v3);
   v4 = w.Value2().Value();
-}
-
-string FstUtils::PrintFstSummary(const VectorFst<LogArc>& fst) {
-  stringstream ss;
-  ss << "states:" << endl;
-  for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const LogArc::StateId &stateId = siter.Value();
-    string initial = fst.Start() == stateId? " START " : "";
-    ss << "state:" << stateId << initial << " FinalScore=" <<  fst.Final(stateId).Value() << endl;
-    ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<LogArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const LogArc &arc = aiter.Value();
-      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId << "-->" << arc.nextstate << " " << arc.weight << endl;
-    } 
-    ss << endl;
-  }
-  return ss.str();
-}
-
-string FstUtils::PrintFstSummary(const VectorFst<StdArc>& fst) {
-  stringstream ss;
-  ss << "states:" << endl;
-  for(StateIterator< VectorFst<StdArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const StdArc::StateId &stateId = siter.Value();
-    string initial = fst.Start() == stateId? " START" : "";
-    ss << "state:" << stateId << initial << " FinalScore=" <<  fst.Final(stateId).Value() << endl;
-    ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<StdArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const StdArc &arc = aiter.Value();
-      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId << "-->" << arc.nextstate << " " << arc.weight << endl;
-    } 
-    ss << endl;
-  }
-  return ss.str();
-}
-
-string FstUtils::PrintFstSummary(const VectorFst<LogPairArc>& fst) {
-  stringstream ss;
-  ss << "=======" << endl;
-  ss << "states:" << endl;
-  ss << "=======" << endl << endl;
-  for(StateIterator< VectorFst<LogPairArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const LogPairArc::StateId &stateId = siter.Value();
-    string initial = fst.Start() == stateId? " START " : "";
-    ss << "state:" << stateId << initial << " FinalScore=" <<  PrintPair(fst.Final(stateId)) << endl;
-    ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<LogPairArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const LogPairArc &arc = aiter.Value();
-      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId;
-      ss << "-->" << arc.nextstate << " " << PrintPair(arc.weight) << endl;
-    } 
-    ss << endl;
-  }
-  return ss.str();
-}
-
-string FstUtils::PrintFstSummary(const VectorFst<LogTripleArc>& fst) {
-  stringstream ss;
-  ss << "=======" << endl;
-  ss << "states:" << endl;
-  ss << "=======" << endl << endl;
-  for(StateIterator< VectorFst<LogTripleArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const LogTripleArc::StateId &stateId = siter.Value();
-    string initial = fst.Start() == stateId? " START " : "";
-    ss << "state:" << stateId << initial << " FinalScore=" <<  PrintTriple(fst.Final(stateId)) << endl;
-    ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<LogTripleArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const LogTripleArc &arc = aiter.Value();
-      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId;
-      ss << "-->" << arc.nextstate << " " << PrintTriple(arc.weight) << endl;
-    } 
-    ss << endl;
-  }
-  return ss.str();
-}
-
-string FstUtils::PrintFstSummary(const VectorFst<LogQuadArc>& fst) {
-  stringstream ss;
-  ss << "=======" << endl;
-  ss << "states:" << endl;
-  ss << "=======" << endl << endl;
-  for(StateIterator< VectorFst<LogQuadArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const LogQuadArc::StateId &stateId = siter.Value();
-    string initial = fst.Start() == stateId? " START " : "";
-    ss << "state:" << stateId << initial << " FinalScore=" <<  PrintQuad(fst.Final(stateId)) << endl;
-    ss << "arcs:" << endl;
-    for(ArcIterator< VectorFst<LogQuadArc> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
-      const LogQuadArc &arc = aiter.Value();
-      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId;
-      ss << "-->" << arc.nextstate << " " << PrintQuad(arc.weight) << endl;
-    } 
-    ss << endl;
-  }
-  return ss.str();
 }
 
 // assumption: the fst has one or more final state
@@ -410,7 +328,7 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
   stringstream output;
   
   cerr << "best alignment FST summary: " << endl;
-  cerr << PrintFstSummary(bestAlignment) << endl;
+  cerr << PrintFstSummary<StdArc>(bestAlignment) << endl;
 
   // traverse the transducer beginning with the start state
   int startState = bestAlignment.Start();

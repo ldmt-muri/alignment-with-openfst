@@ -1,4 +1,4 @@
-#ifndef _FST_UTILS_H_
+#ifndef _FST_UTILS_H_	  
 #define _FST_UTILS_H_
 
 #include <ctime>
@@ -6,7 +6,7 @@
 #include <fst/fstlib.h>
 #include <typeinfo>
 
-#include "alias_sampler.h"
+#include "Samplers.h"
 
 // pair typedef
 typedef fst::ProductWeight<fst::LogWeight, fst::LogWeight> LogPairWeight;
@@ -34,34 +34,56 @@ class FstUtils {
     return exp(-1.0 * exponent);
   }
 
-  static string PrintFstSummary(const fst::VectorFst<fst::LogArc>& fst);
-  static string PrintFstSummary(const fst::VectorFst<fst::StdArc>& fst);
-  static int FindFinalState(const fst::VectorFst<fst::LogArc>& fst);
-  static void MakeOneFinalState(fst::VectorFst<fst::LogArc>& fst);
-
-  static LogPairWeight EncodePairInfinity();
-  static LogPairWeight EncodePair(float val1, float val2);
-  static void DecodePair(const LogPairWeight& w, float& v1, float& v2);
-  static string PrintPair(const LogPairWeight& w);
-  static string PrintFstSummary(const fst::VectorFst<LogPairArc>& fst);
-  
-  static LogTripleWeight EncodeTripleInfinity();
-  static LogTripleWeight EncodeTriple(float val1, float val2, float val3);
-  static void DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3);
-  static string PrintTriple(const LogTripleWeight& w);
-  static string PrintFstSummary(const fst::VectorFst<LogTripleArc>& fst);
-
-  static LogQuadWeight EncodeQuadInfinity();
-  static LogQuadWeight EncodeQuad(float val1, float val2, float val3, float val4);
-  static void DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4);
-  static string PrintQuad(const LogQuadWeight& w);
-  static string PrintFstSummary(const fst::VectorFst<LogQuadArc>& fst);
   static void SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize);
+
   static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);
+
   static int FindFinalState(const fst::VectorFst<LogQuadArc>& fst);
+  static int FindFinalState(const fst::VectorFst<fst::LogArc>& fst);
+
+  static void MakeOneFinalState(fst::VectorFst<fst::LogArc>& fst);
   static void MakeOneFinalState(fst::VectorFst<LogQuadArc>& fst);
   
+  static LogPairWeight EncodePair(float val1, float val2); 
+  static LogTripleWeight EncodeTriple(float val1, float val2, float val3);
+  static LogQuadWeight EncodeQuad(float val1, float val2, float val3, float val4);
+
+  static LogPairWeight EncodePairInfinity();
+  static LogTripleWeight EncodeTripleInfinity();
+  static LogQuadWeight EncodeQuadInfinity();
+
+  static void DecodePair(const LogPairWeight& w, float& v1, float& v2);
+  static void DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3);
+  static void DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4);
+
   static string PrintAlignment(const fst::VectorFst< fst::StdArc > &bestAlignment);
+
+  static string PrintWeight(const fst::TropicalWeightTpl<float>& w);
+  static string PrintWeight(const fst::LogWeight& w);
+  static string PrintWeight(const LogPairWeight& w);
+  static string PrintWeight(const LogTripleWeight& w);
+  static string PrintWeight(const LogQuadWeight& w);
+
+  template<class ArcType>
+    inline static string PrintFstSummary(const fst::VectorFst<ArcType>& fst) {
+    std::stringstream ss;
+    ss << "=======" << endl;
+    ss << "states:" << endl;
+    ss << "=======" << endl << endl;
+    for(fst::StateIterator< fst::VectorFst<ArcType> > siter(fst); !siter.Done(); siter.Next()) {
+    const int &stateId = siter.Value();
+    string initial = fst.Start() == stateId? " START " : "";
+    ss << "state:" << stateId << initial << " FinalScore=" <<  PrintWeight(fst.Final(stateId)) << endl;
+    ss << "arcs:" << endl;
+    for(fst::ArcIterator< fst::VectorFst<ArcType> > aiter(fst, stateId); !aiter.Done(); aiter.Next()) {
+      const ArcType &arc = aiter.Value();
+      ss << arc.ilabel << ":" << arc.olabel << " " <<  stateId;
+      ss << "-->" << arc.nextstate << " " << PrintWeight(arc.weight) << endl;
+    } 
+    ss << endl;
+    }
+    return ss.str(); 
+  }
 
   template<class WeightType, class ArcType>
     inline static void ComputeTotalProb(const fst::VectorFst<ArcType>& prob, fst::VectorFst<ArcType>& totalProbs, WeightType& beta0) {
