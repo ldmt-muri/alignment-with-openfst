@@ -14,7 +14,6 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   outputFilenamePrefix = argv[2];
 }
 
-
 int main(int argc, char **argv) {
   // parse arguments
   cout << "parsing arguments" << endl;
@@ -29,6 +28,7 @@ int main(int argc, char **argv) {
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.minLikelihoodDiff = 1;
+  // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;

@@ -115,6 +115,8 @@ class LogLinearParams {
   void PrintFirstNParams(unsigned n);
 
   void PrintParams();
+  
+  static void PrintParams(std::map<std::string, double> tempParams);
 
   // writes the features to a text file formatted one feature per line. 
   void PersistParams(const std::string& outputFilename);

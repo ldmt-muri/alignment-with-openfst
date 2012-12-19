@@ -93,6 +93,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp << "F51:" << yIM1 << ":" << yI;
     activeFeatures[temp.str()] = 1.0;
   }
+  /*
 
   // F52: yI-xIM2 pair
   if(enabledFeatureTypes.size() > 52 && enabledFeatureTypes[52]) {
@@ -128,10 +129,19 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   // F56: yI-xIP2 pair
   if(enabledFeatureTypes.size() > 56 && enabledFeatureTypes[56]) {
     temp.str("");
-    int xIP2 = i+2 < x.size()? x[i+2] : -1;
-    temp << "F56:" << yI << ":" << xIP2;
+    int xIP2 = i+2 < x.size()? x[i+2] : -1; 
+   temp << "F56:" << yI << ":" << xIP2;
     activeFeatures[temp.str()] = 1.0;
   }
+  */
+
+  // F57: yI-i pair
+  if(enabledFeatureTypes.size() > 57 && enabledFeatureTypes[57]) {
+    temp.str("");
+    temp << "F57:" << yI << ":" << i;
+    activeFeatures[temp.str()] = 1.0;
+  }
+
 }
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
@@ -198,38 +208,6 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   //  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
   //    activeFeatures["F7:orthographic-similarity"] = orthographicSimilarity;
   //  }
-
-  // F8: <srcToken, tgtPrefix1> (subset of word association features in Chris et al. 2011)
-  string tgtPrefix1 = tgtTokenString.length() > 0? tgtTokenString.substr(0,1) : "";
-  if(enabledFeatureTypes.size() > 8 && enabledFeatureTypes[8]) {
-    temp.str("");
-    temp << "F8:" << srcToken << ":" << tgtPrefix1;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F9: <srcToken, tgtPrefix2> (subset of word association features in Chris et al. 2011)
-  string tgtPrefix2 = tgtTokenString.length() > 1? tgtTokenString.substr(0,2) : "";
-  if(enabledFeatureTypes.size() > 9 && enabledFeatureTypes[9]) {
-    temp.str("");
-    temp << "F9:" << srcToken << ":" << tgtPrefix2;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F10: <srcPrefix1, tgtToken> (subset of word association features in Chris et al. 2011)
-  string srcPrefix1 = srcTokenString.size() > 0? srcTokenString.substr(0,1) : "";
-  if(enabledFeatureTypes.size() > 10 && enabledFeatureTypes[10]) {
-    temp.str("");
-    temp << "F10:" << srcPrefix1 << ":" << tgtToken;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F11: <srcPrefix2, tgtToken> (subset of word association features in Chris et al. 2011)
-  string srcPrefix2 = srcTokenString.size() > 1? srcTokenString.substr(0,2) : "";
-  if(enabledFeatureTypes.size() > 11 && enabledFeatureTypes[11]) {
-    temp.str("");
-    temp << "F11:" << srcPrefix2 << ":" << tgtToken;
-    activeFeatures[temp.str()] = 1.0;
-  }
 
   // F12: ibm model 1 forward logprob (subset of word association features in Chris et al. 2011)
   double ibm1Forward = ibmModel1ForwardScores.find(srcToken)->second.find(tgtToken)->second;
@@ -327,6 +305,13 @@ void LogLinearParams::PrintParams() {
   assert(paramIndexes.size() == paramWeights.size());
   PrintFirstNParams(paramIndexes.size());
 }
+
+void LogLinearParams::PrintParams(std::map<std::string, double> tempParams) {
+  for(map<string, double>::const_iterator paramsIter = tempParams.begin(); paramsIter != tempParams.end(); paramsIter++) {
+    cerr << paramsIter->first << " " << paramsIter->second << endl;
+  }
+}
+
 
 // use gradient based methods to update the model parameter weights
 void LogLinearParams::UpdateParams(const map<string, double> &gradient, const OptMethod& optMethod) {

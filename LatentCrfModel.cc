@@ -57,6 +57,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   for(map<int,string>::const_iterator vocabIter = vocabEncoder.intToToken.begin();
       vocabIter != vocabEncoder.intToToken.end();
       vocabIter++) {
+    if(vocabIter->second == "_unk_") {
+      continue;
+    }
     this->xDomain.insert(vocabIter->first);
   }
   // zero is reserved for FST epsilon
@@ -159,8 +162,8 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 	}
 	// now add the arc
 	fst.AddArc(fromState, fst::LogArc(yIM1, yI, nLambdaH, toState));	
-      }
-    }
+      } 
+   }
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
     yIM1ToState = yIToState;
   }
@@ -176,12 +179,13 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 // - fst is populated using BuildLambdaFst()
 // - FXZk is cleared
 void LatentCrfModel::ComputeF(const vector<int> &x,
-			   const VectorFst<LogArc> &fst,
-			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			   map<string, double> &FXZk) {
-
+			      const VectorFst<LogArc> &fst,
+			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+			      map<string, double> &FXZk) {
+  
   assert(FXZk.size() == 0);
-
+  assert(fst.NumStates() > 0);
+  
   // schedule for visiting states such that we know the timestep for each arc
   set<int> iStates, iP1States;
   iStates.insert(fst.Start());
@@ -190,11 +194,15 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
   for(int i = 0; i < x.size(); i++) {
     int xI = x[i];
     
+    //    cerr << "i = " << i << " out of " << x.size() << endl;
+
     // from each state at timestep i
     for(set<int>::const_iterator iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
+
+      //      cerr << "  from state# " << fromState << endl;
 
       // for each arc leaving this state
       for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
@@ -204,6 +212,8 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 	double arcWeight = arc.weight.Value();
 	int toState = arc.nextstate;
 
+	//	cerr << "    to state# " << toState << " yIM1=" << yIM1 << " yI=" << yI << " weight=" << arcWeight << endl;
+
 	// compute marginal weight of passing on this arc
 	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
 
@@ -211,6 +221,8 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 	map<string, double> h;
 	lambda.FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
 	for(map<string, double>::const_iterator h_k = h.begin(); h_k != h.end(); h_k++) {
+
+	  //	  cerr << "      featureId=" << h_k->first << " value=" << h_k->second << endl;
 
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
 	  if(FXZk.count(h_k->first) == 0) {
@@ -578,6 +590,11 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   // update the model parameters, temporarily, so that we can compute the derivative at the required values
   model.lambda.UpdateParams(lambdasArray, lambdasCount);
 
+  // debug
+  //  cerr << "lbfgs suggests the following lambda parameter weights" << endl;
+  //  model.lambda.PrintParams();
+  
+
   // for each sentence in this mini batch, aggregate the nloglikelihood and its derivatives across sentences
   double nlogLikelihood = 0;
   map<string, double> derivativeWRTLambda;
@@ -604,7 +621,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     }
     // compute the F map fro this sentence
     map<string, double> F;
-    model.ComputeF(model.data[sentId], thetaLambdaFst, lambdaAlphas, lambdaBetas, F);
+    model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
     // compute the Z value for this sentence
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     // update the log likelihood
@@ -618,10 +635,15 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       derivativeWRTLambda[fIter->first] -= fOverZ;
     }
   }
+  // debug
+  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
+  LogLinearParams::PrintParams(derivativeWRTLambda);
+
   // write the gradient in the (hopefully) pre-allocated array 'gradient'
   model.lambda.ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient);
   // return the to-be-minimized objective function
   cerr << "Evaluate returning " << nlogLikelihood << endl;
+  cerr << "===================================" << endl;
   //  cerr << "gradient: ";
   //  for(map<string, double>::const_iterator gradientIter = derivativeWRTLambda.begin(); 
   //      gradientIter != derivativeWRTLambda.end(); gradientIter++) {
@@ -645,51 +667,29 @@ int LatentCrfModel::LbfgsProgressReport(void *instance,
   return 0;
 }
 
-// make sure all lambda features which may fire on this training data are added to lambda.params
+// make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::WarmUp() {
-  cerr << "warming up...";
-  // for each sentence in this mini batch, aggregate the nloglikelihood derivatives across sentences
-  double nlogLikelihood = 0;
-  map<string, double> derivativeWRTLambda;
+  UniformSampler uniform;
+  cerr << "warming up..." << endl;
+  //  cerr << "lambda.GetParamsCount() = " << lambda.GetParamsCount() << endl;
   for(int sentId = 0; sentId < data.size(); sentId++) {
-    // build the FSTs
-    VectorFst<LogArc> thetaLambdaFst, lambdaFst;
-    vector<fst::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-    BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    //    cerr << "now processing sent# " << sentId << endl;
+    // build the FST
+    VectorFst<LogArc> lambdaFst;
+    vector<fst::LogWeight> lambdaAlphas, lambdaBetas;
     BuildLambdaFst(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
-    // compute the D map for this sentence
-    map<string, double> D;
-    ComputeD(data[sentId], data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, D);      
-    // compute the C value for this sentence
-    double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
-    // add D/C to the gradient
-    for(map<string, double>::const_iterator dIter = D.begin(); dIter != D.end(); dIter++) {
-      double d = dIter->second;
-      double nLogd = MultinomialParams::nLog(d);
-      double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-      derivativeWRTLambda[dIter->first] += dOverC;
-    }
+    //    cerr << "lambda fst successfully built" << endl;
     // compute the F map fro this sentence
     map<string, double> F;
-    ComputeF(data[sentId], thetaLambdaFst, lambdaAlphas, lambdaBetas, F);
-    // compute the Z value for this sentence
-    double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
-    //      cerr << "nloglikelihood -= " << nLogZ << ", |x| = " << data[sentId].size() << endl;
-    // subtract F/Z from the gradient
+    ComputeF(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
+    //    cerr << "F successfully computed" << endl;
+    // add each feature fired on any sentence to the lambda parameters
     for(map<string, double>::const_iterator fIter = F.begin(); fIter != F.end(); fIter++) {
-      double f = fIter->second;
-      double nLogf = MultinomialParams::nLog(f);
-      double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-      derivativeWRTLambda[fIter->first] -= fOverZ;
+      lambda.UpdateParam(fIter->first, uniform.Draw() - 0.5);
     }
   }
-  
-  // now, update the lambda features once with gradient descent (just for initialization)
-  OptMethod optMethod = learningInfo.optimizationMethod;
-  optMethod.algorithm = GRADIENT_DESCENT;
-  optMethod.learningRate = 0.0001;
-  lambda.UpdateParams(derivativeWRTLambda, optMethod);
-
+  cerr << "lambdas initialized to: " << endl;
+  lambda.PrintParams();
   cerr << "done" << endl;
 }
 
@@ -712,16 +712,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // compute the B matrix for this sentence
       map< int, map< int, double > > B;
       B.clear();
-      ComputeB(this->data[sentId],
-	       this->data[sentId], 
-	       thetaLambdaFst, 
-	       alphas, 
-	       betas, 
-	       B);
+      ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
       // compute the C value for this sentence
       double nLogC = ComputeNLogC(thetaLambdaFst, betas);
       //cerr << "nloglikelihood += " << nLogC << endl;
-      // update mle for each z^*|y^*
+      // update mle for each z^*|y^* fired
       for(map< int, map<int, double> >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
 	int y_ = yIter->first;
 	for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
@@ -733,10 +728,18 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	}
       }
     }
+    // debug
+    //    cerr << "mle (before normalization):" << endl;
+    //    MultinomialParams::PrintParams(mle);
+    //    cerr << "=======================================" << endl;
     // now, normalize the MLE estimates
     MultinomialParams::NormalizeParams(mle);
     // update the thetas
     nLogTheta = mle;
+    // debug
+    cerr << "nlog theta params:" << endl;
+    MultinomialParams::PrintParams(nLogTheta);
+    cerr << "=======================================" << endl;
 
     // update the lambdas with mini-batch lbfgs, one full pass over training data
     // needed to call liblbfgs
@@ -770,8 +773,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // update iteration's nloglikelihood
       nlogLikelihood += optimizedMiniBatchNLogLikelihood;
     }
+    
+    // debug
+    cerr << "lambda params:" << endl;
+    lambda.PrintParams();
+    cerr << "=======================================" << endl;
+
     // debug
     cerr << "coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
+
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(nlogLikelihood);

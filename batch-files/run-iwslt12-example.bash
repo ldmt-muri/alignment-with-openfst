@@ -19,5 +19,5 @@ make
 #./train-loglinear example/small.eng.int example/small.kin.int example/small.out
 
 #./train-autoencoder example/iwslt12.eng example/iwslt12.autoencoder.out 
-./train-autoencoder example/colors.en example/iwslt12.autoencoder.out 
+./train-latentCrfModel example/colors.en example/iwslt12.latentCrf.out 
 

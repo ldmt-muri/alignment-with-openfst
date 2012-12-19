@@ -52,7 +52,7 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params) {
       const std::map< int, float > &translations = (*srcIter).second;
       // iterate over tgt tokens 
       for(std::map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+	std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
       }
     } 
   }
