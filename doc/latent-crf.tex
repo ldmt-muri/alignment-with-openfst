@@ -94,7 +94,7 @@ Our objective is to maximize the corpus ($\cal{T}$) log-likelihood of regenerati
  &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} \frac{(\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i)}{Z_\lambda(\mathbf{x})} \\
 &= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} (\prod_{i=1}^{|\mathbf{y}|} \theta_{z_i\mid y_i}) \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i) \nonumber \\
  &- \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log \sum_{\mathbf{y}} \exp \boldsymbol{\lambda}^\top \sum_{i=1}^{|\mathbf{y}|} \mathbf{h}(y_i, y_{i-1}, \mathbf{x}, i) \\
- &= log C(\mathbf{x}, \mathbf{z}) - log Z_\lambda(\mathbf{x})
+&= \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} \log C(\mathbf{x}, \mathbf{z}) - \log Z_\lambda(\mathbf{x})
 \end{align}
 
 Unfortunately, there's no closed-form MLE solution for $\boldsymbol{\lambda}$ and $\boldsymbol{\theta}$ due to the latent variables. We will try to reduce the risk of getting stuck at a local optimum, but no guarantees. We explore a number of ways to optimize the parameters:

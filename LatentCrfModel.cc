@@ -617,7 +617,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double d = dIter->second;
       double nLogd = MultinomialParams::nLog(d);
       double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-      derivativeWRTLambda[dIter->first] += dOverC;
+      derivativeWRTLambda[dIter->first] -= dOverC;
     }
     // compute the F map fro this sentence
     map<string, double> F;
@@ -632,18 +632,18 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double f = fIter->second;
       double nLogf = MultinomialParams::nLog(f);
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-      derivativeWRTLambda[fIter->first] -= fOverZ;
+      derivativeWRTLambda[fIter->first] += fOverZ;
     }
   }
   // debug
-  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
-  LogLinearParams::PrintParams(derivativeWRTLambda);
+  //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
+  //  LogLinearParams::PrintParams(derivativeWRTLambda);
 
   // write the gradient in the (hopefully) pre-allocated array 'gradient'
   model.lambda.ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient);
   // return the to-be-minimized objective function
-  cerr << "Evaluate returning " << nlogLikelihood << endl;
-  cerr << "===================================" << endl;
+  cerr << "Evaluate returning " << nlogLikelihood << ". step is " << step << endl;
+  //  cerr << "===================================" << endl;
   //  cerr << "gradient: ";
   //  for(map<string, double>::const_iterator gradientIter = derivativeWRTLambda.begin(); 
   //      gradientIter != derivativeWRTLambda.end(); gradientIter++) {
@@ -751,7 +751,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
     assert(learningInfo.optimizationMethod.subOptMethod != 0);
     lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
     // for each mini-batch
-    for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.miniBatchSize) {
+    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
+    for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
 
       // populate lambdasArray and lambasArrayLength
       lambdasArray = lambda.GetParamWeightsArray();
@@ -767,7 +768,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	cerr << "rounding error (" << lbfgsStatus << "). it seems like my gradient is buggy." << endl << "retry..." << endl;
 	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
 			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
-	cerr << "the lbfgs status now is " << lbfgsStatus << endl;
+	cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
       }
     
       // update iteration's nloglikelihood
@@ -781,7 +782,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // debug
     cerr << "coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
-
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(nlogLikelihood);
