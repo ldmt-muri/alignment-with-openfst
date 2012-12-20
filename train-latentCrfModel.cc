@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
-  learningInfo.minLikelihoodDiff = 1;
+  learningInfo.minLikelihoodDiff = 0.01;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;

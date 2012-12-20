@@ -98,6 +98,8 @@ class LatentCrfModel {
   //                             {\sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)}
   double ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vector<int> &z);
     
+  double ComputeCorpusNloglikelihood();
+
  public:
 
   static LatentCrfModel& GetInstance();

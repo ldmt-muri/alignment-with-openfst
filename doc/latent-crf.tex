@@ -137,6 +137,23 @@ After updating the $\boldsymbol{\theta}$, we turn to $\boldsymbol{\lambda}$. We 
 
 
 \subsection{Expectation maximization}
+Instead of directly maximizing the loglikelihood, we iteratively maximize $G(\boldsymbol{\lambda}, \boldsymbol{\theta})$. 
+
+\begin{align}
+G(\boldsymbol{\lambda}, \boldsymbol{\theta}) &=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      \log
+        p(\mathbf{y}, \mathbf{z} \mid \mathbf{x}; \boldsymbol{\lambda}, \boldsymbol{\theta}) \\
+&=
+  \sum_{\langle\mathbf{x},\mathbf{z}=\mathbf{x}\rangle \in \cal{T}} 
+    \sum_\mathbf{y} 
+      p(\mathbf{y}\mid\mathbf{x}, \mathbf{z}; \boldsymbol{\lambda}^{old}, \boldsymbol{\theta}^{old}) 
+      \log
+        p_\lambda(\mathbf{y} \mid \mathbf{x}) 
+        . p_\theta(\mathbf{z} \mid \mathbf{y}) \\
+\end{align}
 
 
 \subsection{Stochastic gradient descent with softmax parameterization}

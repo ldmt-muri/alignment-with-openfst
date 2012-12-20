@@ -576,9 +576,9 @@ void LatentCrfModel::Train() {
   case BLOCK_COORD_DESCENT:
     BlockCoordinateDescent();
     break;
-  case EXPECTATION_MAXIMIZATION:
+    /*  case EXPECTATION_MAXIMIZATION:
     ExpectationMaximization();
-    break;
+    break;*/
   default:
     assert(false);
     break;
@@ -680,7 +680,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 // TODO: we don't need to recalculate C since none of the parameters were updated since 
 //       this quantity were computed to calculate \hat{\theta} in the EM algorithm
 // a call back function that computes the gradient and the G function for the lbfgs minimizer
-double LatentCrfModel::EvaluateGDerivativeWRTLambda(void *ptrFromSentId,
+/*double LatentCrfModel::EvaluateGDerivativeWRTLambda(void *ptrFromSentId,
 						    const double *lambdasArray,
 						    double *gradient,
 						    const int lambdasCount,
@@ -761,7 +761,7 @@ double LatentCrfModel::EvaluateGDerivativeWRTLambda(void *ptrFromSentId,
   //  cerr << endl;
   return nlogLikelihood;
 }
-
+*/
 
 int LatentCrfModel::LbfgsProgressReport(void *instance,
 				     const lbfgsfloatval_t *x, 
@@ -802,7 +802,7 @@ void LatentCrfModel::WarmUp() {
   lambda.PrintParams();
   cerr << "done" << endl;
 }
-
+/*
 void LatentCrfModel::ExpectationMaximization() {
 
   // add all features in this data set to lambda.params
@@ -904,7 +904,7 @@ void LatentCrfModel::ExpectationMaximization() {
 
   } while(!learningInfo.IsModelConverged());
 }
-
+*/
 void LatentCrfModel::BlockCoordinateDescent() {  
   
   // add all features in this data set to lambda.params
@@ -922,6 +922,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // update the thetas by normalizing soft counts (i.e. the closed form solution)
     MultinomialParams::ConditionalMultinomialParam mle;
+    map<int, double> mleMarginals;
     for(int sentId = 0; sentId < data.size(); sentId++) {
       // build the FST
       VectorFst<LogArc> thetaLambdaFst;
@@ -943,6 +944,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	  double nLogb = MultinomialParams::nLog(b);
 	  double bOverC = MultinomialParams::nExp(nLogb - nLogC);
 	  mle[y_][z_] += bOverC;
+	  mleMarginals[y_] += bOverC;
 	}
       }
     }
@@ -950,9 +952,30 @@ void LatentCrfModel::BlockCoordinateDescent() {
     //    cerr << "mle (before normalization):" << endl;
     //    MultinomialParams::PrintParams(mle);
     //    cerr << "=======================================" << endl;
-    // now, normalize the MLE estimates
-    MultinomialParams::NormalizeParams(mle);
-    // update the thetas
+    // fix theta mle estimates
+    for(map<int,  map<int, float> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
+      int y_ = yIter->first;
+      double unnormalizedMarginalProbz_giveny_ = 0.0;
+      // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
+      for(map<int, float>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	int z_ = zIter->first;
+	float unnormalizedProbz_giveny_ = zIter->second;
+	unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
+      }
+      assert(abs(mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) < 0.001);
+      cerr << "mleMarginal[" << y_ << "] = " << mleMarginals[y_] << endl;
+      // normalize the mle estimates to sum to one for each context
+      for(map<int, float>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	int z_ = zIter->first;
+	float normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
+	cerr << "mle[" << y_ << "][" << z_ << "] was " << mle[y_][z_];
+	mle[y_][z_] = normalizedProbz_giveny_;
+	cerr << " became " << mle[y_][z_] << endl;
+	// take the nlog
+	mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
+      }
+    }
+    // now, update the thetas
     nLogTheta = mle;
     // debug
     cerr << "nlog theta params:" << endl;
