@@ -7,6 +7,7 @@
 #include <map>
 #include <assert.h>
 #include <limits.h>
+#include <iostream>
 
 #include "StringUtils.h"
 
@@ -62,8 +63,11 @@ class VocabEncoder {
   }
 
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
+  // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int> > &data) {
 
+    assert(data.size() == 0);
+    
     // open data file
     std::ifstream textFile(textFilename.c_str(), std::ios::in);
 
@@ -96,6 +100,14 @@ class VocabEncoder {
     vocabFile.close();
   }
 
+  const std::string& Decode(int wordId) const {
+    if(intToToken.count(wordId) == 0) {
+      return this->UNK;
+    } else {
+      return intToToken.find(wordId)->second;
+    }
+  }
+
   int nextId;
   map<string, int> tokenToInt;
   map<int, string> intToToken;
@@ -104,7 +116,17 @@ class VocabEncoder {
 
 class VocabDecoder {
  public:
- VocabDecoder(const std::string& vocabFilename) {
+  VocabDecoder(const VocabDecoder& another) {
+    vocab = another.vocab;
+    UNK = another.UNK;
+  }
+
+  VocabDecoder(VocabDecoder& another) {
+    vocab = another.vocab;
+    UNK = another.UNK;
+  }
+
+  VocabDecoder(const std::string& vocabFilename) {
     std::ifstream vocabFile(vocabFilename.c_str(), std::ios::in);
     std::string line;
     UNK = "_unk_";
@@ -117,15 +139,17 @@ class VocabDecoder {
       stringstream ss(splits[0]);
       int wordId;
       ss >> wordId;
-      vocab[wordId] = splits[1];
+      vocab[wordId].assign(splits[1]);
+      //      cerr << "vocab[" << wordId << "] = " << vocab.find(wordId)->second << endl;
+      //      cerr << "&(splits[0])=" << &(splits[0]) << ", &(vocab.find(wordId)->second)=" << &(vocab.find(wordId)->second) << endl;
     }
     vocab[1] = "_null_";
     vocab[-1] = "_<s>_";
     //vocab[0] = "_zero_"; // shouldn't happen!
   }
-
+  
   const std::string& Decode(int wordId) const {
-    if(vocab.count(wordId) == 0) {
+    if(vocab.find(wordId) == vocab.end()) {
       return this->UNK;
     } else {
       return vocab.find(wordId)->second;

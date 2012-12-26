@@ -34,6 +34,8 @@ class FstUtils {
     return exp(-1.0 * exponent);
   }
 
+  static void LinearFstToVector(const fst::VectorFst<fst::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olables);
+
   static void SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize);
 
   static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);

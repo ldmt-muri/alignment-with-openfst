@@ -37,4 +37,14 @@ int main(int argc, char **argv) {
   // train the model
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
   model.Train();
+
+  // find the most likely labels given the trianed model
+  vector< vector<int> > labels;
+  model.Label(model.data, labels);
+  assert(labels.size() == model.data.size());
+  for(int i = 0; i < labels.size(); i++) {
+    cerr << StringUtils::IntVectorToString(model.data[i]) << endl;
+    cerr << StringUtils::IntVectorToString(labels[i]) << endl << endl;
+  }
+  
 }

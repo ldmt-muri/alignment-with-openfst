@@ -24,6 +24,8 @@ class LatentCrfModel {
 		 const string &outputPrefix, 
 		 LearningInfo &learningInfo);
   
+  ~LatentCrfModel();
+
   static LatentCrfModel *instance;
 
   // optimize the likelihood with block coordinate descent
@@ -107,18 +109,22 @@ class LatentCrfModel {
   static LatentCrfModel& GetInstance(const string &textFilename, 
 				     const string &outputPrefix, 
 				     LearningInfo &learningInfo);
-
   
   // train the model
   void Train();
+
+  // label
+  void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
+  void Label(vector<int> &tokens, vector<int> &labels);
+
+  vector<vector<int> > data;
 
  private:
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE;
   string textFilename, outputPrefix;
-  vector<vector<int> > data;
   set<int> xDomain, yDomain;
-  LogLinearParams lambda;
+  LogLinearParams *lambda;
   MultinomialParams::ConditionalMultinomialParam nLogTheta;
   LearningInfo learningInfo;
   // vectors specifiying which feature types to use (initialized in the constructor)

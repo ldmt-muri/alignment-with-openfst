@@ -80,6 +80,14 @@ class StringUtils {
     }
   }
 
+  static std::string IntVectorToString(const std::vector<int> &numbers) {
+    std::stringstream ss("");
+    for(int i = 0; i < numbers.size(); i++) {
+      ss << numbers[i] << " ";
+    }
+    return ss.str();
+  }
+
 
 };
 

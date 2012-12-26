@@ -218,9 +218,7 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   // create a LogArc shadow fst of 'fst' which can be later used to compute potentials (LogQuadArc is too complex to compute potentials with)
   clock_t timestamp = clock();
   fst::VectorFst<fst::LogArc> probFst;
-  fst::ArcMap(fst, &probFst, LogQuadToLogMapper
-
-());
+  fst::ArcMap(fst, &probFst, LogQuadToLogMapper());
   assert(AreShadowFsts(fst, probFst));
   cerr << "ArcMap took " << 1.0 * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 
@@ -375,4 +373,19 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
   }
 
   return output.str();
+}
+
+// assumptions:
+// - this fst is linear. no state has more than one outgoing/incoming arc
+void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olabels) {
+  int currentState = fst.Start();
+  do {
+    ArcIterator< VectorFst<StdArc> > aiter(fst, currentState); 
+    ilabels.push_back(aiter.Value().ilabel);
+    olabels.push_back(aiter.Value().olabel);
+    currentState = aiter.Value().nextstate;
+    // assert it's a linear FST
+    aiter.Next();
+    assert(aiter.Done()); 
+  } while(fst.Final(currentState) == fst::TropicalWeight::Zero());
 }

@@ -23,7 +23,7 @@ class LogLinearParams {
 
   // for the latent CRF model
   LogLinearParams(const VocabDecoder &types);
-
+  
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
   // note: pos here is short for position
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
