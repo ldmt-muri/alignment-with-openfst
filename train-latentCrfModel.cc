@@ -27,14 +27,13 @@ int main(int argc, char **argv) {
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
-  learningInfo.minLikelihoodDiff = 0.01;
+  learningInfo.minLikelihoodDiff = 10;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
-  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1;
+  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
-  learningInfo.optimizationMethod.subOptMethod->maxIterations = 5;
-  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 5;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.0000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);

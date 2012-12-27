@@ -377,12 +377,19 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
 
 // assumptions:
 // - this fst is linear. no state has more than one outgoing/incoming arc
-void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olabels) {
+void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olabels, bool keepEpsilons) {
+  assert(olabels.size() == 0);
+  assert(ilabels.size() == 0);
   int currentState = fst.Start();
   do {
-    ArcIterator< VectorFst<StdArc> > aiter(fst, currentState); 
-    ilabels.push_back(aiter.Value().ilabel);
-    olabels.push_back(aiter.Value().olabel);
+    ArcIterator< VectorFst<StdArc> > aiter(fst, currentState);
+    if(keepEpsilons || aiter.Value().ilabel != EPSILON) {
+      ilabels.push_back(aiter.Value().ilabel);
+    }
+    if(keepEpsilons || aiter.Value().olabel != EPSILON) {
+      cerr << "appending " <<  aiter.Value().olabel << " to olabels" << endl;
+      olabels.push_back(aiter.Value().olabel);
+    }
     currentState = aiter.Value().nextstate;
     // assert it's a linear FST
     aiter.Next();

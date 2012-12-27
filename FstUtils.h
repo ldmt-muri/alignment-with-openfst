@@ -25,19 +25,19 @@ class FstUtils {
   static const int LOG_ZERO = 30;
   static const int EPSILON = 0;
   static const float LOG_PROBS_MUST_BE_GREATER_THAN_ME; // set in FstUtils.cc
-
+  
   inline static float nLog(double prob) {
     return -1.0 * log(prob);
   }
-
+  
   inline static double nExp(float exponent) {
     return exp(-1.0 * exponent);
   }
-
-  static void LinearFstToVector(const fst::VectorFst<fst::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olables);
-
+  
+  static void LinearFstToVector(const fst::VectorFst<fst::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olables, bool keepEpsilons = false);
+  
   static void SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize);
-
+  
   static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);
 
   static int FindFinalState(const fst::VectorFst<LogQuadArc>& fst);

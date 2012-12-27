@@ -703,7 +703,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     from = index;
     to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
   }
-  cerr << "sents:" << from << "-" << to << " lbfgs Iteration " << k << ": objective = " << fx << ",xnorm = " << xnorm << ",gnorm = " << gnorm << ",step = " << step << endl;
+  cerr << endl << "sents:" << from << "-" << to << "\tlbfgs Iteration " << k << ":\tobjective = " << fx << ",\txnorm = " << xnorm << ",\tgnorm = " << gnorm << ",\tstep = " << step << endl;
   return 0;
 }
 
@@ -738,8 +738,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
   cerr << "warmup finished" << endl;
 
   do {
-    // log likelihood
-    double nlogLikelihood = 0;
 
     // debug
     //    double temp = ComputeCorpusNloglikelihood();
@@ -836,6 +834,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
     // for each mini-batch
     //    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
+    double nlogLikelihood = 0;
     for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
 
       // populate lambdasArray and lambasArrayLength
@@ -843,21 +842,26 @@ void LatentCrfModel::BlockCoordinateDescent() {
       lambdasArrayLength = lambda->GetParamsCount();
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
+      cerr << "calling lbfgs on sents " << sentId << "-" << min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size()) << endl;
       int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
 			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 
       // debug
       cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
-      cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
       if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
 	cerr << "rounding error (" << lbfgsStatus << "). it seems like my gradient is buggy." << endl << "retry..." << endl;
 	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
 			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 	cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
       }
+      cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
     
       // update iteration's nloglikelihood
-      nlogLikelihood += optimizedMiniBatchNLogLikelihood;
+      if(isnan(optimizedMiniBatchNLogLikelihood)) {
+	cerr << "didn't add this batch's likelihood to the total likelihood" << endl;
+      } else {
+	nlogLikelihood += optimizedMiniBatchNLogLikelihood;
+      }
     }
     
     // debug
@@ -892,7 +896,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
 void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
-  labels.resize(tokens.size());
   VectorFst<LogArc> fst;
   vector<fst::LogWeight> alphas, betas;
   BuildThetaLambdaFst(tokens, tokens, fst, alphas, betas);
@@ -901,6 +904,12 @@ void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   fst::ShortestPath(fst2, &shortestPath);
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);
+  cerr << "labels.size() = " << labels.size() << " vs. tokens.size() = " << tokens.size() << endl;
+  cerr << "labels = ";
+  for(int i = 0; i < labels.size(); i++) {
+    cerr << labels[i] << " ";
+  }
+  cerr << endl;
   assert(labels.size() == tokens.size());
 }
 
