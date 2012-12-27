@@ -23,16 +23,17 @@ int main(int argc, char **argv) {
   // configurations
   LearningInfo learningInfo;
   // block coord 
+  learningInfo.debugInfo = DebugLevel::CORPUS;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
-  learningInfo.minLikelihoodDiff = 10;
+  learningInfo.minLikelihoodDiff = 10
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
-  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
+  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 5;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.0000000000001;

@@ -36,6 +36,10 @@ namespace OptAlgorithm {
   enum OptAlgorithm {GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS};
 }
 
+namespace DebugLevel {
+  enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6};
+}
+
 // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
 struct LbfgsParams {
   int maxIterations;
@@ -99,6 +103,7 @@ class LearningInfo {
     neighborhoodMinIbm1FwdScore = 0.001;
     neighborhoodMinIbm1BckScore = 0.001;
     neighborhoodMinCoocc = 3;
+    debugLevel = 1;
   }
 
   bool IsModelConverged() {
@@ -194,6 +199,13 @@ class LearningInfo {
   // ibm 1 backward log probs
   // [tgtToken][srcToken]
   std::map<int, std::map<int, float> > *ibm1BackwardLogProbs;
+
+  // 0 = no debug info. 
+  // 1 = corpus level debug info.
+  // 2 = mini-batch level debug info.
+  // 3 = sentence level debug info. 
+  // 4 = token level debug info.
+  unsigned debugLevel;
 };
 
 

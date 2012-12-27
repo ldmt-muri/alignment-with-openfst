@@ -662,7 +662,9 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
       derivativeWRTLambda[fIter->first] += fOverZ;
     }
-    cerr << ".";
+    if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      cerr << ".";
+    }
   }
   // debug
   //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
@@ -703,14 +705,23 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     from = index;
     to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
   }
-  cerr << endl << "sents:" << from << "-" << to << "\tlbfgs Iteration " << k << ":\tobjective = " << fx << ",\txnorm = " << xnorm << ",\tgnorm = " << gnorm << ",\tstep = " << step << endl;
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << endl << "sents:" << from << "-" << to;
+    cerr << "\tlbfgs Iteration " << k;
+    cerr << ":\tobjective = " << fx;
+    cerr << ",\txnorm = " << xnorm;
+    cerr << ",\tgnorm = " << gnorm;
+    cerr << ",\tstep = " << step << endl;
+  }
   return 0;
 }
 
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::WarmUp() {
   UniformSampler uniform;
-  cerr << "warming up..." << endl;
+  if(model.learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "warming up..." << endl;
+  }
   //  cerr << "lambda.GetParamsCount() = " << lambda.GetParamsCount() << endl;
   for(int sentId = 0; sentId < data.size(); sentId++) {
     //        cerr << "now processing sent# " << sentId << endl;
@@ -726,16 +737,17 @@ void LatentCrfModel::WarmUp() {
       lambda->UpdateParam(fIter->first, uniform.Draw() - 0.5);
     }
   }
-  cerr << "lambdas initialized to: " << endl;
-  lambda->PrintParams();
-  cerr << "done" << endl;
+  if(model.learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "lambdas initialized to: " << endl;
+    lambda->PrintParams();
+    cerr << "warmup done." << endl;
+  }
 }
 
 void LatentCrfModel::BlockCoordinateDescent() {  
   
   // add all features in this data set to lambda.params
   WarmUp();
-  cerr << "warmup finished" << endl;
 
   do {
 
@@ -746,6 +758,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     //    cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
 
     // update the thetas by normalizing soft counts (i.e. the closed form solution)
+    if(learningInfo.debugLevel >= DebugLevel::Corpus) {
+      cerr << "updating thetas..." << endl;
+    }
     MultinomialParams::ConditionalMultinomialParam mle;
     map<int, double> mleMarginals;
     for(int sentId = 0; sentId < data.size(); sentId++) {
@@ -809,6 +824,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     ss << "." << learningInfo.iterationsCount;
     ss << ".theta";
     MultinomialParams::PersistParams(ss.str(), nLogTheta);
+    if(learningInfo.debugLevel >= DebugLevel::Corpus) {
+      cerr << "done updating thetas." << endl;
+    }
 
     // debug
     //    temp = ComputeCorpusNloglikelihood();
@@ -835,30 +853,46 @@ void LatentCrfModel::BlockCoordinateDescent() {
     // for each mini-batch
     //    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     double nlogLikelihood = 0;
-    for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
+    if(learningInfo.optimizationMethod.subOptMethod->miniBatchSize <= 0) {
+      learningInfo.optimizationMethod.subOptMethod->miniBatchSize = data.size();
+    }
+    for(int sentId = 0; sentId < data.size(); sentId += ) {
 
       // populate lambdasArray and lambasArrayLength
       lambdasArray = lambda->GetParamWeightsArray();
       lambdasArrayLength = lambda->GetParamsCount();
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
-      cerr << "calling lbfgs on sents " << sentId << "-" << min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size()) << endl;
+      if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
+	cerr << "calling lbfgs on sents " << sentId << "-" << to << endl;
+      }
       int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
 			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 
       // debug
-      cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
-      if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
-	cerr << "rounding error (" << lbfgsStatus << "). it seems like my gradient is buggy." << endl << "retry..." << endl;
-	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
-			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+      if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
       }
-      cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
-    
+      if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
+	if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	  cerr << "rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
+	}
+	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
+			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+	if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	  cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+	}
+      }
+      if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
+      }
+      
       // update iteration's nloglikelihood
       if(isnan(optimizedMiniBatchNLogLikelihood)) {
-	cerr << "didn't add this batch's likelihood to the total likelihood" << endl;
+	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	  cerr << "didn't add this batch's likelihood to the total likelihood" << endl;
+	}
       } else {
 	nlogLikelihood += optimizedMiniBatchNLogLikelihood;
       }
@@ -879,7 +913,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     //    cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
 
     // debug
-    cerr << "finished coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
+    if(model.learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "finished coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
+    }
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(nlogLikelihood);
