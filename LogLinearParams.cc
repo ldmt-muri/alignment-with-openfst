@@ -293,6 +293,13 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp << "F65:" << yI << ":CapitalInitial";
     activeFeatures[temp.str()] = 1.0;
   }
+
+  // F66: yI-(|x|-i)
+  if(enabledFeatureTypes.size() > 66 && enabledFeatureTypes[66]) {
+    temp.str("");
+    temp << "F66:" << yI << ":" << (x.size()-i);
+    activeFeatures[temp.str()] = 1.0;
+  }
 }
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 

@@ -114,8 +114,15 @@ class LatentCrfModel {
   void Train();
 
   // label
-  void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
   void Label(vector<int> &tokens, vector<int> &labels);
+  void Label(vector<string> &tokens, vector<int> &labels);
+  void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
+  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels);
+  void Label(string &inputFilename, string &outputFilename);
+
+  // analyze
+  void Analyze(string &inputFilename, string &outputFilename);
+
 
   vector<vector<int> > data;
 

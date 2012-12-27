@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <fstream>
 #include <set>
 
 typedef std::string string;
@@ -88,6 +89,55 @@ class StringUtils {
     return ss.str();
   }
 
+  // 'tokens' is a vector of sentences
+  // each sentence is a vector of space-separated tokens
+  static void ReadTokens(const std::string &filename, std::vector<std::vector<std::string> > &tokens) {
+    std::ifstream textFile(filename.c_str(), std::ios::in);
+    std::string line;
+    // for each line
+    while(getline(textFile, line)) {
+      // skip empty lines
+      if(line.size() == 0) {
+	continue;
+      }
+      std::vector<string> splits;
+      SplitString(line, ' ', splits);
+      tokens.push_back(splits);
+    }
+    textFile.close();
+  }
+
+  // 'tokens' is a vector of sentences
+  // each sentence is a vector of space-separated tokens
+  static void ReadTokens(const std::string &filename, std::vector<std::vector<int> > &tokens) {
+    std::ifstream textFile(filename.c_str(), std::ios::in);
+    std::string line;
+    // for each line
+    while(getline(textFile, line)) {
+      // skip empty lines
+      if(line.size() == 0) {
+	continue;
+      }
+      std::vector<int> splits;
+      ReadIntTokens(line, splits);
+      tokens.push_back(splits);
+    }
+    textFile.close();
+  }
+
+  static void WriteTokens(const std::string &filename, std::vector<std::vector<int> > &tokens) {
+    std::ofstream textFile(filename.c_str(), std::ios::out);
+    for(int i = 0 ; i < tokens.size(); i++) {
+      if(tokens[i].size() != 0) {
+	textFile << tokens[i][0];
+      }
+      for(int j = 1 ; j < tokens[i].size(); j++) {
+	textFile << " " << tokens[i][j];
+      }
+      textFile << "\n";
+    }
+    textFile.close();
+  }
 
 };
 

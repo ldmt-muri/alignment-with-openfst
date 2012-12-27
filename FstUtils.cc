@@ -387,7 +387,6 @@ void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<
       ilabels.push_back(aiter.Value().ilabel);
     }
     if(keepEpsilons || aiter.Value().olabel != EPSILON) {
-      cerr << "appending " <<  aiter.Value().olabel << " to olabels" << endl;
       olabels.push_back(aiter.Value().olabel);
     }
     currentState = aiter.Value().nextstate;

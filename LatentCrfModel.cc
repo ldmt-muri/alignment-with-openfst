@@ -893,6 +893,16 @@ void LatentCrfModel::BlockCoordinateDescent() {
   MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta);
 }
 
+void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
+  assert(labels.size() == 0);
+  assert(tokens.size() > 0);
+  vector<int> tokensInt;
+  for(int i = 0; i < tokens.size(); i++) {
+    tokensInt.push_back(vocabEncoder.Encode(tokens[i]));
+  }
+  Label(tokensInt, labels);
+}
+
 void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
@@ -904,12 +914,6 @@ void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   fst::ShortestPath(fst2, &shortestPath);
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);
-  cerr << "labels.size() = " << labels.size() << " vs. tokens.size() = " << tokens.size() << endl;
-  cerr << "labels = ";
-  for(int i = 0; i < labels.size(); i++) {
-    cerr << labels[i] << " ";
-  }
-  cerr << endl;
   assert(labels.size() == tokens.size());
 }
 
@@ -919,4 +923,66 @@ void LatentCrfModel::Label(vector<vector<int> > &tokens, vector<vector<int> > &l
   for(int i = 0; i < tokens.size(); i++) {
     Label(tokens[i], labels[i]);
   }
+}
+
+void LatentCrfModel::Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
+  assert(labels.size() == 0);
+  labels.resize(tokens.size());
+  for(int i = 0 ; i <tokens.size(); i++) {
+    Label(tokens[i], labels[i]);
+  }
+}
+
+void LatentCrfModel::Label(string &inputFilename, string &outputFilename) {
+  std::vector<std::vector<std::string> > tokens;
+  StringUtils::ReadTokens(inputFilename, tokens);
+  vector<vector<int> > labels;
+  Label(tokens, labels);
+  StringUtils::WriteTokens(outputFilename, labels);
+}
+
+void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
+  // label
+  std::vector<std::vector<std::string> > tokens;
+  StringUtils::ReadTokens(inputFilename, tokens);
+  vector<vector<int> > labels;
+  Label(tokens, labels);
+  // analyze
+  map<int, map<string, int> > labelToTypesAndCounts;
+  map<string, map<int, int> > typeToLabelsAndCounts;
+  for(int sentId = 0; sentId < tokens.size(); sentId++) {
+    for(int i = 0; i < tokens[sentId].size(); i++) {
+      labelToTypesAndCounts[labels[sentId][i]][tokens[sentId][i]]++;
+      typeToLabelsAndCounts[tokens[sentId][i]][labels[sentId][i]]++;
+    }
+  }
+  // write the number of tokens of each labels
+  std::ofstream outputFile(outputFilename.c_str(), std::ios::out);
+  outputFile << "# LABEL HISTOGRAM #" << endl;
+  for(map<int, map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
+    outputFile << "label:" << labelIter->first;
+    int totalCount = 0;
+    for(map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
+      totalCount += typeIter->second;
+    }
+    outputFile << " tokenCount:" << totalCount << endl;
+  }
+  // write the types of each label
+  outputFile << endl << "# LABEL -> TYPES:COUNTS #" << endl;
+  for(map<int, map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
+    outputFile << "label:" << labelIter->first << endl << "\ttypes: " << endl;
+    for(map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
+      outputFile << "\t\t" << typeIter->first << ":" << typeIter->second << endl;
+    }
+  }
+  // write the labels of each type
+  outputFile << endl << "# TYPE -> LABELS:COUNT #" << endl;
+  for(map<string, map<int, int> >::const_iterator typeIter = typeToLabelsAndCounts.begin(); typeIter != typeToLabelsAndCounts.end(); typeIter++) {
+    outputFile << "type:" << typeIter->first << "\tlabels: ";
+    for(map<int, int>::const_iterator labelIter = typeIter->second.begin(); labelIter != typeIter->second.end(); labelIter++) {
+      outputFile << labelIter->first << ":" << labelIter->second << " ";
+    }
+    outputFile << endl;
+  }
+  outputFile.close();
 }

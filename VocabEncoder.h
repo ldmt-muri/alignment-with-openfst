@@ -4,10 +4,10 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <assert.h>
 #include <limits.h>
-#include <iostream>
 
 #include "StringUtils.h"
 
