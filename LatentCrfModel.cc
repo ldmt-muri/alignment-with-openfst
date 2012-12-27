@@ -662,6 +662,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
       derivativeWRTLambda[fIter->first] += fOverZ;
     }
+    cerr << ".";
   }
   // debug
   //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
@@ -683,17 +684,26 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   return nlogLikelihood;
 }
 
-int LatentCrfModel::LbfgsProgressReport(void *instance,
-				     const lbfgsfloatval_t *x, 
-				     const lbfgsfloatval_t *g,
-				     const lbfgsfloatval_t fx,
-				     const lbfgsfloatval_t xnorm,
-				     const lbfgsfloatval_t gnorm,
-				     const lbfgsfloatval_t step,
-				     int n,
-				     int k,
-				     int ls) {
-  cerr << "lbfgs Iteration " << k << ": objective = " << fx << ",xnorm = " << xnorm << ",gnorm = " << gnorm << ",step = " << step << endl;
+int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
+					const lbfgsfloatval_t *x, 
+					const lbfgsfloatval_t *g,
+					const lbfgsfloatval_t fx,
+					const lbfgsfloatval_t xnorm,
+					const lbfgsfloatval_t gnorm,
+					const lbfgsfloatval_t step,
+					int n,
+					int k,
+					int ls) {
+  LatentCrfModel &model = LatentCrfModel::GetInstance();
+  int index = *((int*)ptrFromSentId), from, to;
+  if(index == -1) {
+    from = 0;
+    to = model.data.size();
+  } else {
+    from = index;
+    to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
+  }
+  cerr << "sents:" << from << "-" << to << " lbfgs Iteration " << k << ": objective = " << fx << ",xnorm = " << xnorm << ",gnorm = " << gnorm << ",step = " << step << endl;
   return 0;
 }
 
@@ -817,6 +827,13 @@ void LatentCrfModel::BlockCoordinateDescent() {
     lbfgs_parameter_init(&lbfgsParams);
     assert(learningInfo.optimizationMethod.subOptMethod != 0);
     lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+    lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
+    lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
+    if(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1) {
+      lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
+      // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
+      lbfgsParams.linesearch = LBFGS_LINESEARCH_BACKTRACKING;
+    }
     // for each mini-batch
     //    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {

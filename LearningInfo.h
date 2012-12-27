@@ -40,10 +40,14 @@ namespace OptAlgorithm {
 struct LbfgsParams {
   int maxIterations;
   int memoryBuffer;
+  double precision;
+  bool l1;
   
   LbfgsParams() {
     maxIterations = 10;
-    memoryBuffer = 500;
+    memoryBuffer = 6;
+    precision = 0.000000000000001;
+    l1 = false;
   }
 };
 

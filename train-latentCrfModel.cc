@@ -30,9 +30,14 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodDiff = 0.01;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
+  learningInfo.optimizationMethod.subOptMethod->maxIterations = 5;
+  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
+  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
+  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.0000000000001;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
 
   // train the model
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
