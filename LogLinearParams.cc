@@ -86,6 +86,24 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   stringstream temp;
 
+  const VocabDecoder &types = srcTypes;
+  const std::string& xIString = types.Decode(x[i]);
+  unsigned xIStringSize = xIString.size();
+  const std::string& xIM1String = i-1 >= 0?
+    types.Decode(x[i-1]):
+    "_start_";
+  unsigned xIM1StringSize = xIM1String.size();
+  const std::string& xIM2String = i-2 >= 0?
+    types.Decode(x[i-2]):
+    "_start_";
+  const std::string& xIP1String = i+1 < x.size()?
+    types.Decode(x[i+1]):
+    "_end_";
+  unsigned xIP1StringSize = xIP1String.size();
+  const std::string& xIP2String = i+2 < x.size()?
+    types.Decode(x[i+2]):
+    "_end_";
+
   // F51: yIM1-yI pair
   if(enabledFeatureTypes.size() > 51 && enabledFeatureTypes[51]) {
     temp.str("");
@@ -97,7 +115,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   if(enabledFeatureTypes.size() > 52 && enabledFeatureTypes[52]) {
     temp.str("");
     int xIM2 = i-2 >= 0? x[i-2] : -1;
-    temp << "F52:" << yI << ":" << xIM2;
+    temp << "F52:" << yI << ":" << xIM2String;
     activeFeatures[temp.str()] = 1.0;
   }
 
@@ -105,14 +123,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   if(enabledFeatureTypes.size() > 53 && enabledFeatureTypes[53]) {
     temp.str("");
     int xIM1 = i-1 >= 0? x[i-1] : -1;
-    temp << "F53:" << yI << ":" << xIM1;
+    temp << "F53:" << yI << ":" << xIM1String;
     activeFeatures[temp.str()] = 1.0;
   }
 
   // F54: yI-xI pair
   if(enabledFeatureTypes.size() > 54 && enabledFeatureTypes[54]) {
     temp.str("");
-    temp << "F54:" << yI << ":" << x[i];
+    temp << "F54:" << yI << ":" << xIString;
     activeFeatures[temp.str()] = 1.0;
   }
   
@@ -120,7 +138,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   if(enabledFeatureTypes.size() > 55 && enabledFeatureTypes[55]) {
     temp.str("");
     int xIP1 = i+1 < x.size()? x[i+1] : -1;
-    temp << "F55:" << yI << ":" << xIP1;
+    temp << "F55:" << yI << ":" << xIP1String;
     activeFeatures[temp.str()] = 1.0;
   }
 
@@ -128,35 +146,26 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   if(enabledFeatureTypes.size() > 56 && enabledFeatureTypes[56]) {
     temp.str("");
     int xIP2 = i+2 < x.size()? x[i+2] : -1; 
-   temp << "F56:" << yI << ":" << xIP2;
+   temp << "F56:" << yI << ":" << xIP2String;
     activeFeatures[temp.str()] = 1.0;
   }
 
   // F57: yI-i pair
   if(enabledFeatureTypes.size() > 57 && enabledFeatureTypes[57]) {
-    temp.str("");
-    temp << "F57:" << yI << ":" << i;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  const VocabDecoder &types = srcTypes;
-  const std::string& xIString = types.Decode(x[i]);
-  unsigned xIStringSize = xIString.size();
-  const std::string& xIM1String = i-1 >= 0?
-    types.Decode(x[i-1]):
-    "_start_";
-  unsigned xIM1StringSize = xIM1String.size();
-  const std::string& xIP1String = i+1 < x.size()?
-    types.Decode(x[i+1]):
-    "_end_";
-  unsigned xIP1StringSize = xIP1String.size();
-  // F58: yI-prefix(xI)
-  if(enabledFeatureTypes.size() > 58 && enabledFeatureTypes[58]) {
-    if(xIStringSize > 0) {
+    if(i < 2) {
       temp.str("");
-      temp << "F58:" << yI << ":" << xIString[0];
+      temp << "F57:" << yI << ":" << i;
       activeFeatures[temp.str()] = 1.0;
     }
+  }
+
+  // F58: yI-prefix(xI)
+  if(enabledFeatureTypes.size() > 58 && enabledFeatureTypes[58]) {
+    //    if(xIStringSize > 0) {
+    //      temp.str("");
+    //      temp << "F58:" << yI << ":" << xIString[0];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
     if(xIStringSize > 1) {
       temp.str("");
       temp << "F58:" << yI << ":" << xIString[0] << xIString[1];
@@ -171,11 +180,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F59: yI-suffix(xI)
   if(enabledFeatureTypes.size() > 59 && enabledFeatureTypes[59]) {
-    if(xIStringSize > 0) {
-      temp.str("");
-      temp << "F59:" << yI << ":" << xIString[xIStringSize-1];
-      activeFeatures[temp.str()] = 1.0;
-    }
+    //    if(xIStringSize > 0) {
+    //      temp.str("");
+    //      temp << "F59:" << yI << ":" << xIString[xIStringSize-1];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
     if(xIStringSize > 1) {
       temp.str("");
       temp << "F59:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
@@ -190,17 +199,17 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F60: yI-prefix(xIP1)
   if(enabledFeatureTypes.size() > 60 && enabledFeatureTypes[60]) {
-    if(xIP1StringSize > 0) {
-      temp.str("");
-      temp << "F60:" << yI << ":" << xIP1String[0];
-      activeFeatures[temp.str()] = 1.0;
-    }
-    if(xIP1StringSize > 1) {
+    //    if(xIP1StringSize > 0 && i+1 < x.size()) {
+    //      temp.str("");
+    //      temp << "F60:" << yI << ":" << xIP1String[0];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
+    if(xIP1StringSize > 1 && i+1 < x.size()) {
       temp.str("");
       temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1];
       activeFeatures[temp.str()] = 1.0;
     }
-    if(xIP1StringSize > 2) {
+    if(xIP1StringSize > 2 && i+1 < x.size()) {
       temp.str("");
       temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1] << xIP1String[2];
       activeFeatures[temp.str()] = 1.0;
@@ -209,17 +218,17 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F61: yI-suffix(xIP1)
   if(enabledFeatureTypes.size() > 61 && enabledFeatureTypes[61]) {
-    if(xIP1StringSize > 0) {
-      temp.str("");
-      temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
-    }
-    if(xIP1StringSize > 1) {
+    //    if(xIP1StringSize > 0 && i+1 < x.size()) {
+    //      temp.str("");
+    //      temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-1];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
+    if(xIP1StringSize > 1 && i+1 < x.size()) {
       temp.str("");
       temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
       activeFeatures[temp.str()] = 1.0;
     }
-    if(xIP1StringSize > 2) {
+    if(xIP1StringSize > 2 && i+1 < x.size()) {
       temp.str("");
       temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-3] << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
       activeFeatures[temp.str()] = 1.0;
@@ -228,17 +237,17 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F62: yI-prefix(xIM1)
   if(enabledFeatureTypes.size() > 62 && enabledFeatureTypes[62]) {
-    if(xIM1StringSize > 0) {
-      temp.str("");
-      temp << "F62:" << yI << ":" << xIM1String[0];
-      activeFeatures[temp.str()] = 1.0;
-    }
-    if(xIM1StringSize > 1) {
+    //    if(xIM1StringSize > 0 && i-1 >= 0) {
+    //      temp.str("");
+    //      temp << "F62:" << yI << ":" << xIM1String[0];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
+    if(xIM1StringSize > 1 && i-1 >= 0) {
       temp.str("");
       temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1];
       activeFeatures[temp.str()] = 1.0;
     }
-    if(xIM1StringSize > 2) {
+    if(xIM1StringSize > 2 && i-1 >= 0) {
       temp.str("");
       temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1] << xIM1String[2];
       activeFeatures[temp.str()] = 1.0;
@@ -247,17 +256,17 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F63: yI-suffix(xIM1)
   if(enabledFeatureTypes.size() > 63 && enabledFeatureTypes[63]) {
-    if(xIM1StringSize > 0) {
-      temp.str("");
-      temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
-    }
-    if(xIM1StringSize > 1) {
+    //    if(xIM1StringSize > 0 && i-1 >= 0) {
+    //      temp.str("");
+    //      temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-1];
+    //      activeFeatures[temp.str()] = 1.0;
+    //    }
+    if(xIM1StringSize > 1 && i-1 >= 0) {
       temp.str("");
       temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
       activeFeatures[temp.str()] = 1.0;
     }
-    if(xIM1StringSize > 2) {
+    if(xIM1StringSize > 2 && i-1 >= 0) {
       temp.str("");
       temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-3] << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
       activeFeatures[temp.str()] = 1.0;
@@ -271,15 +280,15 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     for(int j = 0; j < xIStringSize; j++) {
       char xIStringJ = xIString[j];
       if(xIStringJ >= 'a' && xIStringJ <= 'z') {
-	temp << 's'; // for small
+	temp << 'a'; // for small
       } else if(xIStringJ >= 'A' && xIStringJ <= 'Z') {
-	temp << 'c'; // for capital
+	temp << 'A'; // for capital
       } else if(xIStringJ >= '0' && xIStringJ <= '9') {
-	temp << 'd'; // for digit
+	temp << '0'; // for digit
       } else if(xIStringJ == '@') {
-	temp << 'a'; // for 'at'
+	temp << '@'; // for 'at'
       } else if(xIStringJ == '.') {
-	temp << 'p'; // for period
+	temp << '.'; // for period
       } else {
 	temp << '*';
       }
@@ -296,10 +305,13 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F66: yI-(|x|-i)
   if(enabledFeatureTypes.size() > 66 && enabledFeatureTypes[66]) {
-    temp.str("");
-    temp << "F66:" << yI << ":" << (x.size()-i);
-    activeFeatures[temp.str()] = 1.0;
+    if(x.size() - i < 3) {
+      temp.str("");
+      temp << "F66:" << yI << ":" << (x.size()-i);
+      activeFeatures[temp.str()] = 1.0;
+    }
   }
+
 }
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
