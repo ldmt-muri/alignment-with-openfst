@@ -86,7 +86,11 @@ struct OptMethod {
 }; 
 
 namespace ConstraintType {
-  enum ConstraintType {yI_xIString};
+  enum ConstraintType {
+    // an observed type xI must be assigned label yI
+    yIExclusive_xIString, 
+    // an observed type xI can be assigned label yI (i.e. other labels can also be valid)
+    yI_xIString};
 }
 
 struct Constraint {
@@ -101,6 +105,7 @@ struct Constraint {
   ~Constraint() {
     if(field1 != 0) {
       switch(type) {
+      case ConstraintType::yIExclusive_xIString:
       case ConstraintType::yI_xIString:
 	delete (int *)field1;
 	break;
@@ -111,6 +116,7 @@ struct Constraint {
     }
     if(field2 != 0) {
       switch(type) {
+      case ConstraintType::yIExclusive_xIString:
       case ConstraintType::yI_xIString:
 	delete (string *)field2;
 	break;
@@ -121,6 +127,20 @@ struct Constraint {
     }
   }
   
+  void SetConstraintOfType_yIExclusive_xIString(int yI, const std::string &xI) {
+    type = ConstraintType::yIExclusive_xIString;
+    field1 = new int[1];
+    *((int*)field1) = yI;
+    field2 = new std::string();
+    *((string*)field2) = xI;
+  }
+  
+  void GetFieldsOfConstraintType_yIExclusive_xIString(int &yI, std::string &xI) {
+    assert(type == ConstraintType::yIExclusive_xIString);
+    yI = *(int*)field1;
+    xI = *(string*)field2;
+  }
+
   void SetConstraintOfType_yI_xIString(int yI, const std::string &xI) {
     type = ConstraintType::yI_xIString;
     field1 = new int[1];

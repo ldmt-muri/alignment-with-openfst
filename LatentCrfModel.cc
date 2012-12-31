@@ -120,6 +120,8 @@ double LatentCrfModel::ComputeNLogZ_lambda(const vector<int> &x) {
 
 // build an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i)
 void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+  clock_t timestamp = clock();
+
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -181,6 +183,10 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
   ShortestDistance(fst, &alphas, false);
   assert(betas.size() == 0);
   ShortestDistance(fst, &betas, true);
+
+  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
+    cerr << " BuildLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+  }
 }
 
 // assumptions: 
@@ -190,6 +196,7 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 			      const VectorFst<LogArc> &fst,
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 			      map<string, double> &FXZk) {
+  clock_t timestamp = clock();
   
   assert(FXZk.size() == 0);
   assert(fst.NumStates() > 0);
@@ -250,6 +257,10 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
     iStates = iP1States;
     iP1States.clear();
   }  
+
+  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
+    cerr << "ComputeF() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
+  }
 }
 			   
 // assumptions: 
@@ -259,6 +270,8 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
 			   const VectorFst<LogArc> &fst,
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 			   map<string, double> &DXZk) {
+
+  clock_t timestamp = clock();
 
   // enforce assumptions
   assert(DXZk.size() == 0);
@@ -312,6 +325,10 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
     iStates = iP1States;
     iP1States.clear();
   }  
+
+  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
+    cerr << "ComputeD() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
+  }
 }
 
 // assumptions:
@@ -382,6 +399,7 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 // build an FST which path sums to 
 // -log \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ]
 void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+  clock_t timestamp = clock();
 
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
@@ -451,6 +469,10 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
   assert(betas.size() == 0);
   ShortestDistance(fst, &alphas, false);
   ShortestDistance(fst, &betas, true);
+
+  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
+    cerr << " BuildThetaLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+  }
 }
 
 // compute p(y, z | x) = \frac{\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)}{Z_\lambda(x)}
@@ -606,6 +628,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 								 double *gradient,
 								 const int lambdasCount,
 								 const double step) {
+  clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
   
   // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
@@ -627,6 +650,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
   }
   for(int sentId = from; sentId < to; sentId++) {
+    clock_t timestamp2 = clock();
     // build the FSTs
     VectorFst<LogArc> thetaLambdaFst, lambdaFst;
     vector<fst::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
@@ -663,6 +687,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     }
     if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << ".";
+      cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda() for this sentence took " << (float) (clock() - timestamp2) / CLOCKS_PER_SEC << " sec." << endl;
     }
   }
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
@@ -685,6 +710,9 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //    cerr << gradientIter->first << ":" << gradientIter->second << " ";
   //  }
   //  cerr << endl;
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+  }
   return nlogLikelihood;
 }
 
@@ -740,13 +768,13 @@ void LatentCrfModel::WarmUp() {
   for(int i = 0; i < learningInfo.constraints.size(); i++) {
     switch(learningInfo.constraints[i].type) {
       // constrains the latent variable corresponding to certain types
-    case ConstraintType::yI_xIString:
+    case ConstraintType::yIExclusive_xIString:
       // we only want to constrain one specific feature type
       std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
       constrainedFeatureTypes[54] = true;
       // parse the constraint
       xIString.clear();
-      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
+      learningInfo.constraints[i].GetFieldsOfConstraintType_yIExclusive_xIString(yI, xIString);
       xI = vocabEncoder.Encode(xIString);
       // fire positively constrained features
       x.clear();
@@ -771,6 +799,26 @@ void LatentCrfModel::WarmUp() {
 	for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
 	  lambda->UpdateParam(featureIter->first, -1000.0);
 	}   
+      }
+      break;
+    case ConstraintType::yI_xIString:
+      // we only want to constrain one specific feature type
+      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
+      constrainedFeatureTypes[54] = true;
+      // parse the constraint
+      xIString.clear();
+      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
+      xI = vocabEncoder.Encode(xIString);
+      // fire positively constrained features
+      x.clear();
+      x.push_back(xI);
+      yIM1_dummy = yI; // we don't really care
+      index = 0; // we don't really care
+      activeFeatures.clear();
+      lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+      // set appropriate weights to favor those parameters
+      for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+	lambda->UpdateParam(featureIter->first, 10.0);
       }
       break;
     default:
