@@ -81,14 +81,21 @@ class LogLinearParams {
   }
 
   // converts a map into an array.
-  void ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray) {
+  // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount,
+  // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount 
+  void ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0) {
     // init to 0
-    for(int i = 0; i < paramIndexes.size(); i++) {
-      valuesArray[i] = 0;
+    for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) {
+      valuesArray[i-constrainedFeaturesCount] = 0;
     }
     // set the active features
     for(map<string, double>::const_iterator valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) {
-      valuesArray[ paramIndexes[valuesMapIter->first] ] = valuesMapIter->second;
+      // skip constrained features
+      if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) {
+	continue;
+      }
+      // set the modified index in valuesArray
+      valuesArray[ paramIndexes[valuesMapIter->first]-constrainedFeaturesCount ] = valuesMapIter->second;
     }
   }
 
@@ -131,6 +138,8 @@ class LogLinearParams {
   // maps [srcTokenId][tgtTokenId] => forward logprob
   // maps [tgtTokenId][srcTokenId] => backward logprob
   const std::map< int, std::map< int, double > > &ibmModel1ForwardScores, &ibmModel1BackwardScores;
+
+  const int COUNT_OF_FEATURE_TYPES;
 };
 
 #endif

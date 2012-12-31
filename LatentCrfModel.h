@@ -136,6 +136,7 @@ class LatentCrfModel {
   LearningInfo learningInfo;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;
+  unsigned countOfConstrainedLambdaParameters;
 };
 
 #endif

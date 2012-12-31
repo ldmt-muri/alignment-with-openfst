@@ -9,15 +9,16 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
   srcTypes(srcTypes), 
   tgtTypes(tgtTypes), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
-  ibmModel1BackwardScores(ibmModel1BackwardLogProbs)
-{
+  ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
+  COUNT_OF_FEATURE_TYPES(67) {
 }
 
 LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
   srcTypes(types), 
   tgtTypes(types),
   ibmModel1ForwardScores(map<int, map<int, double> >()),
-  ibmModel1BackwardScores(map<int, map<int, double> >()) {
+  ibmModel1BackwardScores(map<int, map<int, double> >()),
+  COUNT_OF_FEATURE_TYPES(67) {
 }
 
 // if there's another parameter with the same ID already, do nothing
@@ -80,10 +81,10 @@ double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtTo
   return result;
 }
 
+// assumptions: activeFeatures may or may not be empty
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   std::map<string, double> &activeFeatures) {
-
   stringstream temp;
 
   const VocabDecoder &types = srcTypes;
@@ -323,6 +324,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   //    cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
   //    cerr << " srcSentLength=" << srcSentLength << " tgtSentLength=" << tgtSentLength << endl;
 
+  assert(activeFeatures.size() == 0);
   assert(srcToken != 0 && tgtToken != 0);
 
   stringstream temp;
@@ -466,7 +468,7 @@ void LogLinearParams::PersistParams(const string& outputFilename) {
 
 void LogLinearParams::PrintFirstNParams(unsigned n) {
   for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
-    cerr << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
+    cerr << paramsIter->first << " " << paramWeights[paramsIter->second] << " at " << paramsIter->second << endl;
   }
 }
 
@@ -504,6 +506,8 @@ void LogLinearParams::UpdateParams(const map<string, double> &gradient, const Op
 
 // override the member weights vector with this array
 void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
+  cerr << "##################" << endl;
+  cerr << "pointer to internal weights: " << paramWeights.data() << ". pointer to external weights: " << array << endl;
   assert(arrayLength == paramWeights.size());
   assert(paramWeights.size() == paramIndexes.size());
   for(int i = 0; i < arrayLength; i++) {

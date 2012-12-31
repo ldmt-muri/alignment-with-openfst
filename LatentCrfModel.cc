@@ -608,8 +608,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 								 const double step) {
   LatentCrfModel &model = LatentCrfModel::GetInstance();
   
-  // update the model parameters, temporarily, so that we can compute the derivative at the required values
-  model.lambda->UpdateParams(lambdasArray, lambdasCount);
+  // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
   // debug
   //  cerr << "lbfgs suggests the following lambda parameter weights" << endl;
@@ -674,7 +673,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //  LogLinearParams::PrintParams(derivativeWRTLambda);
 
   // write the gradient in the (hopefully) pre-allocated array 'gradient'
-  model.lambda->ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient);
+  model.lambda->ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient, model.countOfConstrainedLambdaParameters);
   // return the to-be-minimized objective function
   //  cerr << "Evaluate returning " << nlogLikelihood;
   //  cerr << ". step is " << step;
@@ -721,10 +720,72 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::WarmUp() {
-  UniformSampler uniform;
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "warming up..." << endl;
   }
+
+  // make sure no features are fired yet. 
+  assert(lambda->GetParamsCount() == 0);
+
+  // first, add constrained features here and set their weights by hand. those weights will not be optimized.
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "adding constrained lambda features..." << endl;
+  }
+  std::map<string, double> activeFeatures;
+  int yI, xI;
+  int yIM1_dummy, index; // we don't really care
+  vector<int> x;
+  string xIString;
+  vector<bool> constrainedFeatureTypes(lambda->COUNT_OF_FEATURE_TYPES, false);
+  for(int i = 0; i < learningInfo.constraints.size(); i++) {
+    switch(learningInfo.constraints[i].type) {
+      // constrains the latent variable corresponding to certain types
+    case ConstraintType::yI_xIString:
+      // we only want to constrain one specific feature type
+      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
+      constrainedFeatureTypes[54] = true;
+      // parse the constraint
+      xIString.clear();
+      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
+      xI = vocabEncoder.Encode(xIString);
+      // fire positively constrained features
+      x.clear();
+      x.push_back(xI);
+      yIM1_dummy = yI; // we don't really care
+      index = 0; // we don't really care
+      activeFeatures.clear();
+      lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+      // set appropriate weights to favor those parameters
+      for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+	lambda->UpdateParam(featureIter->first, 1.0);
+      }
+      // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
+      for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+	if(*yDomainIter == yI) {
+	  continue;
+	}
+	// fire the negatively constrained features
+	activeFeatures.clear();
+	lambda->FireFeatures(*yDomainIter, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+	// set appropriate weights to penalize those parameters
+	for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+	  lambda->UpdateParam(featureIter->first, -1000.0);
+	}   
+      }
+      break;
+    default:
+      assert(false);
+      break;
+    }
+  }
+  // take note of the number of constrained lambda parameters. use this to limit optimization to non-constrained params
+  countOfConstrainedLambdaParameters = lambda->GetParamsCount();
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "done adding constrainted lambda features. Count:" << lambda->GetParamsCount() << endl;
+  }
+
+  // then, add all remaining features warranted by the training set.
+  UniformSampler uniform;
   //  cerr << "lambda.GetParamsCount() = " << lambda.GetParamsCount() << endl;
   for(int sentId = 0; sentId < data.size(); sentId++) {
     //        cerr << "now processing sent# " << sentId << endl;
@@ -737,13 +798,13 @@ void LatentCrfModel::WarmUp() {
     ComputeF(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
     // add each feature fired on any sentence to the lambda parameters
     for(map<string, double>::const_iterator fIter = F.begin(); fIter != F.end(); fIter++) {
-      lambda->UpdateParam(fIter->first, uniform.Draw() - 0.5);
+      lambda->AddParam(fIter->first, uniform.Draw() - 0.5);
     }
   }
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "lambdas initialized to: " << endl;
     lambda->PrintParams();
-    cerr << "warmup done." << endl;
+    cerr << "warmup done. Lambda params count:" << lambda->GetParamsCount() << endl;
   }
 }
 
@@ -862,8 +923,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
     for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
 
       // populate lambdasArray and lambasArrayLength
-      lambdasArray = lambda->GetParamWeightsArray();
-      lambdasArrayLength = lambda->GetParamsCount();
+      // don't optimize all parameters. only optimize non-constrained ones
+      lambdasArray = lambda->GetParamWeightsArray() + countOfConstrainedLambdaParameters;
+      lambdasArrayLength = lambda->GetParamsCount() - countOfConstrainedLambdaParameters;
+      
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {

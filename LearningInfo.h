@@ -85,6 +85,57 @@ struct OptMethod {
   }
 }; 
 
+namespace ConstraintType {
+  enum ConstraintType {yI_xIString};
+}
+
+struct Constraint {
+  void *field1, *field2;
+  ConstraintType::ConstraintType type;
+
+  Constraint() {
+    field1 = 0;
+    field2 = 0;
+  }
+
+  ~Constraint() {
+    if(field1 != 0) {
+      switch(type) {
+      case ConstraintType::yI_xIString:
+	delete (int *)field1;
+	break;
+      default:
+	assert(false);
+	break;
+      }
+    }
+    if(field2 != 0) {
+      switch(type) {
+      case ConstraintType::yI_xIString:
+	delete (string *)field2;
+	break;
+      default:
+	assert(false);
+	break;
+      }
+    }
+  }
+  
+  void SetConstraintOfType_yI_xIString(int yI, const std::string &xI) {
+    type = ConstraintType::yI_xIString;
+    field1 = new int[1];
+    *((int*)field1) = yI;
+    field2 = new std::string();
+    *((string*)field2) = xI;
+  }
+  
+  void GetFieldsOfConstraintType_yI_xIString(int &yI, std::string &xI) {
+    assert(type == ConstraintType::yI_xIString);
+    yI = *(int*)field1;
+    xI = *(string*)field2;
+  }
+};
+
 class LearningInfo {
  public:
   LearningInfo() {
@@ -206,6 +257,9 @@ class LearningInfo {
   // 3 = sentence level debug info. 
   // 4 = token level debug info.
   unsigned debugLevel;
+
+  // this field can be used to communicate to the underlying model that certain combinations are required/forbidden
+  std::vector<Constraint> constraints;
 };
 
 
