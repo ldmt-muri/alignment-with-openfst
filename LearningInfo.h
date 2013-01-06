@@ -73,6 +73,8 @@ struct OptMethod {
   // regularization details
   Regularizer::Regularizer regularizer;
   float regularizationStrength;
+  // move-away from previous weights penalty
+  float moveAwayPenalty;
 
   OptMethod() {
     stochastic = false;
@@ -82,6 +84,7 @@ struct OptMethod {
     regularizer = Regularizer::NONE;
     regularizationStrength = 1000;
     subOptMethod = 0;
+    moveAwayPenalty = 1.0;
   }
 }; 
 
@@ -96,6 +99,24 @@ namespace ConstraintType {
 struct Constraint {
   void *field1, *field2;
   ConstraintType::ConstraintType type;
+
+  Constraint(const Constraint &c) {
+    int yI;
+    std::string xI;
+    switch(c.type) {
+    case ConstraintType::yIExclusive_xIString:
+      c.GetFieldsOfConstraintType_yIExclusive_xIString(yI, xI);
+      this->SetConstraintOfType_yIExclusive_xIString(yI, xI);
+      break;
+    case ConstraintType::yI_xIString:
+      c.GetFieldsOfConstraintType_yI_xIString(yI, xI);
+      this->SetConstraintOfType_yI_xIString(yI, xI);
+      break;
+    default:
+      assert(false);
+      break;
+    }
+  }
 
   Constraint() {
     field1 = 0;
@@ -135,7 +156,7 @@ struct Constraint {
     *((string*)field2) = xI;
   }
   
-  void GetFieldsOfConstraintType_yIExclusive_xIString(int &yI, std::string &xI) {
+  void GetFieldsOfConstraintType_yIExclusive_xIString(int &yI, std::string &xI) const {
     assert(type == ConstraintType::yIExclusive_xIString);
     yI = *(int*)field1;
     xI = *(string*)field2;
@@ -149,7 +170,7 @@ struct Constraint {
     *((string*)field2) = xI;
   }
   
-  void GetFieldsOfConstraintType_yI_xIString(int &yI, std::string &xI) {
+  void GetFieldsOfConstraintType_yI_xIString(int &yI, std::string &xI) const {
     assert(type == ConstraintType::yI_xIString);
     yI = *(int*)field1;
     xI = *(string*)field2;

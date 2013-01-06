@@ -11,6 +11,7 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
   ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
   COUNT_OF_FEATURE_TYPES(67) {
+  learningInfo = 0;
 }
 
 LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
@@ -19,20 +20,40 @@ LogLinearParams::LogLinearParams(const VocabDecoder &types) :
   ibmModel1ForwardScores(map<int, map<int, double> >()),
   ibmModel1BackwardScores(map<int, map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(67) {
+  learningInfo = 0;
+}
+
+void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
+  this->learningInfo = &learningInfo;
 }
 
 // if there's another parameter with the same ID already, do nothing
 bool LogLinearParams::AddParam(string paramId, double paramWeight) {
+  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "executing AddParam(" << paramId << "," << paramWeight << "); ";
+  }
+  bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
+    if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "paramId is new.";
+    }
     // check class's integrity
     assert(paramIndexes.size() == paramWeights.size());
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramWeights.push_back(paramWeight);
-    return true;
+    oldParamWeights.push_back(0.0);
+    returnValue = true;
   } else {
-    return false;
+    if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "paramId already exists.";
+    }
+    returnValue = false;
+  }  
+  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "returning " << returnValue << endl;
   }
+  return returnValue;
 }
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights

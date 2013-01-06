@@ -24,6 +24,9 @@ class LogLinearParams {
   // for the latent CRF model
   LogLinearParams(const VocabDecoder &types);
   
+  // set learning info
+  void SetLearningInfo(const LearningInfo &learningInfo);
+
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
   // note: pos here is short for position
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
@@ -64,10 +67,30 @@ class LogLinearParams {
     }
   }
 
+  // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
+  void UpdateOldParam(const std::string paramId) {
+    if(!AddParam(paramId)) {
+      oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
+    }
+  }
+
+  // copies the weight of all features from paramWeights vector to oldParamWeights vector
+  void UpdateOldParams() {
+    for(int i = 0; i < paramWeights.size(); i++) {
+      oldParamWeights[i] = paramWeights[i];
+    }
+  }  
+
   // returns the current weight of this param (adds the parameter if necessary)
   double GetParam(const std::string paramId) {
     AddParam(paramId);
     return paramWeights[paramIndexes[paramId]];
+  }
+  
+  // returns the difference between new and old weights of a parameter, given its string ID
+  double GetParamNewMinusOld(const std::string paramId) {
+    AddParam(paramId);
+    return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
   }
 
   int GetParamsCount() {
@@ -78,6 +101,11 @@ class LogLinearParams {
   // returns a pointer to the array of parameter weights
   double* GetParamWeightsArray() {
     return paramWeights.data();
+  }
+
+  // returns a pointer to the array of old parameter weights
+  double* GetOldParamWeightsArray() {
+    return oldParamWeights.data();
   }
 
   // converts a map into an array.
@@ -130,6 +158,7 @@ class LogLinearParams {
   
   std::map< std::string, int > paramIndexes;
   std::vector< double > paramWeights;
+  std::vector< double > oldParamWeights;
 
   // maps a word id into a string
   const VocabDecoder &srcTypes, &tgtTypes;
@@ -140,6 +169,8 @@ class LogLinearParams {
   const std::map< int, std::map< int, double > > &ibmModel1ForwardScores, &ibmModel1BackwardScores;
 
   const int COUNT_OF_FEATURE_TYPES;
+
+  const LearningInfo *learningInfo;
 };
 
 #endif

@@ -39,6 +39,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->textFilename = textFilename;
   this->outputPrefix = outputPrefix;
   this->learningInfo = learningInfo;
+  this->lambda->SetLearningInfo(learningInfo);
 
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = 2;
@@ -100,6 +101,10 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
 
   // lambdas are initialized to all zeros
   assert(lambda->GetParamsCount() == 0);
+
+  // hand-crafted weights for constrained features
+  REWARD_FOR_CONSTRAINED_FEATURES = 10.0;
+  PENALTY_FOR_CONSTRAINED_FEATURES = -10.0;
 }
 
 // compute the partition function Z_\lambda(x)
@@ -690,10 +695,25 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda() for this sentence took " << (float) (clock() - timestamp2) / CLOCKS_PER_SEC << " sec." << endl;
     }
   }
-  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-    cerr << "-eval";
+  // move-away penalty is applied for all features. however, features that didn't fire in
+  // this minibatch have a penalty of zero (and penalty derivative of zero). 
+  // so we only need to update the derivative and likelihood with the penalty 
+  // applied to features in derivativeWRTLambda (i.e. those that fired in this minibatch)
+  double totalMoveAwayPenalty = 0;
+  for(map<string, double>::iterator fIter = derivativeWRTLambda.begin(); fIter != derivativeWRTLambda.end(); fIter++) {
+    // get the difference
+    double newMinusOld = model.lambda->GetParamNewMinusOld(fIter->first);
+    // update the derivative for this feature
+    fIter->second += 2 * newMinusOld;
+    // update the likelihood
+    nlogLikelihood += newMinusOld * newMinusOld;
+    // update totalMoveAwayPenalty
+    totalMoveAwayPenalty += newMinusOld * newMinusOld;
   }
   // debug
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "-eval(" << nlogLikelihood << "," << totalMoveAwayPenalty << ") ";
+  }
   //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
   //  LogLinearParams::PrintParams(derivativeWRTLambda);
 
@@ -742,6 +762,14 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     cerr << ",\txnorm = " << xnorm;
     cerr << ",\tgnorm = " << gnorm;
     cerr << ",\tstep = " << step << endl;
+    cerr << "updating the old lambda params (necessary for applying the moveAwayPenalty) ..." << endl;
+  }
+  
+  // update the old lambdas
+  model.lambda->UpdateOldParams();
+
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "done" << endl;
   }
   return 0;
 }
@@ -785,7 +813,7 @@ void LatentCrfModel::WarmUp() {
       lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
       // set appropriate weights to favor those parameters
       for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
-	lambda->UpdateParam(featureIter->first, 1.0);
+	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
       }
       // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
       for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
@@ -797,7 +825,7 @@ void LatentCrfModel::WarmUp() {
 	lambda->FireFeatures(*yDomainIter, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
 	// set appropriate weights to penalize those parameters
 	for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
-	  lambda->UpdateParam(featureIter->first, -1000.0);
+	  lambda->UpdateParam(featureIter->first, PENALTY_FOR_CONSTRAINED_FEATURES);
 	}   
       }
       break;
@@ -818,7 +846,7 @@ void LatentCrfModel::WarmUp() {
       lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
       // set appropriate weights to favor those parameters
       for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
-	lambda->UpdateParam(featureIter->first, 10.0);
+	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
       }
       break;
     default:
@@ -914,7 +942,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	float unnormalizedProbz_giveny_ = zIter->second;
 	unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
       }
-      assert(abs(mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) < 0.001);
+      assert(abs(mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) < 0.1);
       //      cerr << "mleMarginal[" << y_ << "] = " << mleMarginals[y_] << endl;
       // normalize the mle estimates to sum to one for each context
       for(map<int, float>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
