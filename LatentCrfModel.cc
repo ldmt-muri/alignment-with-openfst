@@ -880,8 +880,6 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 
   // for each sentence in this mini batch, aggregate the nloglikelihood and its derivatives across sentences
   double nlogLikelihood = 0;
-  bool useSparseVectors = model.learningInfo.useSparseVectors;
-  map<string, double> derivativeWRTLambda;
   FastSparseVector<double> derivativeWRTLambdaSparseVector;
   int index = *((int*)ptrFromSentId), from, to;
   if(index == -1) {
@@ -910,61 +908,46 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     model.BuildThetaLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     model.BuildLambdaFst(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
     // compute the D map for this sentence
-    map<string, double> D;
     FastSparseVector<double> DSparseVector;
-    if(useSparseVectors) {
-      model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
-    } else {
-      model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, D);
-    }
+    model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
     // compute the C value for this sentence
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+    if(isnan(nLogC)) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: nLogC = " << nLogC << ". skipping this sentence altogether!" << endl;
+      }
+      continue;
+    } 
     // update the loglikelihood
     nlogLikelihood += nLogC;
     // add D/C to the gradient
-    if(useSparseVectors) {
-      for(FastSparseVector<double>::iterator dIter = DSparseVector.begin(); dIter != DSparseVector.end(); ++dIter) {
-	double d = dIter->second;
-	double nLogd = MultinomialParams::nLog(d);
-	double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-	derivativeWRTLambdaSparseVector[dIter->first] -= dOverC;
-      }
-    } else {
-      for(map<string, double>::const_iterator dIter = D.begin(); dIter != D.end(); dIter++) {
-	double d = dIter->second;
-	double nLogd = MultinomialParams::nLog(d);
-	double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-	derivativeWRTLambda[dIter->first] -= dOverC;
-      }
+    for(FastSparseVector<double>::iterator dIter = DSparseVector.begin(); dIter != DSparseVector.end(); ++dIter) {
+      double d = dIter->second;
+      double nLogd = MultinomialParams::nLog(d);
+      double dOverC = MultinomialParams::nExp(nLogd - nLogC);
+      derivativeWRTLambdaSparseVector[dIter->first] -= dOverC;
     }
     // compute the F map fro this sentence
-    map<string, double> F;
     FastSparseVector<double> FSparseVector;
-    if(useSparseVectors) {
-      model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
-    } else {
-      model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
-    }
+    model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
     // compute the Z value for this sentence
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     // update the log likelihood
+    if(isnan(nLogZ)) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: nLogZ = " << nLogZ << ". skipping this sentence altogether!" << endl;
+      }
+      nlogLikelihood -= nLogC;
+      continue;
+    } 
     nlogLikelihood -= nLogZ;
     //      cerr << "nloglikelihood -= " << nLogZ << ", |x| = " << data[sentId].size() << endl;
     // subtract F/Z from the gradient
-    if(useSparseVectors) {
-      for(FastSparseVector<double>::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
-	double f = fIter->second;
-	double nLogf = MultinomialParams::nLog(f);
-	double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-	derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
-      }
-    } else {
-      for(map<string, double>::const_iterator fIter = F.begin(); fIter != F.end(); fIter++) {
-	double f = fIter->second;
-	double nLogf = MultinomialParams::nLog(f);
-	double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-	derivativeWRTLambda[fIter->first] += fOverZ;
-      }
+    for(FastSparseVector<double>::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
+      double f = fIter->second;
+      double nLogf = MultinomialParams::nLog(f);
+      double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
+      derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
     }
     if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << ".";
@@ -976,27 +959,16 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   // so we only need to update the derivative and likelihood with the penalty 
   // applied to features in derivativeWRTLambda (i.e. those that fired in this minibatch)
   double totalMoveAwayPenalty = 0;
-  if(useSparseVectors) {
+  if(model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty != 0.0) {
     for(FastSparseVector<double>::iterator fIter = derivativeWRTLambdaSparseVector.begin(); fIter != derivativeWRTLambdaSparseVector.end(); ++fIter) {
       // get the difference
       double newMinusOld = model.lambda->GetParamNewMinusOldWeight(fIter->first);
       // update the derivative for this feature
-      fIter->second += 2.0 * newMinusOld;
+      fIter->second += 2.0 * model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld;
       // update the likelihood
-      nlogLikelihood += newMinusOld * newMinusOld;
+      nlogLikelihood += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
       // update totalMoveAwayPenalty
-      totalMoveAwayPenalty += newMinusOld * newMinusOld;
-    }
-  } else {
-    for(map<string, double>::iterator fIter = derivativeWRTLambda.begin(); fIter != derivativeWRTLambda.end(); fIter++) {
-      // get the difference
-      double newMinusOld = model.lambda->GetParamNewMinusOldWeight(fIter->first);
-      // update the derivative for this feature
-      fIter->second += 2.0 * newMinusOld;
-      // update the likelihood
-      nlogLikelihood += newMinusOld * newMinusOld;
-      // update totalMoveAwayPenalty
-      totalMoveAwayPenalty += newMinusOld * newMinusOld;
+      totalMoveAwayPenalty += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
     }
   }
   // debug
@@ -1007,24 +979,20 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //  LogLinearParams::PrintParams(derivativeWRTLambda);
 
   // write the gradient in the (hopefully) pre-allocated array 'gradient'
-  if(useSparseVectors) {
-    // init gradient to zero
-    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-      gradient[displacedIndex] = 0;
+  // init gradient to zero
+  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+    gradient[displacedIndex] = 0;
+  }
+  // for each active feature in this mini batch
+  for(FastSparseVector<double>::iterator derivativeIter = derivativeWRTLambdaSparseVector.begin(); 
+      derivativeIter != derivativeWRTLambdaSparseVector.end(); 
+      ++derivativeIter) {
+    // skip constrained features
+    if(derivativeIter->first < model.countOfConstrainedLambdaParameters) {
+      continue;
     }
-    // for each active feature in this mini batch
-    for(FastSparseVector<double>::iterator derivativeIter = derivativeWRTLambdaSparseVector.begin(); 
-	derivativeIter != derivativeWRTLambdaSparseVector.end(); 
-	++derivativeIter) {
-      // skip constrained features
-      if(derivativeIter->first < model.countOfConstrainedLambdaParameters) {
-	continue;
-      }
-      // set active unconstrained feature's gradient
-      gradient[derivativeIter->first - model.countOfConstrainedLambdaParameters] = derivativeIter->second;
-    }
-  } else {
-    model.lambda->ConvertFeatureMapToFeatureArray(derivativeWRTLambda, gradient, model.countOfConstrainedLambdaParameters);
+    // set active unconstrained feature's gradient
+    gradient[derivativeIter->first - model.countOfConstrainedLambdaParameters] = derivativeIter->second;
   }
   // return the to-be-minimized objective function
   //  cerr << "Evaluate returning " << nlogLikelihood;

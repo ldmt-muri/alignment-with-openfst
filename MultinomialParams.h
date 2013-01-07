@@ -23,6 +23,9 @@ namespace MultinomialParams {
   static const int LOG_ZERO = 30;
 
   inline float nLog(double prob) {
+    if(prob <= 0) {
+      return LOG_ZERO;
+    }
     return -1.0 * log(prob);
   }
   
