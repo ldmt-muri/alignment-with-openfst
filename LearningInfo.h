@@ -200,7 +200,7 @@ class LearningInfo {
   }
 
   bool IsModelConverged() {
-    assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping);
+    assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping || useMinLikelihoodRelativeDiff);
     
     // logging
     if(useMaxIterationsCount) {
@@ -208,7 +208,7 @@ class LearningInfo {
     }
     if(useMinLikelihoodDiff && 
        iterationsCount > 1) {
-      cerr << "likelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
+      cerr << "loglikelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
 					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl << endl;
     }
     if(useEarlyStopping &&
@@ -216,6 +216,15 @@ class LearningInfo {
       cerr << "validationLikelihood[" << iterationsCount-2 << "] = " << validationLogLikelihood[iterationsCount-2] << endl;
       cerr << "validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
       cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl << endl;
+    }
+
+    double absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
+    double relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
+    if(useMinLikelihoodRelativeDiff &&
+       iterationsCount > 1) {
+      double absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
+      double relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
+      cerr << "loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl << endl;
     }
     
     // check for convergnece conditions
@@ -234,7 +243,11 @@ class LearningInfo {
        validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2] > 0) {
       return true;
     }
-    
+    if(useMinLikelihoodRelativeDiff && 
+       iterationsCount > 1 && 
+       minLikelihoodRelativeDiff > relativeDiff) {
+      return true;
+    }
     // none of the convergence conditions apply!
     return false;
   }
@@ -251,6 +264,10 @@ class LearningInfo {
   // by early stopping, i mean assume convergence as soon as the likelihood of a validation set cease to increase
   bool useEarlyStopping;
   int trainToDevDataSize;
+
+  // criteria 4
+  bool useMinLikelihoodRelativeDiff;
+  float minLikelihoodRelativeDiff;
 
   // optimization method
   OptMethod optimizationMethod;

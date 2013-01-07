@@ -30,6 +30,8 @@ int main(int argc, char **argv) {
   learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.minLikelihoodDiff = 10;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
+  learningInfo.minLikelihoodRelativeDiff = 0.001;
   learningInfo.useSparseVectors = true;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
