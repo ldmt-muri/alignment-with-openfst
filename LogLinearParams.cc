@@ -12,6 +12,7 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
   ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
   COUNT_OF_FEATURE_TYPES(67) {
   learningInfo = 0;
+  gaussianSampler = new GaussianSampler(0.0, 0.01);
 }
 
 LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
@@ -20,11 +21,20 @@ LogLinearParams::LogLinearParams(const VocabDecoder &types) :
   ibmModel1ForwardScores(map<int, map<int, double> >()),
   ibmModel1BackwardScores(map<int, map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(67) {
-  learningInfo = 0;
+  gaussianSampler = new GaussianSampler(0.0, 0.01);
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
+}
+
+
+// initializes the parameter weight by drawing from a gaussian
+bool LogLinearParams::AddParam(string paramId) {
+  // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
+  double paramWeight = gaussianSampler->Draw();
+  // add param
+  return AddParam(paramId, paramWeight);
 }
 
 // if there's another parameter with the same ID already, do nothing

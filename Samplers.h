@@ -21,6 +21,31 @@ struct UniformSampler {
   }
 };
 
+// an approximation of gaussian that generates data in the range [-width/2, +width/2]
+struct GaussianSampler {
+  UniformSampler uniformSampler_;
+  double mean_, deviation_;
+  const unsigned width_;
+
+GaussianSampler(double mean=0.0, double deviation=1.0) : width_(12) {
+    mean_ = mean;
+    deviation_ = deviation;
+  }
+
+  double Draw() const {
+    // generate an Irwin-Hall sample
+    double sample = 0;
+    for(int i = 0; i < width_; i++) {
+      sample += uniformSampler_.Draw();
+    }
+    // adjust the range in order to approximate standard gaussian
+    sample -= 0.5 * width_;
+    // scale the specified mean/deviation
+    sample = mean_ + sample * deviation_;
+    return sample;
+  }
+};
+
 // dumb multinomial sampler with range {0,...,probs.size()-1}
 // note: the probabilities need not be normalized, but none of them is allowed to be zero (TODO: allow zeros)
 struct MultinomialSampler {

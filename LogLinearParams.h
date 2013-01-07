@@ -12,6 +12,7 @@
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
 #include "cdec-utils/fast_sparse_vector.h"
+#include "Samplers.h"
 
 class LogLinearParams {
  public:
@@ -43,8 +44,12 @@ class LogLinearParams {
 			   const std::vector<bool> &enabledFeatureTypes, 
 			   FastSparseVector<double> &activeFeatures);
 
+  // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
+  inline bool AddParam(std::string paramId);
+
   // if the paramId does not exist, add it. otherwise, do nothing. 
-  inline bool AddParam(std::string paramId, double paramWeight=0.0);  
+  inline bool AddParam(std::string paramId, double paramWeight);
+
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
   double DotProduct(const std::map<std::string, double>& values) {
     double dotProduct = 0;
@@ -226,6 +231,8 @@ class LogLinearParams {
   const int COUNT_OF_FEATURE_TYPES;
 
   const LearningInfo *learningInfo;
+
+  const GaussianSampler *gaussianSampler;
 };
 
 #endif

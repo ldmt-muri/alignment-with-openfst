@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 5;
+  learningInfo.maxIterationsCount = 50;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.minLikelihoodDiff = 10;
   learningInfo.useSparseVectors = true;
@@ -38,14 +38,15 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 5;
+  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
-  learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 10.0;
+  learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
 
   // add constraints
   learningInfo.constraints.clear();
+  /*
   Constraint constraint;
   constraint.SetConstraintOfType_yI_xIString(3, "neighbour");
   learningInfo.constraints.push_back(constraint);
@@ -151,7 +152,7 @@ int main(int argc, char **argv) {
   learningInfo.constraints.push_back(constraint);
   constraint.SetConstraintOfType_yIExclusive_xIString(13, "!");
   learningInfo.constraints.push_back(constraint);
-
+  */
   cerr << "done." << endl;
 
   // train the model
