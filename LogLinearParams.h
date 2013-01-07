@@ -31,75 +31,104 @@ class LogLinearParams {
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
   // note: pos here is short for position
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
-		    int srcPos, int prevSrcPos, int tgtPos, 
-		    int srcSentLength, int tgtSentLength, 
-		    const std::vector<bool>& enabledFeatureTypes, std::map<std::string, double>& activeFeatures);
-
-  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
-		    const std::vector<bool> &enabledFeatureTypes, 
-		    std::map<string, double> &activeFeatures);
-
-  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
-		    const std::vector<bool> &enabledFeatureTypes, 
-		    FastSparseVector<double> &activeFeatures);
-    
-  // if the paramId does not exist, add it. otherwise, do nothing. 
-  bool AddParam(std::string paramId, double paramWeight=0.0);
-
-  // compute dot product between a sparse vector (passed) represented as a map, and the feature weights (member)
-  double DotProduct(const std::map<string, double>& values);
+			   int srcPos, int prevSrcPos, int tgtPos, 
+			   int srcSentLength, int tgtSentLength, 
+			   const std::vector<bool>& enabledFeatureTypes, std::map<std::string, double>& activeFeatures);
   
-  // compute dot product of two vectors 
-  double DotProduct(const std::vector<double>& values, const std::vector<double>& weights);
+  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+			   const std::vector<bool> &enabledFeatureTypes, 
+			   std::map<string, double> &activeFeatures);
+  
+  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+			   const std::vector<bool> &enabledFeatureTypes, 
+			   FastSparseVector<double> &activeFeatures);
 
-  // compute dot product of feature values (passed), and feature weights (member)
-  double DotProduct(const std::vector<double>& values);
+  // if the paramId does not exist, add it. otherwise, do nothing. 
+  inline bool AddParam(std::string paramId, double paramWeight=0.0);  
+  // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
+  double DotProduct(const std::map<std::string, double>& values) {
+    double dotProduct = 0;
+    // for each active feature
+    for(std::map<std::string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
+      // make sure there's a corresponding feature in paramIndexes and paramWeights
+      AddParam(valuesIter->first);
+      // then update the dot product
+      dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
+    }
+    return dotProduct;
+  }
 
+  // compute dot product of two vectors
+  // assumptions:
+  // -both vectors are of the same size
+  inline double DotProduct(const std::vector<double>& values, const std::vector<double>& weights) {
+    assert(values.size() == weights.size());
+    double dotProduct = 0;
+    for(int i = 0; i < values.size(); i++) {
+      dotProduct += values[i] * weights[i];
+    }
+    return dotProduct;
+  }
+  
+  // compute the dot product between the values vector (passed) and the paramWeights vector (member)
+  // assumptions:
+  // - values and paramWeights are both of the same size
+  inline double DotProduct(const std::vector<double>& values) {
+    return DotProduct(values, paramWeights);
+  }
+  
   // given description of an arc in the alignment transducer, compute the local arc probability
-  double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, int srcSentLength, int tgtSentLength,
-		       const std::vector<bool>& enabledFeatureTypes);
-
-  // updates the model parameters given the gradient and an optimization method
+  inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
+					 int srcSentLength, int tgtSentLength, 
+					 const std::vector<bool>& enabledFeatureTypes) {
+    std::map<std::string, double> activeFeatures;
+    FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
+    // compute log prob
+    double result = DotProduct(activeFeatures);    
+    return result;
+  }
+  
+ // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const std::map<std::string, double> &gradient, const OptMethod &optMethod);
   
   // override the member weights vector with this array
   void UpdateParams(const double* array, const int arrayLength);
-
+  
   // update a single parameter's value (adds the parameter if necessary)
-  void UpdateParam(const std::string paramId, const double newValue) {
+  inline void UpdateParam(const std::string paramId, const double newValue) {
     if(!AddParam(paramId, newValue)) {
       paramWeights[paramIndexes[paramId]] = newValue;
     }
   }
 
   // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
-  void UpdateOldParamWeight(const std::string paramId) {
+  inline void UpdateOldParamWeight(const std::string paramId) {
     if(!AddParam(paramId)) {
       oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
     }
   }
 
   // copies the weight of all features from paramWeights vector to oldParamWeights vector
-  void UpdateOldParamWeights() {
+  inline void UpdateOldParamWeights() {
     for(int i = 0; i < paramWeights.size(); i++) {
       oldParamWeights[i] = paramWeights[i];
     }
   }  
 
   // returns the int index of the parameter in the underlying array
-  unsigned GetParamIndex(const std::string paramId) {
+  inline unsigned GetParamIndex(const std::string paramId) {
     AddParam(paramId);
     return paramIndexes[paramId];
   }
 
   // returns the string identifier of the parameter given its int index in the weights array
-  std::string GetParamId(const unsigned paramIndex) {
+  inline std::string GetParamId(const unsigned paramIndex) {
     assert(paramIndex < paramWeights.size());
     return paramIds[paramIndex];
   }
 
   // returns the current weight of this param (adds the parameter if necessary)
-  double GetParamWeight(const std::string paramId) {
+  inline double GetParamWeight(const std::string paramId) {
     AddParam(paramId);
     return paramWeights[paramIndexes[paramId]];
   }
@@ -107,29 +136,29 @@ class LogLinearParams {
   // returns the difference between new and old weights of a parameter, given its string ID. 
   // assumptions:
   // - paramId already exists
-  double GetParamNewMinusOldWeight(const std::string paramId) {
+  inline double GetParamNewMinusOldWeight(const std::string paramId) {
     return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
   }
 
   // returns the difference between new and old weights of a parameter, given its vector index
   // assumptions:
   // - paramIndex is a valid index
-  double GetParamNewMinusOldWeight(const unsigned paramIndex) {
+  inline double GetParamNewMinusOldWeight(const unsigned paramIndex) {
     return paramWeights[paramIndex] - oldParamWeights[paramIndex];
   }
 
-  int GetParamsCount() {
+  inline int GetParamsCount() {
     assert(paramWeights.size() == paramIndexes.size());
     return paramWeights.size();
   }
 
   // returns a pointer to the array of parameter weights
-  double* GetParamWeightsArray() {
+  inline double* GetParamWeightsArray() {
     return paramWeights.data();
   }
 
   // returns a pointer to the array of old parameter weights
-  double* GetOldParamWeightsArray() {
+  inline double* GetOldParamWeightsArray() {
     return oldParamWeights.data();
   }
 

@@ -60,52 +60,6 @@ bool LogLinearParams::AddParam(string paramId, double paramWeight) {
   return returnValue;
 }
 
-// side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-double LogLinearParams::DotProduct(const map<string, double>& values) {
-  double dotProduct = 0;
-  // for each active feature
-  for(map<string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
-    // make sure there's a corresponding feature in paramIndexes and paramWeights
-    AddParam(valuesIter->first);
-    // then update the dot product
-    dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
-  }
-  return dotProduct;
-}
-
-
-// assumptions:
-// -both vectors are of the same size
-double LogLinearParams::DotProduct(const vector<double>& values, const vector<double>& weights) {
-  assert(values.size() == weights.size());
-  double dotProduct = 0;
-  for(int i = 0; i < values.size(); i++) {
-    dotProduct += values[i] * weights[i];
-  }
-  return dotProduct;
-}
-
-// compute the dot product between the values vector (passed) and the paramWeights vector (member)
-// assumptions:
-// - values and paramWeights are both of the same size
-double LogLinearParams::DotProduct(const vector<double>& values) {
-  return DotProduct(values, paramWeights);
-}
-
-double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
-				      int srcSentLength, int tgtSentLength, 
-				      const std::vector<bool>& enabledFeatureTypes) {
-
-  map<string, double> activeFeatures;
-  FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
-  // compute log prob
-  double result = DotProduct(activeFeatures);
-  
-  //  cerr << "RESULT=" << result << endl << endl;
-
-  return result;
-}
-
 // assumptions: activeFeatures may or may not be empty
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 

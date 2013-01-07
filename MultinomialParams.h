@@ -22,9 +22,13 @@ namespace MultinomialParams {
 
   static const int LOG_ZERO = 30;
 
-  float nLog(double prob);
-
-  double nExp(float exponent);
+  inline float nLog(double prob) {
+    return -1.0 * log(prob);
+  }
+  
+  inline double nExp(float exponent) {
+    return exp(-1.0 * exponent);
+  }
 
   // refactor variable names here (e.g. translations)
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s

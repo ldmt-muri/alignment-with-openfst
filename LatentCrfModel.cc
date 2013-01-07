@@ -346,10 +346,10 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 // - fst is populated using BuildThetaLambdaFst()
 // - DXZk is cleared
 void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z, 
-			   const VectorFst<LogArc> &fst,
-			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			   map<string, double> &DXZk) {
-
+			      const VectorFst<LogArc> &fst,
+			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+			      map<string, double> &DXZk) {
+  
   clock_t timestamp = clock();
 
   // enforce assumptions

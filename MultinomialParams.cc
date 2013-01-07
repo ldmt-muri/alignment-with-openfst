@@ -2,14 +2,6 @@
 
 using namespace MultinomialParams;
 
-float MultinomialParams::nLog(double prob) {
-    return -1.0 * log(prob);
-  }
-
-double MultinomialParams::nExp(float exponent) {
-    return exp(-1.0 * exponent);
-  }
-
   // refactor variable names here (e.g. translations)
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
 void MultinomialParams::NormalizeParams(ConditionalMultinomialParam& params) {

@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
-  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
+  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
