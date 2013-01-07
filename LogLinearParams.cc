@@ -39,10 +39,14 @@ bool LogLinearParams::AddParam(string paramId, double paramWeight) {
     }
     // check class's integrity
     assert(paramIndexes.size() == paramWeights.size());
+    assert(paramIndexes.size() == oldParamWeights.size());
+    assert(paramIndexes.size() == paramIds.size());
+    // do the work
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramWeights.push_back(paramWeight);
     oldParamWeights.push_back(0.0);
+    paramIds.push_back(paramId);
     returnValue = true;
   } else {
     if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
@@ -106,6 +110,21 @@ double LogLinearParams::ComputeLogProb(int srcToken, int prevSrcToken, int tgtTo
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   std::map<string, double> &activeFeatures) {
+  FastSparseVector<double> f;
+  FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, f);
+  for(FastSparseVector<double>::iterator fIter = f.begin(); fIter != f.end(); ++fIter) {
+    activeFeatures[GetParamId(fIter->first)] = fIter->second;
+  }
+}
+
+// TODO: potential bug: make sure that:
+// - it's OK to overwrite values in the activeFeatures vector below
+// - when we need to collect features fired on one transition, we clear the vector before calling this method 
+// assumptions: 
+// - activeFeatures may or may not be empty
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+				   const std::vector<bool> &enabledFeatureTypes, 
+				   FastSparseVector<double> &activeFeatures) {
   stringstream temp;
 
   const VocabDecoder &types = srcTypes;
@@ -130,7 +149,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   if(enabledFeatureTypes.size() > 51 && enabledFeatureTypes[51]) {
     temp.str("");
     temp << "F51:" << yIM1 << ":" << yI;
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F52: yI-xIM2 pair
@@ -138,7 +158,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp.str("");
     int xIM2 = i-2 >= 0? x[i-2] : -1;
     temp << "F52:" << yI << ":" << xIM2String;
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F53: yI-xIM1 pair
@@ -146,14 +167,16 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp.str("");
     int xIM1 = i-1 >= 0? x[i-1] : -1;
     temp << "F53:" << yI << ":" << xIM1String;
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F54: yI-xI pair
   if(enabledFeatureTypes.size() > 54 && enabledFeatureTypes[54]) {
     temp.str("");
     temp << "F54:" << yI << ":" << xIString;
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
   
   // F55: yI-xIP1 pair
@@ -161,15 +184,17 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp.str("");
     int xIP1 = i+1 < x.size()? x[i+1] : -1;
     temp << "F55:" << yI << ":" << xIP1String;
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F56: yI-xIP2 pair
   if(enabledFeatureTypes.size() > 56 && enabledFeatureTypes[56]) {
     temp.str("");
     int xIP2 = i+2 < x.size()? x[i+2] : -1; 
-   temp << "F56:" << yI << ":" << xIP2String;
-    activeFeatures[temp.str()] = 1.0;
+    temp << "F56:" << yI << ":" << xIP2String;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F57: yI-i pair
@@ -177,7 +202,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(i < 2) {
       temp.str("");
       temp << "F57:" << yI << ":" << i;
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -191,12 +217,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIStringSize > 1) {
       temp.str("");
       temp << "F58:" << yI << ":" << xIString[0] << xIString[1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIStringSize > 2) {
       temp.str("");
       temp << "F58:" << yI << ":" << xIString[0] << xIString[1] << xIString[2];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -210,12 +238,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIStringSize > 1) {
       temp.str("");
       temp << "F59:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIStringSize > 2) {
       temp.str("");
       temp << "F59:" << yI << ":" << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -229,12 +259,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIP1StringSize > 1 && i+1 < x.size()) {
       temp.str("");
       temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIP1StringSize > 2 && i+1 < x.size()) {
       temp.str("");
       temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1] << xIP1String[2];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -248,12 +280,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIP1StringSize > 1 && i+1 < x.size()) {
       temp.str("");
       temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIP1StringSize > 2 && i+1 < x.size()) {
       temp.str("");
       temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-3] << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -267,12 +301,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIM1StringSize > 1 && i-1 >= 0) {
       temp.str("");
       temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIM1StringSize > 2 && i-1 >= 0) {
       temp.str("");
       temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1] << xIM1String[2];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -286,12 +322,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(xIM1StringSize > 1 && i-1 >= 0) {
       temp.str("");
       temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
     if(xIM1StringSize > 2 && i-1 >= 0) {
       temp.str("");
       temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-3] << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 
@@ -315,14 +353,16 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 	temp << '*';
       }
     }
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F65: yI-capitalInitial(xI)
   if(enabledFeatureTypes.size() > 65 && enabledFeatureTypes[65]) {
     temp.str("");
     temp << "F65:" << yI << ":CapitalInitial";
-    activeFeatures[temp.str()] = 1.0;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] = 1.0;
   }
 
   // F66: yI-(|x|-i)
@@ -330,7 +370,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     if(x.size() - i < 3) {
       temp.str("");
       temp << "F66:" << yI << ":" << (x.size()-i);
-      activeFeatures[temp.str()] = 1.0;
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] = 1.0;
     }
   }
 

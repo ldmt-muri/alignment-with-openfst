@@ -24,23 +24,25 @@ int main(int argc, char **argv) {
   // configurations
   cerr << "setting configurations...";
   LearningInfo learningInfo;
-  // block coord 
+  // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
-  learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 50;
+  learningInfo.maxIterationsCount = 5;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.minLikelihoodDiff = 10;
+  learningInfo.useSparseVectors = true;
+  // block coordinate descent
+  learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
-  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
+  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 10;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 50;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 500;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
-  learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 1.0;
+  learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 10.0;
 
   // add constraints
   learningInfo.constraints.clear();

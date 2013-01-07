@@ -196,6 +196,7 @@ class LearningInfo {
     neighborhoodMinIbm1BckScore = 0.001;
     neighborhoodMinCoocc = 3;
     debugLevel = 1;
+    useSparseVectors = true;
   }
 
   bool IsModelConverged() {
@@ -301,6 +302,9 @@ class LearningInfo {
 
   // this field can be used to communicate to the underlying model that certain combinations are required/forbidden
   std::vector<Constraint> constraints;
+
+  // do we use cdec's FastSparseVector when applicable?
+  bool useSparseVectors;
 };
 
 

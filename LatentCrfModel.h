@@ -80,12 +80,28 @@ class LatentCrfModel {
 		map<string, double> &FXZk);
 
   // assumptions: 
+  // - fst is populated using BuildLambdaFst()
+  // - FXZk is cleared
+  void ComputeF(const vector<int> &x, 
+		const VectorFst<LogArc> &fst,
+		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+		FastSparseVector<double> &FXZk);
+
+  // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
   void ComputeD(const vector<int> &x, const vector<int> &z,
 		const VectorFst<LogArc> &fst,
 		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 		map<string, double> &DXZk);
+
+  // assumptions: 
+  // - fst is populated using BuildThetaLambdaFst()
+  // - DXZk is cleared
+  void ComputeD(const vector<int> &x, const vector<int> &z, 
+		const VectorFst<LogArc> &fst,
+		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+		FastSparseVector<double> &DXZk);
     
   // assumptions:
   // - fst, betas are populated using BuildThetaLambdaFst()

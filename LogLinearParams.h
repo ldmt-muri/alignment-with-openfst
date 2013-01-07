@@ -11,6 +11,7 @@
 
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
+#include "cdec-utils/fast_sparse_vector.h"
 
 class LogLinearParams {
  public:
@@ -37,6 +38,10 @@ class LogLinearParams {
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 		    const std::vector<bool> &enabledFeatureTypes, 
 		    std::map<string, double> &activeFeatures);
+
+  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+		    const std::vector<bool> &enabledFeatureTypes, 
+		    FastSparseVector<double> &activeFeatures);
     
   // if the paramId does not exist, add it. otherwise, do nothing. 
   bool AddParam(std::string paramId, double paramWeight=0.0);
@@ -68,29 +73,49 @@ class LogLinearParams {
   }
 
   // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
-  void UpdateOldParam(const std::string paramId) {
+  void UpdateOldParamWeight(const std::string paramId) {
     if(!AddParam(paramId)) {
       oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
     }
   }
 
   // copies the weight of all features from paramWeights vector to oldParamWeights vector
-  void UpdateOldParams() {
+  void UpdateOldParamWeights() {
     for(int i = 0; i < paramWeights.size(); i++) {
       oldParamWeights[i] = paramWeights[i];
     }
   }  
 
+  // returns the int index of the parameter in the underlying array
+  unsigned GetParamIndex(const std::string paramId) {
+    AddParam(paramId);
+    return paramIndexes[paramId];
+  }
+
+  // returns the string identifier of the parameter given its int index in the weights array
+  std::string GetParamId(const unsigned paramIndex) {
+    assert(paramIndex < paramWeights.size());
+    return paramIds[paramIndex];
+  }
+
   // returns the current weight of this param (adds the parameter if necessary)
-  double GetParam(const std::string paramId) {
+  double GetParamWeight(const std::string paramId) {
     AddParam(paramId);
     return paramWeights[paramIndexes[paramId]];
   }
   
-  // returns the difference between new and old weights of a parameter, given its string ID
-  double GetParamNewMinusOld(const std::string paramId) {
-    AddParam(paramId);
+  // returns the difference between new and old weights of a parameter, given its string ID. 
+  // assumptions:
+  // - paramId already exists
+  double GetParamNewMinusOldWeight(const std::string paramId) {
     return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
+  }
+
+  // returns the difference between new and old weights of a parameter, given its vector index
+  // assumptions:
+  // - paramIndex is a valid index
+  double GetParamNewMinusOldWeight(const unsigned paramIndex) {
+    return paramWeights[paramIndex] - oldParamWeights[paramIndex];
   }
 
   int GetParamsCount() {
@@ -159,6 +184,7 @@ class LogLinearParams {
   std::map< std::string, int > paramIndexes;
   std::vector< double > paramWeights;
   std::vector< double > oldParamWeights;
+  std::vector< std::string > paramIds;
 
   // maps a word id into a string
   const VocabDecoder &srcTypes, &tgtTypes;
