@@ -13,6 +13,7 @@
 #include "LbfgsUtils.h"
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
+#include "ClustersComparer.h"
 
 using namespace fst;
 using namespace std;
@@ -139,6 +140,8 @@ class LatentCrfModel {
   // analyze
   void Analyze(string &inputFilename, string &outputFilename);
 
+  // evaluate
+  double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
 
   vector<vector<int> > data;
 

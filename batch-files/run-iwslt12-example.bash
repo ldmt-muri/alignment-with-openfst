@@ -19,4 +19,4 @@ make
 #./train-loglinear example/small.eng.int example/small.kin.int example/small.out
 
 #./train-autoencoder example/iwslt12.eng example/iwslt12.autoencoder.out 
-./train-latentCrfModel example/iwslt12-letters.eng example/iwslt12.latentCrf.out 
+./train-latentCrfModel example/iwslt12-letters-1000.eng example/iwslt12.latentCrf.out example/iwslt12-letters-1000.eng.gold

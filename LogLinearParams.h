@@ -106,6 +106,16 @@ class LogLinearParams {
     }
   }
 
+  // update a single parameter's value, identified by its integer index in the weights array
+  // assumptions:
+  // - there's a parameter with such index
+  inline void UpdateParam(const unsigned paramIndex, const double newValue) {
+    if(paramWeights.size() <= paramIndex) {
+      assert(false);
+    }
+    paramWeights[paramIndex] = newValue;
+  }
+
   // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
   inline void UpdateOldParamWeight(const std::string paramId) {
     if(!AddParam(paramId)) {

@@ -8,18 +8,28 @@ using namespace std;
 
 typedef ProductArc<LogWeight, LogWeight> ProductLogArc;
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix) {
-  assert(argc == 3);
+void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename) {
+  assert(argc >= 3);
   textFilename = argv[1];
   outputFilenamePrefix = argv[2];
+  if(argc >= 4) {
+    goldLabelsFilename = argv[3];
+  } else {
+    goldLabelsFilename = "";
+  }
 }
 
 int main(int argc, char **argv) {
   // parse arguments
   cerr << "parsing arguments...";
-  string textFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix);
+  string textFilename, outputFilenamePrefix, goldLabelsFilename;
+  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename);
   cerr << "done." << endl;
+
+  // randomize draws
+  int seed = time(NULL);
+  cerr << "executing srand(" << seed << ")" << endl;
+  srand(seed);
 
   // configurations
   cerr << "setting configurations...";
@@ -160,15 +170,23 @@ int main(int argc, char **argv) {
   // train the model
   cerr << "train the model..." << endl;
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
+
   model.Train();
   cerr << "training finished!" << endl;
-  
-  // find the most likely labels given the trianed model
-  //  model.Label(textFilename, outputFilenamePrefix + ".labels");
-  
+    
   // compute some statistics on a test set
   cerr << "analyze the data using the trained model..." << endl;
   string analysisFilename = outputFilenamePrefix + ".analysis";
   model.Analyze(textFilename, analysisFilename);
   cerr << "analysis can be found at " << analysisFilename << endl;
+
+  // compare to gold standard
+  if(goldLabelsFilename != "") {
+    cerr << "comparing to gold standard tagging..." << endl;
+    string labelsFilename = outputFilenamePrefix + ".labels";
+    model.Label(textFilename, labelsFilename);
+    double vi = model.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
+    cerr << "done. variation of information = " << vi << endl;
+  }
 }

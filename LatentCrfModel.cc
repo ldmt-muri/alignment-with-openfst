@@ -870,6 +870,17 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 								 const double step) {
   clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
+
+  // make sure none of the parameter weights is nan
+  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+    if(isnan(lambdasArray[displacedIndex])) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". will halt!" << endl;
+      }
+      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
+      assert(false);
+    }
+  }
   
   // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
@@ -914,9 +925,11 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
     if(isnan(nLogC)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogC = " << nLogC << ". skipping this sentence altogether!" << endl;
+	cerr << "ERROR: nLogC = " << nLogC << ". will halt!" << endl;
+	cerr << "thetaLambdaFst summary:" << endl;
+	cerr << FstUtils::PrintFstSummary(thetaLambdaFst);
       }
-      continue;
+      assert(false);
     } 
     // update the loglikelihood
     nlogLikelihood += nLogC;
@@ -925,6 +938,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double d = dIter->second;
       double nLogd = MultinomialParams::nLog(d);
       double dOverC = MultinomialParams::nExp(nLogd - nLogC);
+      if(isnan(dOverC)) {
+	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ", d = " << d << ". will halt!" << endl;
+	}
+        assert(false);
+      }
       derivativeWRTLambdaSparseVector[dIter->first] -= dOverC;
     }
     // compute the F map fro this sentence
@@ -935,10 +954,9 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // update the log likelihood
     if(isnan(nLogZ)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogZ = " << nLogZ << ". skipping this sentence altogether!" << endl;
+	cerr << "ERROR: nLogZ = " << nLogZ << ". will halt!" << endl;
       }
-      nlogLikelihood -= nLogC;
-      continue;
+      assert(false);
     } 
     nlogLikelihood -= nLogZ;
     //      cerr << "nloglikelihood -= " << nLogZ << ", |x| = " << data[sentId].size() << endl;
@@ -947,6 +965,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double f = fIter->second;
       double nLogf = MultinomialParams::nLog(f);
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
+      if(isnan(fOverZ)) {
+	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ". will halt!" << endl;
+	}
+	assert(false);
+      }
       derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
     }
     if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
@@ -1006,7 +1030,18 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //  }
   //  cerr << endl;
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+
     cerr << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+  }
+
+  // make sure the gradient doesn't contain a nan
+  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+    if(isnan(gradient[displacedIndex])) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: gradient[" << displacedIndex << "] = " << gradient[displacedIndex] << ". will halt!" << endl;
+      }
+      assert(false);
+    }
   }
   return nlogLikelihood;
 }
@@ -1447,4 +1482,20 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
     outputFile << endl;
   }
   outputFile.close();
+}
+
+double LatentCrfModel::ComputeVariationOfInformation(string &aLabelsFilename, string &bLabelsFilename) {
+  vector<string> clusteringA, clusteringB;
+  vector<vector<string> > clusteringAByLine, clusteringBByLine;
+  StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
+  StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
+  assert(clusteringAByLine.size() == clusteringBByLine.size());
+  for(int i = 0; i < clusteringAByLine.size(); i++) {
+    assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
+    for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+      clusteringA.push_back(clusteringAByLine[i][j]);
+      clusteringB.push_back(clusteringBByLine[i][j]);			    
+    }
+  }
+  return ClustersComparer::ComputeVariationOfInformation(clusteringA, clusteringB);
 }
