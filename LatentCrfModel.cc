@@ -219,7 +219,7 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 void LatentCrfModel::ComputeF(const vector<int> &x,
 			      const VectorFst<LogArc> &fst,
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			      FastSparseVector<double> &FXk) {
+			      FastSparseVector<LogVal<double> > &FXk) {
   clock_t timestamp = clock();
   
   assert(FXk.size() == 0);
@@ -265,15 +265,17 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
 	  if(FXk.find(h_k->first) == FXk.end()) {
-	    FXk[h_k->first] = 0;
+	    FXk[h_k->first] = LogVal<double>(0.0);
 	  }
 	  //cerr << FXk[h_k->first];
-	  FXk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
+	  FXk[h_k->first] += LogVal<double>(-1.0 * nLogMarginal, init_lnx()) * LogVal<double>(h_k->second);
 	  //cerr << " => " << FXk[h_k->first] << endl;
+	  /*
 	  if(isinf(FXk[h_k->first])) {
 	    cerr << "ERROR: FXk[" << h_k->first << "] = " << FXk[h_k->first] << ", nLogMarginal = " << nLogMarginal;
 	    cerr << ", MultinomialParams::nExp(nLogMarginal) = " << MultinomialParams::nExp(nLogMarginal) << endl;
 	  }
+	  */
 	}
 
 	// prepare the schedule for visiting states in the next timestep
@@ -764,10 +766,10 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // make sure none of the parameter weights is nan
-  bool nansExist = false;
+  bool errorsExist = false;
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-    if(isnan(lambdasArray[displacedIndex])) {
-      nansExist = true;
+    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
+      errorsExist = true;
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". liblbfgs's mistake. will set it to zero!" << endl;
       }
@@ -775,7 +777,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       //      assert(false);
     }
   }
-  if(nansExist) {
+  if(errorsExist && model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "listing the current values in the gradient array: " << endl;
     for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
       cerr << gradient[displacedIndex] << " ";
@@ -829,7 +831,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
     // compute the C value for this sentence
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
-    if(isnan(nLogC)) {
+    if(isnan(nLogC) || isinf(nLogC)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: nLogC = " << nLogC << ". my mistake. will halt!" << endl;
 	cerr << "thetaLambdaFst summary:" << endl;
@@ -844,7 +846,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double d = dIter->second;
       double nLogd = MultinomialParams::nLog(d);
       double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-      if(isnan(dOverC)) {
+      if(isnan(dOverC) || isinf(dOverC)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ", d = " << d << ". my mistake. will halt!" << endl;
 	}
@@ -853,12 +855,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       derivativeWRTLambdaSparseVector[dIter->first] -= dOverC;
     }
     // compute the F map fro this sentence
-    FastSparseVector<double> FSparseVector;
+    FastSparseVector<LogVal<double> > FSparseVector;
     model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
     // compute the Z value for this sentence
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     // update the log likelihood
-    if(isnan(nLogZ)) {
+    if(isnan(nLogZ) || isinf(nLogZ)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
       }
@@ -867,19 +869,18 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     nlogLikelihood -= nLogZ;
     //      cerr << "nloglikelihood -= " << nLogZ << ", |x| = " << data[sentId].size() << endl;
     // subtract F/Z from the gradient
-    for(FastSparseVector<double>::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
-      double f = fIter->second;
-      double nLogf = MultinomialParams::nLog(f);
+    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
+      double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-      if(isnan(fOverZ)) {
+      if(isnan(fOverZ) || isinf(fOverZ)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ". my mistake. will halt!" << endl;
+	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
 	}
 	assert(false);
       }
       derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
-      if(isnan(derivativeWRTLambdaSparseVector[fIter->first])) {
-	cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ", dOverC = " << MultinomialParams::nExp(MultinomialParams::nLog(DSparseVector[fIter->first]) - nLogC) << ". my mistake. will halt!" << endl;
+      if(isnan(derivativeWRTLambdaSparseVector[fIter->first]) || isinf(derivativeWRTLambdaSparseVector[fIter->first])) {
+	cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
 	assert(false);
       }
     }
@@ -939,9 +940,9 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //    cerr << gradientIter->first << ":" << gradientIter->second << " ";
   //  }
   //  cerr << endl;
-  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
 
-    cerr << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+    cerr << endl << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
     cerr << "listing the current values in the gradient array (no problem enountered though): " << endl;
     for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
       cerr << gradient[displacedIndex] << " ";
@@ -951,13 +952,13 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 
   // make sure the gradient and lambdas don't contain a nan
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-    if(isnan(gradient[displacedIndex])) {
+    if(isnan(gradient[displacedIndex]) || isinf(gradient[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: gradient[" << displacedIndex << "] = " << gradient[displacedIndex] << ". my mistake. will halt!" << endl;
       }
       assert(false);
     }
-    if(isnan(lambdasArray[displacedIndex])) {
+    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake. will halt!" << endl;
       }
@@ -990,7 +991,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   double *lambdasArray = model.lambda->GetParamWeightsArray() + model.countOfConstrainedLambdaParameters;
   unsigned lambdasArrayLength = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
   for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
-    if(isnan(lambdasArray[displacedIndex])) {
+    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
       }
@@ -1010,12 +1011,17 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   
   // show progress
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-    cerr << endl << "sents:" << from << "-" << to;
+    cerr << endl << "-report sents:" << from << "-" << to;
     cerr << "\tlbfgs Iteration " << k;
     cerr << ":\tobjective = " << fx;
+  }
+  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << ",\txnorm = " << xnorm;
     cerr << ",\tgnorm = " << gnorm;
-    cerr << ",\tstep = " << step << endl;
+    cerr << ",\tstep = " << step;
+  }
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << endl;
   }
 
   // update the old lambdas
@@ -1029,7 +1035,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 
   // for debug only: make sure we didn't write nans to the lambdasArray
   for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
-    if(isnan(lambdasArray[displacedIndex])) {
+    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
       }
@@ -1137,7 +1143,7 @@ void LatentCrfModel::WarmUp() {
     vector<fst::LogWeight> lambdaAlphas, lambdaBetas;
     BuildLambdaFst(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
     // compute the F map from this sentence (implicitly adds the fired features to lambda parameters)
-    FastSparseVector<double> F;
+    FastSparseVector<LogVal<double> > F;
     ComputeF(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
   }
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
@@ -1298,7 +1304,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
       // update iteration's nloglikelihood
-      if(isnan(optimizedMiniBatchNLogLikelihood)) {
+      if(isnan(optimizedMiniBatchNLogLikelihood) || isinf(optimizedMiniBatchNLogLikelihood)) {
 	if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	  cerr << "ERROR: optimizedMiniBatchNLogLikelihood = " << optimizedMiniBatchNLogLikelihood << ". didn't add this batch's likelihood to the total likelihood. will halt!" << endl;
 	}

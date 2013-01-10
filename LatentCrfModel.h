@@ -14,6 +14,8 @@
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
 #include "ClustersComparer.h"
+#include "cdec-utils/logval.h"
+#include "cdec-utils/semiring.h"
 
 using namespace fst;
 using namespace std;
@@ -78,15 +80,7 @@ class LatentCrfModel {
   void ComputeF(const vector<int> &x, 
 		const VectorFst<LogArc> &fst,
 		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-		map<string, double> &FXZk);
-
-  // assumptions: 
-  // - fst is populated using BuildLambdaFst()
-  // - FXZk is cleared
-  void ComputeF(const vector<int> &x, 
-		const VectorFst<LogArc> &fst,
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-		FastSparseVector<double> &FXZk);
+		FastSparseVector<LogVal<double> > &FXZk);
 
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
