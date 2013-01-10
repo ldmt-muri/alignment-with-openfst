@@ -43,11 +43,11 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
 
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = 2;
+  this->END_OF_SENTENCE_Y_VALUE = 3;
 
   /*
   // POS tag yDomain
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
-  this->yDomain.insert(3); // noun
   this->yDomain.insert(4); // verb
   this->yDomain.insert(5); // adjective
   this->yDomain.insert(6); // adverb
@@ -59,11 +59,15 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->yDomain.insert(12); // particles
   this->yDomain.insert(13); // punctuation marks
   this->yDomain.insert(14); // others (e.g. abbreviations, foreign words ...etc)
+  this->yDomain.insert(15); // noun
   */
 
   // vowel/consonant tag yDomain
-  this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // consonant, and the conceptual yValue of a letter at position -1 in a word
-  this->yDomain.insert(3); // vowel
+  this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of a letter at position -1 in a word
+  this->yDomain.insert(END_OF_SENTENCE_Y_VALUE); // the conceptual yValue of a letter at the position after the last word
+  this->yDomain.insert(4); // class4
+  this->yDomain.insert(5); // class5
+  this->yDomain.insert(6); // class6
 
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
@@ -96,7 +100,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   }
   // only enable hmm-like features -- for better comparison with HMM
   enabledFeatureTypes[51] = true;
-  enabledFeatureTypes[54] = true;
+  //  enabledFeatureTypes[54] = true;
 
   // initialize the theta params to unnormalized uniform
   nLogTheta.clear();
@@ -166,6 +170,12 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+	
+	// skip special classes
+	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	  continue;
+	}
+
 	// compute h(y_i, y_{i-1}, x, i)
 	map<string, double> h;
 	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
@@ -205,14 +215,14 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 
 // assumptions: 
 // - fst is populated using BuildLambdaFst()
-// - FXZk is cleared
+// - FXk is cleared
 void LatentCrfModel::ComputeF(const vector<int> &x,
 			      const VectorFst<LogArc> &fst,
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			      FastSparseVector<double> &FXZk) {
+			      FastSparseVector<double> &FXk) {
   clock_t timestamp = clock();
   
-  assert(FXZk.size() == 0);
+  assert(FXk.size() == 0);
   assert(fst.NumStates() > 0);
   
   // schedule for visiting states such that we know the timestep for each arc
@@ -254,12 +264,16 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 	  //	  cerr << "      featureId=" << h_k->first << " value=" << h_k->second << endl;
 
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
-	  if(FXZk.find(h_k->first) == FXZk.end()) {
-	    FXZk[h_k->first] = 0;
+	  if(FXk.find(h_k->first) == FXk.end()) {
+	    FXk[h_k->first] = 0;
 	  }
-	  //cerr << FXZk[h_k->first];
-	  FXZk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
-	  //cerr << " => " << FXZk[h_k->first] << endl;
+	  //cerr << FXk[h_k->first];
+	  FXk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
+	  //cerr << " => " << FXk[h_k->first] << endl;
+	  if(isinf(FXk[h_k->first])) {
+	    cerr << "ERROR: FXk[" << h_k->first << "] = " << FXk[h_k->first] << ", nLogMarginal = " << nLogMarginal;
+	    cerr << ", MultinomialParams::nExp(nLogMarginal) = " << MultinomialParams::nExp(nLogMarginal) << endl;
+	  }
 	}
 
 	// prepare the schedule for visiting states in the next timestep
@@ -275,149 +289,7 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
   if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
     cerr << "ComputeF() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
   }
-}
-			   
-// assumptions: 
-// - fst is populated using BuildLambdaFst()
-// - FXZk is cleared
-void LatentCrfModel::ComputeF(const vector<int> &x,
-			      const VectorFst<LogArc> &fst,
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			      map<string, double> &FXZk) {
-  clock_t timestamp = clock();
-  
-  assert(FXZk.size() == 0);
-  assert(fst.NumStates() > 0);
-  
-  // schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
-  iStates.insert(fst.Start());
-
-  // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int xI = x[i];
-    
-    //    cerr << "i = " << i << " out of " << x.size() << endl;
-
-    // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
-	iStatesIter != iStates.end(); 
-	iStatesIter++) {
-      int fromState = *iStatesIter;
-
-      //      cerr << "  from state# " << fromState << endl;
-
-      // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
-	int yIM1 = arc.ilabel;
-	int yI = arc.olabel;
-	double arcWeight = arc.weight.Value();
-	int toState = arc.nextstate;
-
-	//	cerr << "    to state# " << toState << " yIM1=" << yIM1 << " yI=" << yI << " weight=" << arcWeight << endl;
-
-	// compute marginal weight of passing on this arc
-	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
-
-	// for each feature that fires on this arc
-	map<string, double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
-	for(map<string, double>::const_iterator h_k = h.begin(); h_k != h.end(); h_k++) {
-
-	  //	  cerr << "      featureId=" << h_k->first << " value=" << h_k->second << endl;
-
-	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
-	  if(FXZk.count(h_k->first) == 0) {
-	    FXZk[h_k->first] = 0;
-	  }
-	  //cerr << FXZk[h_k->first];
-	  FXZk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
-	  //cerr << " => " << FXZk[h_k->first] << endl;
-	}
-
-	// prepare the schedule for visiting states in the next timestep
-	iP1States.insert(toState);
-      } 
-    }
-
-    // prepare for next timestep
-    iStates = iP1States;
-    iP1States.clear();
-  }  
-
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << "ComputeF() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
-  }
-}
-			   
-// assumptions: 
-// - fst is populated using BuildThetaLambdaFst()
-// - DXZk is cleared
-void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z, 
-			      const VectorFst<LogArc> &fst,
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			      map<string, double> &DXZk) {
-  
-  clock_t timestamp = clock();
-
-  // enforce assumptions
-  assert(DXZk.size() == 0);
-
-  // schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
-  iStates.insert(fst.Start());
-
-  // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int xI = x[i];
-    int zI = z[i];
-    
-    // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
-	iStatesIter != iStates.end(); 
-	iStatesIter++) {
-      int fromState = *iStatesIter;
-
-      // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
-	int yIM1 = arc.ilabel;
-	int yI = arc.olabel;
-	double arcWeight = arc.weight.Value();
-	int toState = arc.nextstate;
-
-	// compute marginal weight of passing on this arc
-	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
-
-	// for each feature that fires on this arc
-	map<string, double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
-	for(map<string, double>::const_iterator h_k = h.begin(); h_k != h.end(); h_k++) {
-
-	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
-	  if(DXZk.count(h_k->first) == 0) {
-	    DXZk[h_k->first] = 0;
-	  }
-	  //cerr << DXZk[h_k->first];
-	  DXZk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
-	  //cerr << " => " << DXZk[h_k->first] << endl;
-	}
-
-	// prepare the schedule for visiting states in the next timestep
-	iP1States.insert(toState);
-      } 
-    }
-
-    // prepare for next timestep
-    iStates = iP1States;
-    iP1States.clear();
-  }  
-
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << "ComputeD() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
-  }
-}
+}			   
 
 // assumptions: 
 // - fst is populated using BuildThetaLambdaFst()
@@ -591,6 +463,12 @@ void LatentCrfModel::BuildThetaLambdaAndLambdaFst(const vector<int> &x, const ve
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+
+	// skip special classes
+	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	  continue;
+	}
+
 	// compute h(y_i, y_{i-1}, x, i)
 	map<string, double> h;
 	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
@@ -672,6 +550,12 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+
+	// skip special classes
+	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	  continue;
+	}
+
 	// compute h(y_i, y_{i-1}, x, i)
 	map<string, double> h;
 	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
@@ -801,6 +685,12 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+
+	// skip special classes
+	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	  continue;
+	}
+
 	// compute h(y_i, y_{i-1}, x, i)
 	map<string, double> h;
 	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
@@ -868,18 +758,34 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 								 double *gradient,
 								 const int lambdasCount,
 								 const double step) {
+  try {
+  
   clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // make sure none of the parameter weights is nan
+  bool nansExist = false;
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
     if(isnan(lambdasArray[displacedIndex])) {
+      nansExist = true;
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". will halt!" << endl;
+	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". liblbfgs's mistake. will set it to zero!" << endl;
       }
-      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
-      assert(false);
+      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
+      //      assert(false);
     }
+  }
+  if(nansExist) {
+    cerr << "listing the current values in the gradient array: " << endl;
+    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+      cerr << gradient[displacedIndex] << " ";
+    } 
+    cerr << endl;
+    cerr << "listing the current values in the lambdas array: " << endl;
+    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+      cerr << lambdasArray[displacedIndex] << " ";
+    } 
+    cerr << endl;
   }
   
   // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
@@ -925,7 +831,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
     if(isnan(nLogC)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogC = " << nLogC << ". will halt!" << endl;
+	cerr << "ERROR: nLogC = " << nLogC << ". my mistake. will halt!" << endl;
 	cerr << "thetaLambdaFst summary:" << endl;
 	cerr << FstUtils::PrintFstSummary(thetaLambdaFst);
       }
@@ -940,7 +846,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double dOverC = MultinomialParams::nExp(nLogd - nLogC);
       if(isnan(dOverC)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ", d = " << d << ". will halt!" << endl;
+	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ", d = " << d << ". my mistake. will halt!" << endl;
 	}
         assert(false);
       }
@@ -954,7 +860,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // update the log likelihood
     if(isnan(nLogZ)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogZ = " << nLogZ << ". will halt!" << endl;
+	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
       }
       assert(false);
     } 
@@ -967,11 +873,15 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
       if(isnan(fOverZ)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ". will halt!" << endl;
+	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ". my mistake. will halt!" << endl;
 	}
 	assert(false);
       }
       derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
+      if(isnan(derivativeWRTLambdaSparseVector[fIter->first])) {
+	cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ", f = " << f << ", dOverC = " << MultinomialParams::nExp(MultinomialParams::nLog(DSparseVector[fIter->first]) - nLogC) << ". my mistake. will halt!" << endl;
+	assert(false);
+      }
     }
     if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << ".";
@@ -1032,18 +942,36 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 
     cerr << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+    cerr << "listing the current values in the gradient array (no problem enountered though): " << endl;
+    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+      cerr << gradient[displacedIndex] << " ";
+    } 
+    cerr << endl;
   }
 
-  // make sure the gradient doesn't contain a nan
+  // make sure the gradient and lambdas don't contain a nan
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
     if(isnan(gradient[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: gradient[" << displacedIndex << "] = " << gradient[displacedIndex] << ". will halt!" << endl;
+	cerr << "ERROR: gradient[" << displacedIndex << "] = " << gradient[displacedIndex] << ". my mistake. will halt!" << endl;
       }
+      assert(false);
+    }
+    if(isnan(lambdasArray[displacedIndex])) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake. will halt!" << endl;
+      }
+      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
       assert(false);
     }
   }
   return nlogLikelihood;
+
+  } catch(...) {
+    cerr << "exception thrown in LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(). will halt!" << endl;
+    assert(false);
+  }
+  
 }
 
 int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
@@ -1057,6 +985,20 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 					int k,
 					int ls) {
   LatentCrfModel &model = LatentCrfModel::GetInstance();
+
+  // for debugging only
+  double *lambdasArray = model.lambda->GetParamWeightsArray() + model.countOfConstrainedLambdaParameters;
+  unsigned lambdasArrayLength = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
+  for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
+    if(isnan(lambdasArray[displacedIndex])) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
+      }
+      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
+      assert(false);
+    }
+  }
+
   int index = *((int*)ptrFromSentId), from, to;
   if(index == -1) {
     from = 0;
@@ -1084,6 +1026,17 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "done" << endl;
   }
+
+  // for debug only: make sure we didn't write nans to the lambdasArray
+  for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
+    if(isnan(lambdasArray[displacedIndex])) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
+      }
+      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
+      assert(false);
+    }
+  }  
 
   return 0;
 }
@@ -1183,13 +1136,9 @@ void LatentCrfModel::WarmUp() {
     VectorFst<LogArc> lambdaFst;
     vector<fst::LogWeight> lambdaAlphas, lambdaBetas;
     BuildLambdaFst(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
-    // compute the F map fro this sentence
-    map<string, double> F;
+    // compute the F map from this sentence (implicitly adds the fired features to lambda parameters)
+    FastSparseVector<double> F;
     ComputeF(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
-    // add each feature fired on any sentence to the lambda parameters
-    for(map<string, double>::const_iterator fIter = F.begin(); fIter != F.end(); fIter++) {
-      lambda->AddParam(fIter->first, uniform.Draw() - 0.5);
-    }
   }
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "lambdas initialized to: " << endl;
@@ -1203,6 +1152,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // add all features in this data set to lambda.params
   WarmUp();
 
+  bool converged = false;
   do {
 
     // debug
@@ -1301,6 +1251,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
     lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
     lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
+    lbfgsParams.max_linesearch = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration;
     if(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1) {
       lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
       // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
@@ -1349,8 +1300,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // update iteration's nloglikelihood
       if(isnan(optimizedMiniBatchNLogLikelihood)) {
 	if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "didn't add this batch's likelihood to the total likelihood" << endl;
+	  cerr << "ERROR: optimizedMiniBatchNLogLikelihood = " << optimizedMiniBatchNLogLikelihood << ". didn't add this batch's likelihood to the total likelihood. will halt!" << endl;
 	}
+	assert(false);
       } else {
 	nlogLikelihood += optimizedMiniBatchNLogLikelihood;
       }
@@ -1383,7 +1335,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
     learningInfo.iterationsCount++;
 
     // check convergence
-  } while(!learningInfo.IsModelConverged());
+    try {
+      converged = learningInfo.IsModelConverged();
+    } catch(...) {
+      cerr << "exception thrown in LearningInfo::IsModelConverged(). will halt!" << endl;
+      assert(false);
+    }
+  
+  } while(!converged);
 
   // debug
   lambda->PersistParams(outputPrefix + string(".final.lambda"));

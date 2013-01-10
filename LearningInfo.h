@@ -43,6 +43,7 @@ namespace DebugLevel {
 // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
 struct LbfgsParams {
   int maxIterations;
+  int maxEvalsPerIteration;
   int memoryBuffer;
   double precision;
   bool l1;
@@ -52,6 +53,7 @@ struct LbfgsParams {
     memoryBuffer = 6;
     precision = 0.000000000000001;
     l1 = false;
+    maxEvalsPerIteration = 20;
   }
 };
 
@@ -218,12 +220,11 @@ class LearningInfo {
       cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl << endl;
     }
 
-    double absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
-    double relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
+    double absoluteDiff = 0.0, relativeDiff = 0.0;
     if(useMinLikelihoodRelativeDiff &&
        iterationsCount > 1) {
-      double absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
-      double relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
+      absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
+      relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
       cerr << "loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl << endl;
     }
     
@@ -233,7 +234,7 @@ class LearningInfo {
       return true;
     } 
     if(useMinLikelihoodDiff && 
-       iterationsCount > 1 &&
+       iterationsCount > 2 &&
        minLikelihoodDiff > fabs(logLikelihood[iterationsCount-1] - 
 					    logLikelihood[iterationsCount-2])) {
       return true;
@@ -244,7 +245,7 @@ class LearningInfo {
       return true;
     }
     if(useMinLikelihoodRelativeDiff && 
-       iterationsCount > 1 && 
+       iterationsCount > 2 && 
        minLikelihoodRelativeDiff > relativeDiff) {
       return true;
     }

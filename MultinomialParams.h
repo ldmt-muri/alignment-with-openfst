@@ -20,16 +20,24 @@ namespace MultinomialParams {
   // parameters for describing a set of conditional multinomial distributions p(x|y)=z such that y is the first key, x is the nested key, z is a log probability
   typedef std::map<int, MultinomialParam> ConditionalMultinomialParam;
 
-  static const int LOG_ZERO = 30;
+  static const int NLOG_ZERO = 300;
+  static const int NLOG_INF = -200;
 
   inline float nLog(double prob) {
     if(prob <= 0) {
-      return LOG_ZERO;
+      //      std::cerr << "ERROR: MultinomialParams::nLog(" << prob << ") is undefined. instead, I returned " << NLOG_ZERO << " and continued." << std::endl;
+      std::cerr << "$";
+      return NLOG_ZERO;
     }
     return -1.0 * log(prob);
   }
   
   inline double nExp(float exponent) {
+    if(exponent <= NLOG_INF) {
+      //      std::cerr << "ERROR: MultinomialParams::nExp(" << exponent << ") is infinity. returned I returned exp(" << NLOG_INF << ") and continued." << std::endl;
+      std::cerr << "#";
+      exponent = NLOG_INF;
+    }
     return exp(-1.0 * exponent);
   }
 

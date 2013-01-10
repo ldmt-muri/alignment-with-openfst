@@ -31,7 +31,7 @@ void MultinomialParams::NormalizeParams(ConditionalMultinomialParam& params) {
 void MultinomialParams::ClearParams(ConditionalMultinomialParam& params) {
     for (ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
       for (std::map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	tgtIter->second = LOG_ZERO;
+	tgtIter->second = NLOG_ZERO;
       }
     }
   }

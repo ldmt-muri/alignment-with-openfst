@@ -1,3 +1,4 @@
+#include <fenv.h>
 #include "LearningInfo.h"
 #include "FstUtils.h"
 #include "StringUtils.h"
@@ -20,6 +21,9 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
 }
 
 int main(int argc, char **argv) {
+
+  //  feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+
   // parse arguments
   cerr << "parsing arguments...";
   string textFilename, outputFilenamePrefix, goldLabelsFilename;
@@ -47,10 +51,11 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 5;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 5;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);

@@ -147,7 +147,7 @@ class LatentCrfModel {
 
  private:
   VocabEncoder vocabEncoder;
-  int START_OF_SENTENCE_Y_VALUE;
+  int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE;
   string textFilename, outputPrefix;
   set<int> xDomain, yDomain;
   LogLinearParams *lambda;
