@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
-  learningInfo.useMinLikelihoodDiff = true;
-  learningInfo.minLikelihoodDiff = 10;
+  //  learningInfo.useMinLikelihoodDiff = true;
+  //  learningInfo.minLikelihoodDiff = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.001;
   learningInfo.useSparseVectors = true;
@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
+  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
@@ -184,14 +185,16 @@ int main(int argc, char **argv) {
   string analysisFilename = outputFilenamePrefix + ".analysis";
   model.Analyze(textFilename, analysisFilename);
   cerr << "analysis can be found at " << analysisFilename << endl;
+  
+  // viterbi
+  string labelsFilename = outputFilenamePrefix + ".labels";
+  model.Label(textFilename, labelsFilename);
+  cerr << "automatic labels can be found at " << labelsFilename << endl;
 
   // compare to gold standard
   if(goldLabelsFilename != "") {
     cerr << "comparing to gold standard tagging..." << endl;
-    string labelsFilename = outputFilenamePrefix + ".labels";
-    model.Label(textFilename, labelsFilename);
     double vi = model.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
-    cerr << "automatic labels can be found at " << labelsFilename << endl;
     cerr << "done. variation of information = " << vi << endl;
   }
 }

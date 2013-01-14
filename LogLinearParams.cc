@@ -33,6 +33,37 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 bool LogLinearParams::AddParam(string paramId) {
   // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
   double paramWeight = gaussianSampler->Draw();
+  // REMOVE ME: chris' tiny letters
+  /*  if(paramId == "F51:2:4") {
+    paramWeight = 10.0;
+  } else if(paramId == "F51:2:5") {
+    paramWeight = -10.0;
+  } else if(paramId == "F51:4:4") {
+    paramWeight = 5.0;
+  } else if(paramId == "F51:4:5") {
+    paramWeight = 5.0;
+  } else if(paramId == "F51:5:4") {
+    paramWeight = -10.0;
+  } else if(paramId == "F51:5:5") {
+    paramWeight = -10.0;
+    }*/
+  // wammar's tiny letters
+  /*
+  if(paramId == "F51:4:5")
+    paramWeight = 10;
+  else if(paramId == "F51:5:6")
+    paramWeight = 10;
+  else if(paramId == "F51:6:7")
+    paramWeight = 10;
+  else if(paramId == "F51:7:4")
+    paramWeight = -10;
+  else if(paramId == "F51:7:5")
+    paramWeight = -10;
+  else if(paramId == "F51:7:6")
+    paramWeight = -10;
+  else if(paramId == "F51:7:7")
+    paramWeight = -10;
+  */
   // add param
   return AddParam(paramId, paramWeight);
 }

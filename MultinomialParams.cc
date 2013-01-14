@@ -49,6 +49,19 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params) {
     } 
   }
   
+  // refactor variable names here (e.g. translations)
+void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params, const VocabEncoder &encoder) {
+    // iterate over src tokens in the model
+    int counter = 0;
+    for(ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+      const std::map< int, float > &translations = (*srcIter).second;
+      // iterate over tgt tokens 
+      for(std::map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+	std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+      }
+    } 
+  }
+  
 
 void MultinomialParams::PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params) {
   for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
@@ -60,12 +73,27 @@ void MultinomialParams::PersistParams(std::ofstream& paramsFile, const Condition
   }
 }
 
+void MultinomialParams::PersistParams(std::ofstream &paramsFile, const ConditionalMultinomialParam &params, const VocabEncoder &vocabEncoder) {
+  for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      // line format: 
+      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+      paramsFile << srcIter->first << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
+    }
+  }
+}
+
 void MultinomialParams::PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params) {
   std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
   PersistParams(paramsFile, params);
   paramsFile.close();
 }
 
+void MultinomialParams::PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder) {
+  std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+  PersistParams(paramsFile, params, vocabEncoder);
+  paramsFile.close();
+}
 
   // sample an integer from a multinomial
 int MultinomialParams::SampleFromMultinomial(const MultinomialParam params) {

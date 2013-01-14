@@ -20,3 +20,4 @@ make
 
 #./train-autoencoder example/iwslt12.eng example/iwslt12.autoencoder.out 
 ./train-latentCrfModel example/iwslt12-letters.eng example/iwslt12.latentCrf.out example/iwslt12-letters.eng.gold
+#./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out

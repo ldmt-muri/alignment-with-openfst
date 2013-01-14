@@ -67,7 +67,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->yDomain.insert(END_OF_SENTENCE_Y_VALUE); // the conceptual yValue of a letter at the position after the last word
   this->yDomain.insert(4); // class4
   this->yDomain.insert(5); // class5
-  this->yDomain.insert(6); // class6
+  //  this->yDomain.insert(6); // class6
+  //  this->yDomain.insert(7); // class7
 
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
@@ -106,11 +107,37 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   nLogTheta.clear();
   for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
     for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
-      nLogTheta[*yDomainIter][*zDomainIter] = 1;
+      //      nLogTheta[*yDomainIter][*zDomainIter] = 1;
+      nLogTheta[*yDomainIter][*zDomainIter] = gaussianSampler.Draw();
     }
   }
+  // REMOVE ME  4 = consonant, 5 = vowel (dyer's tiny letters)
+  /*  nLogTheta[4][3] = 10;
+  nLogTheta[4][5] = 10;
+  nLogTheta[4][7] = 10;
+  nLogTheta[4][8] = 10;
+  nLogTheta[4][10] = 10;
+  nLogTheta[4][11] = 10;
+  nLogTheta[4][12] = 10;
+  nLogTheta[4][13] = 10;
+  nLogTheta[4][15] = 10;
+  nLogTheta[4][16] = 10;
+  nLogTheta[4][17] = 10;
+  nLogTheta[5][4] = 10;
+  nLogTheta[5][6] = 10;
+  nLogTheta[5][9] = 10;
+  nLogTheta[5][14] = 10;
+  // good initialization for wammar's tiny letters with four classes and four unique letters
+  nLogTheta[4][vocabEncoder.Encode("a")] = 0.01;
+  nLogTheta[5][vocabEncoder.Encode("b")] = 0.01;
+  nLogTheta[6][vocabEncoder.Encode("c")] = 0.01;
+  nLogTheta[7][vocabEncoder.Encode("d")] = 0.01;
+  */
+
   // then normalize
   MultinomialParams::NormalizeParams(nLogTheta);
+  //  MultinomialParams::PrintParams(nLogTheta);
+  MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
 
   // lambdas are initialized to all zeros
   assert(lambda->GetParamsCount() == 0);
@@ -378,6 +405,36 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   
   assert(BXZ.size() == 0);
+
+  // debug
+  if(learningInfo.debugLevel == DebugLevel::REDICULOUS) {
+    cerr << "thetas are: " << endl;
+    MultinomialParams::PrintParams(nLogTheta);
+    cerr << "thetas (with string observables): " << endl;
+    MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    cerr << "lambdas are: " << endl;
+    lambda->PrintParams();
+    cerr << "ComputeB() is called with the following params: " << endl;
+    cerr << "x = ";
+    for(unsigned i = 0; i < x.size(); i++) {
+      cerr << x[i] << " ";
+    }
+    cerr << endl << "z = ";
+    for(unsigned i = 0; i < z.size(); i++) {
+      cerr << z[i] << " ";
+    }
+    cerr << endl << "thetaLambdaFst = " << endl;
+    cerr << FstUtils::PrintFstSummary(fst) << endl;
+    cerr << "alphas = ";
+    for(unsigned i = 0; i < alphas.size(); i++) {
+      cerr << i << ":" << alphas[i].Value() << "(" << MultinomialParams::nExp(alphas[i].Value()) << ") ";
+    }
+    cerr << endl << "betas = ";
+    for(unsigned i = 0; i < betas.size(); i++) {
+      cerr << i << ":" << betas[i].Value() << "(" << MultinomialParams::nExp(betas[i].Value()) << ") ";
+    }
+    cerr << endl << endl;
+  }
 
   // schedule for visiting states such that we know the timestep for each arc
   set<int> iStates, iP1States;
@@ -754,18 +811,43 @@ double LatentCrfModel::ComputeCorpusNloglikelihood() {
   return EvaluateNLogLikelihoodDerivativeWRTLambda(&index, lambda->GetParamWeightsArray(), gradient, lambda->GetParamsCount(), 0);
 }
 
+// to interface with the simulated annealing library at http://www.taygeta.com/annealing/simanneal.html
+float LatentCrfModel::EvaluateNLogLikelihood(float *lambdasArray) {
+  // singleton
+  LatentCrfModel &model = LatentCrfModel::GetInstance();
+  // unconstrained lambda parameters count
+  unsigned lambdasCount = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
+  // which sentences to work on?
+  static int fromSentId = 0;
+  int sentsCount = model.data.size();
+  if(fromSentId >= sentsCount) {
+    fromSentId = 0;
+  }
+  double *dblLambdasArray = model.lambda->GetParamWeightsArray();
+  for(unsigned i = 0; i < lambdasCount; i++) {
+    dblLambdasArray[i] = (double)lambdasArray[i];
+  }
+  // next time, work on different sentences
+  fromSentId += model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize;
+  // call the other function ;-)
+  void *ptrFromSentId = &fromSentId;
+  double dummy[lambdasCount];
+  float objective = (float)EvaluateNLogLikelihoodDerivativeWRTLambda(ptrFromSentId, dblLambdasArray, dummy, lambdasCount, 1.0);
+  cerr << "objective = " << objective << endl;
+  return objective;
+}
+
 // a call back function that computes the gradient and the nloglikelihood function for the lbfgs minimizer
 double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
 								 const double *lambdasArray,
 								 double *gradient,
 								 const int lambdasCount,
 								 const double step) {
-  try {
-  
   clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // make sure none of the parameter weights is nan
+  /*
   bool errorsExist = false;
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
     if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
@@ -789,6 +871,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     } 
     cerr << endl;
   }
+  */
   
   // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
@@ -913,7 +996,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
   //  LogLinearParams::PrintParams(derivativeWRTLambda);
 
-  // write the gradient in the (hopefully) pre-allocated array 'gradient'
+  // write the gradient in the pre-allocated array 'gradient'
   // init gradient to zero
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
     gradient[displacedIndex] = 0;
@@ -951,6 +1034,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   }
 
   // make sure the gradient and lambdas don't contain a nan
+  /*
   for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
     if(isnan(gradient[displacedIndex]) || isinf(gradient[displacedIndex])) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
@@ -966,13 +1050,8 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       assert(false);
     }
   }
-  return nlogLikelihood;
-
-  } catch(...) {
-    cerr << "exception thrown in LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(). will halt!" << endl;
-    assert(false);
-  }
-  
+  */
+  return nlogLikelihood;  
 }
 
 int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
@@ -1174,6 +1253,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     MultinomialParams::ConditionalMultinomialParam mle;
     map<int, double> mleMarginals;
     for(int sentId = 0; sentId < data.size(); sentId++) {
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "sentId = " << sentId << endl;
+      }
       // build the FST
       VectorFst<LogArc> thetaLambdaFst;
       vector<fst::LogWeight> alphas, betas;
@@ -1193,6 +1275,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	  double b = zIter->second;
 	  double nLogb = MultinomialParams::nLog(b);
 	  double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+	  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+	    cerr << "b(" << z_ << "|" << y_ << ")/c = " << bOverC << endl;
+	  }
 	  mle[y_][z_] += bOverC;
 	  mleMarginals[y_] += bOverC;
 	}
@@ -1235,7 +1320,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
     stringstream thetaParamsFilename;
     thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
     thetaParamsFilename << ".theta";
-    MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta);
+    MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "theta params: " << endl;
+      MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    }
     if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
       cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
     }
@@ -1282,23 +1371,43 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
 	cerr << "calling lbfgs on sents " << sentId << "-" << to << endl;
       }
-      int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
-			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 
-      // debug
-      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-	cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
-      }
-      if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
-	if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-	  cerr << "rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
-	}
-	lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
-			    EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+      if(learningInfo.optimizationMethod.subOptMethod->algorithm == LBFGS) {
+	int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
+				EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+	// debug
 	if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	  cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
 	}
+	if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
+	  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	    cerr << "rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
+	  }
+	  lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
+			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
+	  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	    cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+	  }
+	}
+      } else if(learningInfo.optimizationMethod.subOptMethod->algorithm == SIMULATED_ANNEALING) {
+	simulatedAnnealer.set_up(EvaluateNLogLikelihood, lambdasArrayLength);
+	// initialize the parameters array
+	float simulatedAnnealingArray[lambdasArrayLength];
+	for(int i = 0; i < lambdasArrayLength; i++) {
+	  simulatedAnnealingArray[i] = lambdasArray[i];
+	}
+	simulatedAnnealer.initial(simulatedAnnealingArray);
+	// optimize
+	simulatedAnnealer.anneal(10);
+	// get the optimum parameters
+	simulatedAnnealer.current(simulatedAnnealingArray);
+	for(int i = 0; i < lambdasArrayLength; i++) {
+	  lambdasArray[i] = simulatedAnnealingArray[i];
+	}
+      } else {
+	assert(false);
       }
+      
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
       }
@@ -1352,7 +1461,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
   // debug
   lambda->PersistParams(outputPrefix + string(".final.lambda"));
-  MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta);
+  MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta, vocabEncoder);
 }
 
 void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {

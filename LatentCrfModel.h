@@ -16,6 +16,7 @@
 #include "ClustersComparer.h"
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
+#include "anneal/Cpp/simann.hpp"
 
 using namespace fst;
 using namespace std;
@@ -36,6 +37,9 @@ class LatentCrfModel {
 
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void WarmUp();
+
+  // call back function for simulated annealing
+  static float EvaluateNLogLikelihood(float *lambdasArray);
 
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
@@ -151,6 +155,8 @@ class LatentCrfModel {
   std::vector<bool> enabledFeatureTypes;
   unsigned countOfConstrainedLambdaParameters;
   double REWARD_FOR_CONSTRAINED_FEATURES, PENALTY_FOR_CONSTRAINED_FEATURES;
+  GaussianSampler gaussianSampler;
+  SimAnneal simulatedAnnealer;
 };
 
 #endif

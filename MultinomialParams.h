@@ -11,6 +11,7 @@
 #include <cmath>
 
 #include "Samplers.h"
+#include "VocabEncoder.h"
 
 namespace MultinomialParams {
 
@@ -50,10 +51,12 @@ namespace MultinomialParams {
 
   // refactor variable names here (e.g. translations)
   void PrintParams(const ConditionalMultinomialParam& params);
+  void PrintParams(const ConditionalMultinomialParam& params, const VocabEncoder &encoder);
 
   void PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params);
-
+  void PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
   void PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params);
+  void PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
 
   // sample an integer from a multinomial
   int SampleFromMultinomial(const MultinomialParam params);
