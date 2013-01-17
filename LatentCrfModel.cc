@@ -45,9 +45,14 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->START_OF_SENTENCE_Y_VALUE = 2;
   this->END_OF_SENTENCE_Y_VALUE = 3;
 
-  /*
   // POS tag yDomain
+  unsigned latentClasses = 45;
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
+  for(unsigned i = 0; i < latentClasses; i++) {
+    this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
+  }
+
+  /*
   this->yDomain.insert(4); // verb
   this->yDomain.insert(5); // adjective
   this->yDomain.insert(6); // adverb
@@ -60,7 +65,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->yDomain.insert(13); // punctuation marks
   this->yDomain.insert(14); // others (e.g. abbreviations, foreign words ...etc)
   this->yDomain.insert(15); // noun
-  */
 
   // vowel/consonant tag yDomain
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of a letter at position -1 in a word
@@ -69,6 +73,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->yDomain.insert(5); // class5
   //  this->yDomain.insert(6); // class6
   //  this->yDomain.insert(7); // class7
+  */
 
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
@@ -1067,6 +1072,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // for debugging only
+  /*
   double *lambdasArray = model.lambda->GetParamWeightsArray() + model.countOfConstrainedLambdaParameters;
   unsigned lambdasArrayLength = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
   for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
@@ -1078,6 +1084,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
       assert(false);
     }
   }
+  */
 
   int index = *((int*)ptrFromSentId), from, to;
   if(index == -1) {
@@ -1112,6 +1119,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     cerr << "done" << endl;
   }
 
+  /*
   // for debug only: make sure we didn't write nans to the lambdasArray
   for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
     if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
@@ -1121,7 +1129,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
       //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
       assert(false);
     }
-  }  
+    } */ 
 
   return 0;
 }

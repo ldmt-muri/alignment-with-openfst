@@ -18,6 +18,7 @@ make
 #python utils/decode-corpus.py example/medium.eng.vocab example/medium.out.param.final.eng example/medium.out.param.final.eng.text
 #./train-loglinear example/small.eng.int example/small.kin.int example/small.out
 
-#./train-autoencoder example/iwslt12.eng example/iwslt12.autoencoder.out 
-./train-latentCrfModel example/iwslt12-letters.eng example/iwslt12.latentCrf.out example/iwslt12-letters.eng.gold
+#./train-latentCrfModel example/iwslt12-pos.eng example/iwslt12.latentCrf.out 
+#./train-latentCrfModel example/iwslt12-letters.eng example/iwslt12.latentCrf.out example/iwslt12-letters.eng.gold
 #./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out
+./train-latentCrfModel example/tweets-pos.eng example/iwslt12.latentCrf.out example/tweets-pos.gold
