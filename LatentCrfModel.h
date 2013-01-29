@@ -8,18 +8,32 @@
 #include <set>
 #include <algorithm>
 
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/mpi/nonblocking.hpp>
+#include <boost/thread/thread.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/mpi/collectives.hpp>
+#include <boost/archive/text_oarchive.hpp>
+
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "LbfgsUtils.h"
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
 #include "ClustersComparer.h"
+
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
+#define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
+#include "cdec-utils/fast_sparse_vector.h"
+
 #include "anneal/Cpp/simann.hpp"
 
 using namespace fst;
 using namespace std;
+namespace mpi = boost::mpi;
 
 // implements the model described at doc/LatentCrfModel.tex
 class LatentCrfModel {
@@ -34,6 +48,10 @@ class LatentCrfModel {
 
   // optimize the likelihood with block coordinate descent
   void BlockCoordinateDescent();
+
+  // normalize soft counts with identical content to sum to one
+  void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam &mle, 
+			 map<int, double> &mleMarginals);
 
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void WarmUp();
@@ -59,7 +77,10 @@ class LatentCrfModel {
 				 int n,
 				 int k,
 				 int ls);
-  
+
+  // adds up the values in v1 and v2 and returns the summation vector
+  static FastSparseVector<double> AccumulateDerivatives(const FastSparseVector<double> &v1, const FastSparseVector<double> &v2);
+
   // builds an FST to computes B(x,z)
   void BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, 
 			   VectorFst<LogArc> &fst, vector<fst::LogWeight>& alphas, vector<fst::LogWeight>& betas);
@@ -117,6 +138,27 @@ class LatentCrfModel {
     
   double ComputeCorpusNloglikelihood();
 
+  // keeps looking for a slave that's not busy and return its rank
+  unsigned FindASlackingSlave(vector<bool> &busySlaves, 
+			      vector<boost::mpi::request> &slavesMleRequests, 
+			      vector<boost::mpi::request> &slavesMleMarginalRequests, 
+			      vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
+			      vector< map<int, double> > &slavesMleMarginalResults,
+			      MultinomialParams::ConditionalMultinomialParam &mle,
+			      map<int, double> &mleMarginals);
+
+  // collect results from slaves
+  void CollectSlavesWork(vector<bool> &busySlaves, 
+			 vector<boost::mpi::request> &slavesMleRequests, 
+			 vector<boost::mpi::request> &slavesMleMarginalRequests, 
+			 vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
+			 vector< map<int, double> > &slavesMleMarginalResults,
+			 MultinomialParams::ConditionalMultinomialParam &mle,
+			 map<int, double> &mleMarginals);
+  
+  // configure lbfgs parameters according to the LearningInfo member of the model
+  lbfgs_parameter_t SetLbfgsConfig();
+    
  public:
 
   static LatentCrfModel& GetInstance();
@@ -141,16 +183,35 @@ class LatentCrfModel {
   // evaluate
   double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
 
+  // collect soft counts from this sentence
+  void UpdateThetaMleForSent(const unsigned sentId, 
+			     MultinomialParams::ConditionalMultinomialParam &mle, 
+			     map<int, double> &mleMarginals);
+
+
   vector<vector<int> > data;
+  LearningInfo learningInfo;
+  MultinomialParams::ConditionalMultinomialParam nLogTheta;
+  LogLinearParams *lambda;
+
+  // mpi messages from master to slaves
+  const static int MPI_TAG_UPDATE_SLAVE_THETA = 1;
+  const static int MPI_TAG_UPDATE_SLAVE_LAMBDA = 2;
+  const static int MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS = 3;
+  const static int MPI_TAG_COMPUTE_PARTIAL_THETA_MLE = 4;
+  const static int MPI_TAG_DIE = 5;
+  // mpi messages from slaves to master
+  const static int MPI_TAG_RETURN_PARTIAL_THETA_MLE = 11;
+  const static int MPI_TAG_RETURN_PARTIAL_THETA_MLE_MARGINAL = 12;
+  const static int MPI_TAG_ACK_THETA_UPDATED = 13;
+  const static int MPI_TAG_ACK_LAMBDA_UPDATED = 14;
+  const static int MPI_TAG_ACK_LAMBDA_INDEXES_UPDATED = 15;
 
  private:
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE;
   string textFilename, outputPrefix;
   set<int> xDomain, yDomain;
-  LogLinearParams *lambda;
-  MultinomialParams::ConditionalMultinomialParam nLogTheta;
-  LearningInfo learningInfo;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;
   unsigned countOfConstrainedLambdaParameters;

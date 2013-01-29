@@ -46,7 +46,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->END_OF_SENTENCE_Y_VALUE = 3;
 
   // POS tag yDomain
-  unsigned latentClasses = 45;
+  unsigned latentClasses = 4;
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
     this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
@@ -113,7 +113,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
     for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
       //      nLogTheta[*yDomainIter][*zDomainIter] = 1;
-      nLogTheta[*yDomainIter][*zDomainIter] = gaussianSampler.Draw();
+      nLogTheta[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
     }
   }
   // REMOVE ME  4 = consonant, 5 = vowel (dyer's tiny letters)
@@ -142,7 +142,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   // then normalize
   MultinomialParams::NormalizeParams(nLogTheta);
   //  MultinomialParams::PrintParams(nLogTheta);
-  MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+  }
 
   // lambdas are initialized to all zeros
   assert(lambda->GetParamsCount() == 0);
@@ -332,7 +334,7 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
 			      const VectorFst<LogArc> &fst,
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
 			      FastSparseVector<double> &DXZk) {
-  
+  //  cerr << "ComputeD(){";
   clock_t timestamp = clock();
 
   // enforce assumptions
@@ -389,6 +391,8 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
   if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
     cerr << "ComputeD() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
   }
+
+  //  cerr << "}\n";
 }
 
 // assumptions:
@@ -408,7 +412,7 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
 			   map< int, map< int, double > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
-  
+  //  cerr << "ComputeB(){"<<endl;
   assert(BXZ.size() == 0);
 
   // debug
@@ -484,6 +488,8 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
     iStates = iP1States;
     iP1States.clear();
   }
+  
+  //  cerr << "}\n";
 }
 
 /*
@@ -796,6 +802,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 }
 
 void LatentCrfModel::Train() {
+  cerr << "master is gonna train..." << endl;
   switch(learningInfo.optimizationMethod.algorithm) {
   case BLOCK_COORD_DESCENT:
     BlockCoordinateDescent();
@@ -842,12 +849,21 @@ float LatentCrfModel::EvaluateNLogLikelihood(float *lambdasArray) {
   return objective;
 }
 
+FastSparseVector<double> LatentCrfModel::AccumulateDerivatives(const FastSparseVector<double> &v1, const FastSparseVector<double> &v2) {
+  FastSparseVector<double> vTotal(v1);
+  for(FastSparseVector<double>::const_iterator v2Iter = v2.begin(); v2Iter != v2.end(); ++v2Iter) {
+    vTotal[v2Iter->first] += v2Iter->second;
+  }
+  return vTotal;
+}
+
 // a call back function that computes the gradient and the nloglikelihood function for the lbfgs minimizer
 double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
 								 const double *lambdasArray,
 								 double *gradient,
 								 const int lambdasCount,
 								 const double step) {
+  //  cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda(){" << endl;
   clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
@@ -881,9 +897,10 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
   // debug
-  //  cerr << "lbfgs suggests the following lambda parameter weights" << endl;
-  //  model.lambda->PrintParams();
-  
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "lbfgs suggests the following lambda parameter weights for process #" << model.learningInfo.mpiWorld->rank() << endl;
+    model.lambda->PrintParams();
+  }
 
   // for each sentence in this mini batch, aggregate the nloglikelihood and its derivatives across sentences
   double nlogLikelihood = 0;
@@ -897,6 +914,10 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
   }
   for(int sentId = from; sentId < to; sentId++) {
+    // sentId is assigned to the process with rank = sentId % world.size()
+    if(sentId % model.learningInfo.mpiWorld->size() != model.learningInfo.mpiWorld->rank()) {
+      continue;
+    }
     clock_t timestamp2 = clock();
     /*
     // TODO: work in progress... optimization as explained in issue #55 https://github.com/ldmt-muri/alignment-with-openfst/issues/55
@@ -977,6 +998,13 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
       cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda() for this sentence took " << (float) (clock() - timestamp2) / CLOCKS_PER_SEC << " sec." << endl;
     }
   }
+
+  // accumulate nloglikelihood from all processes
+  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, mpi::minimum<double>());
+  // accumulate the gradient vector from all processes
+  mpi::broadcast< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, 0);
+  //  mpi::all_reduce< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, derivativeWRTLambdaSparseVector, LatentCrfModel::AccumulateDerivatives);
+
   // move-away penalty is applied for all features. however, features that didn't fire in
   // this minibatch have a penalty of zero (and penalty derivative of zero). 
   // so we only need to update the derivative and likelihood with the penalty 
@@ -1056,6 +1084,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     }
   }
   */
+  //  cerr << "}" << endl;
   return nlogLikelihood;  
 }
 
@@ -1233,108 +1262,271 @@ void LatentCrfModel::WarmUp() {
     FastSparseVector<LogVal<double> > F;
     ComputeF(data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, F);
   }
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "lambdas initialized to: " << endl;
     lambda->PrintParams();
     cerr << "warmup done. Lambda params count:" << lambda->GetParamsCount() << endl;
   }
 }
 
-void LatentCrfModel::BlockCoordinateDescent() {  
-  
-  // add all features in this data set to lambda.params
-  WarmUp();
-
-  bool converged = false;
-  do {
-
-    // debug
-    //    double temp = ComputeCorpusNloglikelihood();
-    //    cerr << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << endl;
-    //    cerr << "nloglikelihood before optimizing thetas = " << temp << endl;
-    //    cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
-
-    // update the thetas by normalizing soft counts (i.e. the closed form solution)
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-      cerr << "updating thetas..." << endl;
-    }
-    MultinomialParams::ConditionalMultinomialParam mle;
-    map<int, double> mleMarginals;
-    for(int sentId = 0; sentId < data.size(); sentId++) {
-      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-	cerr << "sentId = " << sentId << endl;
+void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
+					   MultinomialParams::ConditionalMultinomialParam &mle, 
+					   map<int, double> &mleMarginals) {
+  if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+    cerr << "sentId = " << sentId << endl;
+  }
+  assert(sentId < data.size());
+  // build the FST
+  VectorFst<LogArc> thetaLambdaFst;
+  vector<fst::LogWeight> alphas, betas;
+  BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
+  // compute the B matrix for this sentence
+  map< int, map< int, double > > B;
+  B.clear();
+  ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
+  // compute the C value for this sentence
+  double nLogC = ComputeNLogC(thetaLambdaFst, betas);
+  //cerr << "nloglikelihood += " << nLogC << endl;
+  // update mle for each z^*|y^* fired
+  for(map< int, map<int, double> >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    int y_ = yIter->first;
+    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double b = zIter->second;
+      double nLogb = MultinomialParams::nLog(b);
+      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+      if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+	cerr << "b(" << z_ << "|" << y_ << ")/c = " << bOverC << endl;
       }
-      // build the FST
-      VectorFst<LogArc> thetaLambdaFst;
-      vector<fst::LogWeight> alphas, betas;
-      BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
-      // compute the B matrix for this sentence
-      map< int, map< int, double > > B;
-      B.clear();
-      ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
-      // compute the C value for this sentence
-      double nLogC = ComputeNLogC(thetaLambdaFst, betas);
-      //cerr << "nloglikelihood += " << nLogC << endl;
-      // update mle for each z^*|y^* fired
-      for(map< int, map<int, double> >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
-	int y_ = yIter->first;
-	for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	  int z_ = zIter->first;
-	  double b = zIter->second;
-	  double nLogb = MultinomialParams::nLog(b);
-	  double bOverC = MultinomialParams::nExp(nLogb - nLogC);
-	  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-	    cerr << "b(" << z_ << "|" << y_ << ")/c = " << bOverC << endl;
+      mle[y_][z_] += bOverC;
+      mleMarginals[y_] += bOverC;
+    }
+  }
+}
+
+void LatentCrfModel::NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam &mle, 
+				       map<int, double> &mleMarginals) {
+  // fix theta mle estimates
+  for(map<int,  map<int, double> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
+    int y_ = yIter->first;
+    double unnormalizedMarginalProbz_giveny_ = 0.0;
+    // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
+    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double unnormalizedProbz_giveny_ = zIter->second;
+      unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
+    }
+    if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
+      cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
+      cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
+      cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
+	cerr << " --error ignored, but try to figure out what's wrong!" << endl;
+    }
+    // normalize the mle estimates to sum to one for each context
+    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
+      mle[y_][z_] = normalizedProbz_giveny_;
+      // take the nlog
+      mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
+    }
+  }
+}
+
+// keeps looking for a slave that's not busy and return its rank
+unsigned LatentCrfModel::FindASlackingSlave(vector<bool> &busySlaves, 
+					    vector<boost::mpi::request> &slavesMleRequests, 
+					    vector<boost::mpi::request> &slavesMleMarginalRequests,
+					    vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
+					    vector< map<int, double> > &slavesMleMarginalResults,
+					    MultinomialParams::ConditionalMultinomialParam &mle,
+					    map<int, double> &mleMarginals) {
+  while(true) {
+    for(unsigned i = 1; i < busySlaves.size(); i++) {
+      if(!busySlaves[i]) {
+	busySlaves[i] = true;
+	return i;
+      }
+    }
+    boost::this_thread::sleep( boost::posix_time::seconds(1) );
+    //    cerr << "none of hte slaves are slacking. lets see if any of them finished their work!" << endl;
+    // may one of them finished its work by now!
+    CollectSlavesWork(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
+  }
+}
+
+// collect results from slaves
+void LatentCrfModel::CollectSlavesWork(vector<bool> &busySlaves, 
+				       vector<boost::mpi::request> &slavesMleRequests, 
+				       vector<boost::mpi::request> &slavesMleMarginalRequests, 
+				       vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
+				       vector< map<int, double> > &slavesMleMarginalResults,
+				       MultinomialParams::ConditionalMultinomialParam &mle,
+				       map<int, double> &mleMarginals) {
+  for(unsigned i = 1; i < busySlaves.size(); i++) {
+    if(busySlaves[i]) {
+      boost::optional<boost::mpi::status> mleStatus = slavesMleRequests[i].test();
+      boost::optional<boost::mpi::status> mleMarginalStatus = slavesMleMarginalRequests[i].test();
+      if(mleStatus && mleMarginalStatus) {
+	cerr << "master recieved an mle communication from slave#" << i << " with error code " << mleStatus->error()<< endl;
+	cerr << "master recieved an mleMarginal communication from slave#" << i << " with error code " << mleMarginalStatus->error()<< endl;
+	busySlaves[i] = false;
+	// now, that our slave has done the hard work, the master gets to accumulate those numbers on its own numbers
+	for(MultinomialParams::ConditionalMultinomialParam::const_iterator yIter = slavesMleResults[i].begin();
+	    yIter != slavesMleResults[i].end();
+	    yIter++) {
+	  // accumulate mle
+	  for(std::map<int, double>::const_iterator zIter = yIter->second.begin(); 
+	      zIter != yIter->second.end();
+	      zIter++) {
+	    mle[yIter->first][zIter->first] += zIter->second;
 	  }
-	  mle[y_][z_] += bOverC;
-	  mleMarginals[y_] += bOverC;
+	  // accumulate mle marginals
+	  mleMarginals[yIter->first] += slavesMleMarginalResults[i][yIter->first];
 	}
       }
     }
-    // debug
-    //    cerr << "mle (before normalization):" << endl;
-    //    MultinomialParams::PrintParams(mle);
-    //    cerr << "=======================================" << endl;
-    // fix theta mle estimates
-    for(map<int,  map<int, float> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
-      int y_ = yIter->first;
-      double unnormalizedMarginalProbz_giveny_ = 0.0;
-      // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
-      for(map<int, float>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	int z_ = zIter->first;
-	float unnormalizedProbz_giveny_ = zIter->second;
-	unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
-      }
-      if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
-	cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
-	cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
-	cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
-	cerr << " --error ignored, but try to figure out what's wrong!" << endl;
-      }
-      // normalize the mle estimates to sum to one for each context
-      for(map<int, float>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	int z_ = zIter->first;
-	float normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
-	mle[y_][z_] = normalizedProbz_giveny_;
-	// take the nlog
-	mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
-      }
+  }
+}
+
+lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
+  // lbfgs configurations
+  lbfgs_parameter_t lbfgsParams;
+  lbfgs_parameter_init(&lbfgsParams);
+  assert(learningInfo.optimizationMethod.subOptMethod != 0);
+  lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+  lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
+  lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
+  lbfgsParams.max_linesearch = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration;
+  if(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1) {
+    lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
+    // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
+    lbfgsParams.linesearch = LBFGS_LINESEARCH_BACKTRACKING;
+  }
+  return lbfgsParams;
+}
+
+void LatentCrfModel::BlockCoordinateDescent() {  
+  
+  // add all features in this data set to lambda.params
+  if(learningInfo.mpiWorld->rank() == 0) {
+    WarmUp();
+  }
+  
+  // broadcast the initial theta and lambda parameters to the slaves
+  /*
+  int dummy;
+  for(unsigned i = 1; i < learningInfo.mpiWorld->size(); i++) {
+    // theta params
+    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_THETA, nLogTheta);
+    cerr << "master syncronously sent slave#" << i << " the message 'UPDATE_SLAVE_THETA'" << endl;
+    //learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_THETA_UPDATED);
+    //cerr << "ACK RECEIVED\nmaster synchronously received an acknowledgement from slave#" << i << endl;
+    // lambda param ids
+    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS, lambda->paramIds);
+    cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA_IDS'" << endl;
+    cerr << "master's lambda->paramIds.size() = " << lambda->paramIds.size() << endl;
+    cerr << "master's lambda->paramWeights.size() = " << lambda->paramWeights.size() << endl;
+    cerr << "master's lambda->paramIndexes.size() = " << lambda->paramIndexes.size() << endl;
+    learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_INDEXES_UPDATED);
+    cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
+    // lambda params
+    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, lambda->paramWeights);
+    cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA'" << endl;
+    learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_UPDATED);
+    cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
+  }
+  */
+  mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
+  mpi::broadcast< vector<string> >(*learningInfo.mpiWorld, lambda->paramIds, 0);
+  mpi::broadcast< vector<double> >(*learningInfo.mpiWorld, lambda->paramWeights, 0);
+
+  // TRAINING ITERATIONS
+  bool converged = false;
+  do {
+
+    // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
+    // data structure to hold theta MLE estimates
+    MultinomialParams::ConditionalMultinomialParam mle;
+    map<int, double> mleMarginals;
+    // debug info
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      double temp = ComputeCorpusNloglikelihood();
+      cerr << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << endl;
+      cerr << "nloglikelihood before optimizing thetas = " << temp << endl;
+      cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
     }
-    // now, update the thetas
-    nLogTheta = mle;
-    // debug
-    //cerr << "nlog theta params:" << endl;
-    //MultinomialParams::PrintParams(nLogTheta);
-    stringstream thetaParamsFilename;
-    thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
-    thetaParamsFilename << ".theta";
-    MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "updating thetas..." << endl;
+    }
+    // all slaves are slacking at first
+    /*    vector<bool> busySlaves(learningInfo.mpiWorld->size(), false);
+    vector<boost::mpi::request> slavesMleRequests(learningInfo.mpiWorld->size());
+    vector<boost::mpi::request> slavesMleMarginalRequests(learningInfo.mpiWorld->size());
+    vector<MultinomialParams::ConditionalMultinomialParam> slavesMleResults(learningInfo.mpiWorld->size());
+    vector< map<int, double> > slavesMleMarginalResults(learningInfo.mpiWorld->size());
+    */
+    // update the mle for each sentence
+    for(unsigned sentId = 0; sentId < data.size(); sentId++) {
+      // sentId is assigned to the process # (sentId % world.size())
+      if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+	continue;
+      }
+      /*
+      if(learningInfo.mpiWorld->size() > 1) {
+	// find a slacking slave (and collects the work of slaves who completed their work)
+	cerr << "master is looking for a slacking slave...";
+	unsigned slaveRank = FindASlackingSlave(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
+	cerr << "slave#" << slaveRank << " found to be slacking." << endl;
+	string command = "compute";
+	mpi::request isendRequest = learningInfo.mpiWorld->isend(slaveRank, LatentCrfModel::MPI_TAG_COMPUTE_PARTIAL_THETA_MLE, sentId);
+	cerr << "master asynchronously sent slave#" << slaveRank << " the message 'COMPUTE_PARTIAL_THETA_MLE'" << endl;
+	slavesMleRequests[slaveRank] = learningInfo.mpiWorld->irecv(slaveRank, 
+								    LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE, 
+								    slavesMleResults[slaveRank]);
+	slavesMleMarginalRequests[slaveRank] = learningInfo.mpiWorld->irecv(slaveRank,
+									    LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE_MARGINAL, 
+									    slavesMleMarginalResults[slaveRank]);
+	cerr << "master asynchronously received some message from slave#" << slaveRank << endl;
+	//	UpdateThetaMleForSent(sentId, mle, mleMarginals);
+      } 
+      */
+      UpdateThetaMleForSent(sentId, mle, mleMarginals);
+    }
+    /*
+    // wait until all slaves finish their work and collect it
+    if(learningInfo.mpiWorld->size() > 1) {
+      mpi::wait_all(slavesMleRequests.data() + 1, slavesMleRequests.data() + slavesMleRequests.size());
+      mpi::wait_all(slavesMleMarginalRequests.data() + 1, slavesMleMarginalRequests.data() + slavesMleMarginalRequests.size());
+      CollectSlavesWork(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
+    }
+    */
+    // accumulate mle counts from slaves
+    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, mle, mle, MultinomialParams::AccumulateConditionalMultinomials, 0);
+    mpi::reduce<MultinomialParams::MultinomialParam>(*learningInfo.mpiWorld, mleMarginals, mleMarginals, MultinomialParams::AccumulateMultinomials, 0);
+
+    // normalize mle and update nLogTheta on master
+    if(learningInfo.mpiWorld->rank() == 0) {
+      NormalizeThetaMle(mle, mleMarginals);
+      nLogTheta = mle;
+    }
+
+    // update nLogTheta on slaves
+    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
+
+    // debug info
+    if(learningInfo.persistParamsAfterEachIteration) {
+      stringstream thetaParamsFilename;
+      thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
+      thetaParamsFilename << ".theta";
+      if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+	cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
+      }
+      MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
+    }
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "theta params: " << endl;
       MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
-    }
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-      cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
     }
 
     // debug
@@ -1347,19 +1539,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
     // needed to call liblbfgs
     double* lambdasArray;
     int lambdasArrayLength;
-    // lbfgs configurations
-    lbfgs_parameter_t lbfgsParams;
-    lbfgs_parameter_init(&lbfgsParams);
-    assert(learningInfo.optimizationMethod.subOptMethod != 0);
-    lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
-    lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
-    lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
-    lbfgsParams.max_linesearch = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration;
-    if(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1) {
-      lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
-      // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
-      lbfgsParams.linesearch = LBFGS_LINESEARCH_BACKTRACKING;
-    }
     // for each mini-batch
     //    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     double nlogLikelihood = 0;
@@ -1373,13 +1552,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
       lambdasArray = lambda->GetParamWeightsArray() + countOfConstrainedLambdaParameters;
       lambdasArrayLength = lambda->GetParamsCount() - countOfConstrainedLambdaParameters;
       
+      // set lbfgs configurations
+      lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
+
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
 	cerr << "calling lbfgs on sents " << sentId << "-" << to << endl;
       }
-
       if(learningInfo.optimizationMethod.subOptMethod->algorithm == LBFGS) {
 	int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
 				EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
@@ -1387,7 +1568,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	  cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
 	}
-	if(lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
+	if(learningInfo.retryLbfgsOnRoundingErrors && lbfgsStatus == LBFGSERR_ROUNDING_ERROR) {
 	  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	    cerr << "rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
 	  }
@@ -1415,7 +1596,16 @@ void LatentCrfModel::BlockCoordinateDescent() {
       } else {
 	assert(false);
       }
-      
+      /*
+      // update the slave lambda parameters
+      for(unsigned i = 1; i < learningInfo.mpiWorld->size(); i++) {
+	learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, lambda->paramWeights);
+	cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA'" << endl;
+	learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_UPDATED, dummy);
+	cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
+      }
+      */
+      // debug info
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
       }

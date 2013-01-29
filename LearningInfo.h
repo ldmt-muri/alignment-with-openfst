@@ -6,6 +6,8 @@
 #include <math.h>
 #include <assert.h>
 #include <map>
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
 
 #include "IAlignmentSampler.h"
 #include "VocabEncoder.h"
@@ -199,6 +201,8 @@ class LearningInfo {
     neighborhoodMinCoocc = 3;
     debugLevel = 1;
     useSparseVectors = true;
+    persistParamsAfterEachIteration = false;
+    retryLbfgsOnRoundingErrors = true;
   }
 
   bool IsModelConverged() {
@@ -323,6 +327,15 @@ class LearningInfo {
 
   // do we use cdec's FastSparseVector when applicable?
   bool useSparseVectors;
+  
+  // frequency of persisting the params
+  bool persistParamsAfterEachIteration;
+
+  // boost mpi communicator
+  boost::mpi::communicator *mpiWorld;
+
+  // if lbfgs returns a rounding error. should we retry?
+  bool retryLbfgsOnRoundingErrors;
 };
 
 

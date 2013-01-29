@@ -1,4 +1,7 @@
 #include <fenv.h>
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/thread/thread.hpp>
 #include "LearningInfo.h"
 #include "FstUtils.h"
 #include "StringUtils.h"
@@ -6,6 +9,7 @@
 
 using namespace fst;
 using namespace std;
+namespace mpi = boost::mpi;
 
 typedef ProductArc<LogWeight, LogWeight> ProductLogArc;
 
@@ -20,10 +24,86 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   }
 }
 
-int main(int argc, char **argv) {
+void DistributeTasks(int argc, char **argv, LatentCrfModel &model, mpi::communicator &world) {
+  cerr << "TASK DISTRIBUTOR" << endl;
+  // slave nodes stay here
+  if(world.rank() > 0) {
+    
+    int sentId;
+    mpi::request updateThetaRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_THETA, model.nLogTheta);
+    vector<double> paramWeights;
+    mpi::request updateLambdaRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, paramWeights);
+    vector<string> paramIds;
+    mpi::request updateLambdaIdsRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS, paramIds);
+    mpi::request computeThetaMleRequest = world.irecv(0, LatentCrfModel::MPI_TAG_COMPUTE_PARTIAL_THETA_MLE, sentId);     
+    mpi::request dieRequest = world.irecv(0, LatentCrfModel::MPI_TAG_DIE);
+    bool initialized = false;
+    do {
+      //      cerr << "slave#" << world.rank() << " is waiting for the master's command..." << endl;
 
-  //  feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+      if(updateThetaRequest.test()) {
+	// nLogTheta in the slave's model has been implicitly updated
+	cerr << "UPDATE IRECEIVED\nslave#" << world.rank() << " has updated its theta params." << endl;
+      	if(initialized) {
+	  world.send(0, LatentCrfModel::MPI_TAG_ACK_THETA_UPDATED);
+	  cerr << "ACK SENT\nslave#" << world.rank() << " sent a theta ack" << endl;
+	} else {
+	  initialized = true;
+	}
+	cerr << "environment::max_tag() = " << mpi::environment::max_tag() << endl;
+	updateThetaRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_THETA, model.nLogTheta);
+      } else if (updateLambdaRequest.test()) {
+	// lambda->paramWeights in the slave's model has been implicitly updated
+	cerr << "slave#" << world.rank() << " has updated its lambda params." << endl;
+	world.send(0, LatentCrfModel::MPI_TAG_ACK_LAMBDA_UPDATED);
+	// update the local params
+	cerr << "model.lambda->paramWeights.size() = " << model.lambda->paramWeights.size() << endl;
+	cerr << "model.lambda->paramIds.size() = " << model.lambda->paramIds.size() << endl;
+	cerr << "model.lambda->paramIndexes.size() = " << model.lambda->paramIndexes.size() << endl;
+	for(int index = 0; index < paramWeights.size(); index++) {
+	  assert(index < model.lambda->GetParamsCount());
+	  model.lambda->UpdateParam(index, paramWeights[index]);
+	}
+	updateLambdaRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, paramWeights);
+      } else if (updateLambdaIdsRequest.test()) {
+	// lambda->paramIds in the slave's model has been implicitly updated
+	cerr << "slave#" << world.rank() << " has updated its lambda ids." << endl;
+	world.send(0, LatentCrfModel::MPI_TAG_ACK_LAMBDA_INDEXES_UPDATED);
+	// add the local params
+	for(int index = 0; index < paramIds.size(); index++) {
+	  model.lambda->AddParam(paramIds[index]);
+	  assert(index == model.lambda->GetParamIndex(paramIds[index]));
+	}
+	updateLambdaIdsRequest = world.irecv(0, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS, paramIds);
+      } else if (dieRequest.test()) {
+	cerr << "slave#" << world.rank() << " is killing itself." << endl;
+	exit(0);
 
+      } else if (computeThetaMleRequest.test()) {
+	cerr << "slave#" << world.rank() << " is computing partial mle from sentId " << sentId << endl;
+	MultinomialParams::ConditionalMultinomialParam mle;
+	map<int, double> mleMarginals;
+	model.UpdateThetaMleForSent(sentId, mle, mleMarginals);
+	world.send(0, LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE, mle);
+	world.send(0, LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE_MARGINAL, mleMarginals);
+	computeThetaMleRequest = world.irecv(0, LatentCrfModel::MPI_TAG_COMPUTE_PARTIAL_THETA_MLE, sentId);     
+      } else {
+	//	cerr << "slave#" << world.rank() << " will nap for a while" << endl;	
+	boost::this_thread::sleep( boost::posix_time::seconds(1) );
+      }
+    } while(true);
+  }
+  // master node continues...
+  std::cout << "I am the master." << std::endl;
+}
+
+int main(int argc, char **argv) {  
+  // feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+
+  // boost mpi initialization
+  mpi::environment env(argc, argv);
+  mpi::communicator world;
+  
   // parse arguments
   cerr << "parsing arguments...";
   string textFilename, outputFilenamePrefix, goldLabelsFilename;
@@ -42,6 +122,7 @@ int main(int argc, char **argv) {
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
+  learningInfo.mpiWorld = &world;
   //  learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.minLikelihoodDiff = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
@@ -64,119 +145,15 @@ int main(int argc, char **argv) {
 
   // add constraints
   learningInfo.constraints.clear();
-  /*
-  Constraint constraint;
-  constraint.SetConstraintOfType_yI_xIString(3, "neighbour");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "prison");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "sisters");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "house");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "event");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "man");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(3, "woman");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "kill");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "killed");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "killing");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "commit");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "commited");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "commiting");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "take");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "took");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "taken");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "live");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(4, "lived");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(5, "simple");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(5, "honourable");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(5, "nice");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(5, "strong");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(6, "clearly");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(6, "immediately");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yI_xIString(6, "particularly");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(7, "i");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(7, "you");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(7, "he");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(7, "they");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(8, "an");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(8, "the");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(9, "in");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(9, "at");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(9, "by");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "0");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "1");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "2");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "3");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "4");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "5");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "6");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "7");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "8");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(10, "9");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(11, "and");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(11, "or");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, ".");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, ",");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, ";");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, "-");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, "?");
-  learningInfo.constraints.push_back(constraint);
-  constraint.SetConstraintOfType_yIExclusive_xIString(13, "!");
-  learningInfo.constraints.push_back(constraint);
-  */
   cerr << "done." << endl;
+  
+  // initialize the model
+  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
+
+  /*  DistributeTasks(argc, argv, model, world); */
 
   // train the model
   cerr << "train the model..." << endl;
-  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
-
   model.Train();
   cerr << "training finished!" << endl;
     

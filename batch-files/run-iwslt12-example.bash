@@ -1,3 +1,4 @@
+
 #!/bin/bash
 #PBS -l ncpus=1
 #PBS -l pmem=7gb
@@ -21,4 +22,5 @@ make
 #./train-latentCrfModel example/iwslt12-pos.eng example/iwslt12.latentCrf.out 
 #./train-latentCrfModel example/iwslt12-letters.eng example/iwslt12.latentCrf.out example/iwslt12-letters.eng.gold
 #./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out
-./train-latentCrfModel example/tweets-pos.eng example/iwslt12.latentCrf.out example/tweets-pos.gold
+#./train-latentCrfModel example/tb3-pos-wsj.eng example/tb3-pos-wsj.latentCrf.out example/tb3-pos-wsj.pos
+mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out 

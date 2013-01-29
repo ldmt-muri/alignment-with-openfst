@@ -7,21 +7,21 @@ using namespace MultinomialParams;
 void MultinomialParams::NormalizeParams(ConditionalMultinomialParam& params) {
     // iterate over src tokens in the model
     for(ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      std::map< int, float > &translations = (*srcIter).second;
-      float fTotalProb = 0.0;
+      std::map< int, double > &translations = (*srcIter).second;
+      double fTotalProb = 0.0;
       // iterate over tgt tokens logsumming over the logprob(tgt|src) 
-      for(std::map< int, float >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	float temp = (*tgtIter).second;
+      for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+	double temp = (*tgtIter).second;
 	fTotalProb += nExp(temp);
       }
       // exponentiate to find p(*|src) before normalization
       // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
-      float fVerifyTotalProb = 0.0;
-      for(std::map< int, float >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	float fUnnormalized = nExp((*tgtIter).second);
-	float fNormalized = fUnnormalized / fTotalProb;
+      double fVerifyTotalProb = 0.0;
+      for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+	double fUnnormalized = nExp((*tgtIter).second);
+	double fNormalized = fUnnormalized / fTotalProb;
 	fVerifyTotalProb += fNormalized;
-	float fLogNormalized = nLog(fNormalized);
+	double fLogNormalized = nLog(fNormalized);
 	(*tgtIter).second = fLogNormalized;
       }
     }
@@ -30,7 +30,7 @@ void MultinomialParams::NormalizeParams(ConditionalMultinomialParam& params) {
   // zero all parameters
 void MultinomialParams::ClearParams(ConditionalMultinomialParam& params) {
     for (ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      for (std::map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      for (std::map<int, double>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
 	tgtIter->second = NLOG_ZERO;
       }
     }
@@ -41,9 +41,9 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params) {
     // iterate over src tokens in the model
     int counter = 0;
     for(ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      const std::map< int, float > &translations = (*srcIter).second;
+      const std::map< int, double > &translations = (*srcIter).second;
       // iterate over tgt tokens 
-      for(std::map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      for(std::map< int, double >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
 	std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
       }
     } 
@@ -54,9 +54,9 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params, c
     // iterate over src tokens in the model
     int counter = 0;
     for(ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      const std::map< int, float > &translations = (*srcIter).second;
+      const std::map< int, double > &translations = (*srcIter).second;
       // iterate over tgt tokens 
-      for(std::map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      for(std::map< int, double >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
 	std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
       }
     } 
@@ -65,7 +65,7 @@ void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params, c
 
 void MultinomialParams::PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params) {
   for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (std::map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+    for (std::map<int, double>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
       // line format: 
       // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
       paramsFile << srcIter->first << " " << tgtIter->first << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
@@ -75,7 +75,7 @@ void MultinomialParams::PersistParams(std::ofstream& paramsFile, const Condition
 
 void MultinomialParams::PersistParams(std::ofstream &paramsFile, const ConditionalMultinomialParam &params, const VocabEncoder &vocabEncoder) {
   for (ConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (std::map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+    for (std::map<int, double>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
       // line format: 
       // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
       paramsFile << srcIter->first << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
