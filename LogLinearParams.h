@@ -224,7 +224,8 @@ class LogLinearParams {
 
   // writes the features to a text file formatted one feature per line. 
   void PersistParams(const std::string& outputFilename);
-  
+
+  // the actual parameters
   std::map< std::string, int > paramIndexes;
   std::vector< double > paramWeights;
   std::vector< double > oldParamWeights;

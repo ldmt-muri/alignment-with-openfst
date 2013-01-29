@@ -4,7 +4,8 @@
 #include <vector>
 #include <string>
 
-class IAlignmentSampler {
+class IAlignmentModel
+ {
   public:
 
     // print current model paramters

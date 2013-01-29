@@ -1002,7 +1002,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   // accumulate nloglikelihood from all processes
   mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, mpi::minimum<double>());
   // accumulate the gradient vector from all processes
-  mpi::broadcast< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, 0);
+  //  mpi::broadcast< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, 0);
   //  mpi::all_reduce< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, derivativeWRTLambdaSparseVector, LatentCrfModel::AccumulateDerivatives);
 
   // move-away penalty is applied for all features. however, features that didn't fire in

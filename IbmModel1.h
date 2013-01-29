@@ -17,7 +17,7 @@ using namespace std;
 
 typedef map<int, map< int, float > >  Model1Param;
 
-class IbmModel1 : public IAlignmentModel.h {
+class IbmModel1 : public IAlignmentModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeParams();
@@ -36,7 +36,10 @@ class IbmModel1 : public IAlignmentModel.h {
   
  public:
 
-  IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
+  IbmModel1(const string& srcIntCorpusFilename, 
+	    const string& tgtIntCorpusFilename, 
+	    const string& outputFilenamePrefix, 
+	    const LearningInfo& learningInfo);
 
   virtual void PrintParams();
 
@@ -62,4 +65,3 @@ class IbmModel1 : public IAlignmentModel.h {
 };
 
 #endif
-

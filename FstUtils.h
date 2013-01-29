@@ -87,6 +87,7 @@ class FstUtils {
     return ss.str(); 
   }
 
+  // compute the total weight of using each arc in the FST
   template<class WeightType, class ArcType>
     inline static void ComputeTotalProb(const fst::VectorFst<ArcType>& prob, fst::VectorFst<ArcType>& totalProbs, WeightType& beta0) {
 

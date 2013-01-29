@@ -1,5 +1,5 @@
-#ifndef _ALIAS_SAMPLER_H_
-#define _ALIAS_SAMPLER_H_
+#ifndef _SAMPLERS_H_
+#define _SAMPLERS_H_
 
 #include <vector>
 #include <limits>
@@ -102,6 +102,8 @@ struct RichMultinomialSampler : public MultinomialSampler {
 // probability F[i], otherwise it returns an "alias" value L[i]. The
 // constructor computes the F's and L's given an arbitrary multionimial p in
 // O(n) time and Draw returns samples in O(1) time.
+// 
+// copied from http://cdec-decoder.org/
 struct AliasSampler {
 
   AliasSampler() {}
