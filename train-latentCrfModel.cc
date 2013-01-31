@@ -156,7 +156,12 @@ int main(int argc, char **argv) {
   // train the model
   cerr << "train the model..." << endl;
   model.Train();
-  cerr << "training finished!" << endl;
+  cerr << "rank #" << world.rank() << ": training finished!" << endl;
+  
+  // we don't need the slaves anymore
+  if(world.rank() > 0) {
+    return 0;
+  }
     
   // compute some statistics on a test set
   cerr << "analyze the data using the trained model..." << endl;

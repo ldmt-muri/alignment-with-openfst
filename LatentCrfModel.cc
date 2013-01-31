@@ -31,7 +31,9 @@ LatentCrfModel::~LatentCrfModel() {
 LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) : 
   vocabEncoder(textFilename) {
 
-  vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
+  if(learningInfo.mpiWorld->rank() == 0) {
+    vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
+  }
   VocabDecoder *vocabDecoder = new VocabDecoder(outputPrefix + string(".vocab"));
   lambda = new LogLinearParams(*vocabDecoder);
 
@@ -864,12 +866,13 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 								 const double step) {
   //  cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda(){" << endl;
   clock_t timestamp = clock();
+
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
   // debug
-  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "lbfgs suggests the following lambda parameter weights for process #" << model.learningInfo.mpiWorld->rank() << endl;
     model.lambda->PrintParams();
   }
@@ -992,14 +995,15 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   }
 
   // accumulate nloglikelihood from all processes
-  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, mpi::minimum<double>());
+  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, std::plus<double>());
+
   // accumulate the gradient vectors from all processes
   try {
     vector<double> gradientVector(gradient, gradient + lambdasCount);
-    vector<double> gradientVector2;
-    mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector2, LatentCrfModel::AggregateVectors);
-    for(int i = 0; i < gradientVector2.size(); i++) {
-      gradient[i] = gradientVector2[i];
+    mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector, LatentCrfModel::AggregateVectors);
+    assert(gradientVector.size() == lambdasCount);
+    for(int i = 0; i < gradientVector.size(); i++) {
+      gradient[i] = gradientVector[i];
     }
   } catch (boost::exception &e) {
     cerr << "all_reduce diagnostic info: " << boost::diagnostic_information(e);
@@ -1028,7 +1032,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   }
   // debug
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-    cerr << "-eval(nloglikelihood=" << nlogLikelihood << ",totalMoveAwayPenalty=" << totalMoveAwayPenalty << ") ";
+    cerr << "-eval(nloglikelihood=" << nlogLikelihood << ",totalMoveAwayPenalty=" << totalMoveAwayPenalty << ")\n";
   }
   //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
   //  LogLinearParams::PrintParams(derivativeWRTLambda);
@@ -1445,38 +1449,13 @@ void LatentCrfModel::BlockCoordinateDescent() {
     if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
       cerr << "updating thetas..." << endl;
     }
-    // all slaves are slacking at first
-    /*    vector<bool> busySlaves(learningInfo.mpiWorld->size(), false);
-    vector<boost::mpi::request> slavesMleRequests(learningInfo.mpiWorld->size());
-    vector<boost::mpi::request> slavesMleMarginalRequests(learningInfo.mpiWorld->size());
-    vector<MultinomialParams::ConditionalMultinomialParam> slavesMleResults(learningInfo.mpiWorld->size());
-    vector< map<int, double> > slavesMleMarginalResults(learningInfo.mpiWorld->size());
-    */
+
     // update the mle for each sentence
     for(unsigned sentId = 0; sentId < data.size(); sentId++) {
       // sentId is assigned to the process # (sentId % world.size())
       if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
 	continue;
       }
-      /*
-      if(learningInfo.mpiWorld->size() > 1) {
-	// find a slacking slave (and collects the work of slaves who completed their work)
-	cerr << "master is looking for a slacking slave...";
-	unsigned slaveRank = FindASlackingSlave(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
-	cerr << "slave#" << slaveRank << " found to be slacking." << endl;
-	string command = "compute";
-	mpi::request isendRequest = learningInfo.mpiWorld->isend(slaveRank, LatentCrfModel::MPI_TAG_COMPUTE_PARTIAL_THETA_MLE, sentId);
-	cerr << "master asynchronously sent slave#" << slaveRank << " the message 'COMPUTE_PARTIAL_THETA_MLE'" << endl;
-	slavesMleRequests[slaveRank] = learningInfo.mpiWorld->irecv(slaveRank, 
-								    LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE, 
-								    slavesMleResults[slaveRank]);
-	slavesMleMarginalRequests[slaveRank] = learningInfo.mpiWorld->irecv(slaveRank,
-									    LatentCrfModel::MPI_TAG_RETURN_PARTIAL_THETA_MLE_MARGINAL, 
-									    slavesMleMarginalResults[slaveRank]);
-	cerr << "master asynchronously received some message from slave#" << slaveRank << endl;
-	//	UpdateThetaMleForSent(sentId, mle, mleMarginals);
-      } 
-      */
       UpdateThetaMleForSent(sentId, mle, mleMarginals);
     }
     /*
@@ -1501,7 +1480,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
 
     // debug info
-    if(learningInfo.persistParamsAfterEachIteration) {
+    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
       stringstream thetaParamsFilename;
       thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
       thetaParamsFilename << ".theta";
@@ -1515,18 +1494,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
       MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
     }
 
-    // debug
-    //    temp = ComputeCorpusNloglikelihood();
-    //    cerr << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << endl;
-    //    cerr << "nloglikelihood after optimizing thetas but before optimizing lambdas = " << temp << endl;
-    //    cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
-
-    // update the lambdas with mini-batch lbfgs, one full pass over training data
-    // needed to call liblbfgs
+    // update the lambdas with mini-batch lbfgs
     double* lambdasArray;
     int lambdasArrayLength;
-    // for each mini-batch
-    //    cerr << "minibatch size = " << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     double nlogLikelihood = 0;
     if(learningInfo.optimizationMethod.subOptMethod->miniBatchSize <= 0) {
       learningInfo.optimizationMethod.subOptMethod->miniBatchSize = data.size();
@@ -1548,6 +1518,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	cerr << "calling lbfgs on sents " << sentId << "-" << to << endl;
       }
       if(learningInfo.optimizationMethod.subOptMethod->algorithm == LBFGS) {
+
 	int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
 				EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 	// debug
@@ -1582,15 +1553,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       } else {
 	assert(false);
       }
-      /*
-      // update the slave lambda parameters
-      for(unsigned i = 1; i < learningInfo.mpiWorld->size(); i++) {
-	learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, lambda->paramWeights);
-	cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA'" << endl;
-	learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_UPDATED, dummy);
-	cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
-      }
-      */
+      
       // debug info
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
@@ -1608,14 +1571,13 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
 
     // debug info
-    if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": updated lambda params are" << endl;
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       lambda->PrintParams();
     }
 
     // persist updated lambda params
     stringstream lambdaParamsFilename;
-    if(learningInfo.persistParamsAfterEachIteration) {
+    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
       lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
       if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
 	cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
@@ -1633,18 +1595,20 @@ void LatentCrfModel::BlockCoordinateDescent() {
     learningInfo.iterationsCount++;
 
     // check convergence
-    try {
+    if(learningInfo.mpiWorld.rank() == 0) {
       converged = learningInfo.IsModelConverged();
-    } catch(...) {
-      cerr << "exception thrown in LearningInfo::IsModelConverged(). will halt!" << endl;
-      assert(false);
     }
+    
+    // broadcast the convergence decision
+    mpi::broadcast<bool>(*learningInfo.mpiWorld, converged, 0);
   
   } while(!converged);
 
   // debug
-  lambda->PersistParams(outputPrefix + string(".final.lambda"));
-  MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta, vocabEncoder);
+  if(learningInfo.mpiWorld->rank() == 0) {
+    lambda->PersistParams(outputPrefix + string(".final.lambda"));
+    MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta, vocabEncoder);
+  }
 }
 
 void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {

@@ -131,6 +131,7 @@ class LogLinearParams {
 
   // copies the weight of all features from paramWeights vector to oldParamWeights vector
   inline void UpdateOldParamWeights() {
+    assert(oldParamWeights.size() == paramWeights.size());
     for(int i = 0; i < paramWeights.size(); i++) {
       oldParamWeights[i] = paramWeights[i];
     }
@@ -235,6 +236,7 @@ class LogLinearParams {
   void Broadcast(boost::mpi::communicator &world, unsigned root) {
     boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root);
     boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root);
+    boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root);
     boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root);
   }  
 

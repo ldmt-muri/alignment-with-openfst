@@ -14,6 +14,7 @@
 \newcommand{\nascomment}[1]{\textcolor{green}{\bf\small [#1 --NAS]}}
 \newcommand{\wacomment}[1]{\textcolor{blue}{\bf\small [#1 --WA]}}
 \DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\impact}{impact}
 \setlength\titlebox{6.5cm}    % Expanding the titlebox
 
 \newenvironment{itemizesquish}{\begin{list}{\labelitemi}{\setlength{\itemsep}{0em}\setlength{\labelwidth}{0.5em}\setlength{\leftmargin}{\labelwidth}\addtolength{\leftmargin}{\labelsep}}}{\end{list}}
@@ -37,6 +38,8 @@ abstract...
 Given a set of sentences \{\textbf{x}\}, find the most probable POS sequence \textbf{y} for each sentence. 
 
 \section{Model}
+
+$\impact(f) = \frac{1}{|split|} \sum_{(trainset, testset) \in splits} \weight(f|trainset) \sum_{doc \in testset} \value(f|testdoc)$
 
 $x_i$ is the $i^{th}$ word in \textbf{x}. $x^k$ refers to a unique type throughout the sentences. $x$ belongs to discrete domain $\cal{X}$. 
 Similarly, $y_i$ is the $i^{th}$ POS tag in \textbf{y}. $y^k$ refers to a unique POS tag. $y$ belongs to discrete domain $\cal{Y}$. 
