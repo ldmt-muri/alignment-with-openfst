@@ -71,12 +71,12 @@ bool LogLinearParams::AddParam(string paramId) {
 // if there's another parameter with the same ID already, do nothing
 bool LogLinearParams::AddParam(string paramId, double paramWeight) {
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "executing AddParam(" << paramId << "," << paramWeight << "); ";
+    cerr << "rank #" << learningInfo->mpiWorld->rank() << ": executing AddParam(" << paramId << "," << paramWeight << "); where |paramIndexes| = " << paramIndexes.size() << ", |paramWeights| = " << paramWeights.size() << endl;
   }
   bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
     if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-      cerr << "paramId is new.";
+      cerr << "rank #" << learningInfo->mpiWorld->rank() << ": paramId is new.\n";
     }
     // check class's integrity
     assert(paramIndexes.size() == paramWeights.size());

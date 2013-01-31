@@ -802,7 +802,6 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 }
 
 void LatentCrfModel::Train() {
-  cerr << "master is gonna train..." << endl;
   switch(learningInfo.optimizationMethod.algorithm) {
   case BLOCK_COORD_DESCENT:
     BlockCoordinateDescent();
@@ -867,34 +866,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   clock_t timestamp = clock();
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
-  // make sure none of the parameter weights is nan
-  /*
-  bool errorsExist = false;
-  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
-      errorsExist = true;
-      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". liblbfgs's mistake. will set it to zero!" << endl;
-      }
-      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
-      //      assert(false);
-    }
-  }
-  if(errorsExist && model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "listing the current values in the gradient array: " << endl;
-    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-      cerr << gradient[displacedIndex] << " ";
-    } 
-    cerr << endl;
-    cerr << "listing the current values in the lambdas array: " << endl;
-    for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-      cerr << lambdasArray[displacedIndex] << " ";
-    } 
-    cerr << endl;
-  }
-  */
-  
-  // note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
+  // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
   // debug
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
@@ -999,39 +971,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     }
   }
 
-  // accumulate nloglikelihood from all processes
-  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, mpi::minimum<double>());
-  // accumulate the gradient vector from all processes
-  //  mpi::broadcast< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, 0);
-  //  mpi::all_reduce< FastSparseVector<double> >(*model.learningInfo.mpiWorld, derivativeWRTLambdaSparseVector, derivativeWRTLambdaSparseVector, LatentCrfModel::AccumulateDerivatives);
-
-  // move-away penalty is applied for all features. however, features that didn't fire in
-  // this minibatch have a penalty of zero (and penalty derivative of zero). 
-  // so we only need to update the derivative and likelihood with the penalty 
-  // applied to features in derivativeWRTLambda (i.e. those that fired in this minibatch)
-  double totalMoveAwayPenalty = 0;
-  if(model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty != 0.0) {
-    for(FastSparseVector<double>::iterator fIter = derivativeWRTLambdaSparseVector.begin(); fIter != derivativeWRTLambdaSparseVector.end(); ++fIter) {
-      // get the difference
-      double newMinusOld = model.lambda->GetParamNewMinusOldWeight(fIter->first);
-      // update the derivative for this feature
-      fIter->second += 2.0 * model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld;
-      // update the likelihood
-      nlogLikelihood += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
-      // update totalMoveAwayPenalty
-      totalMoveAwayPenalty += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
-    }
-  }
   // debug
-  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-    cerr << "-eval(" << nlogLikelihood << "," << totalMoveAwayPenalty << ") ";
-  }
-  //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
-  //  LogLinearParams::PrintParams(derivativeWRTLambda);
+  assert(lambdasCount == model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters);
 
-  // write the gradient in the pre-allocated array 'gradient'
+  // write the gradient in the array 'gradient' (which is pre-allocated by the lbfgs library)
   // init gradient to zero
-  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
+  for(int displacedIndex = 0; displacedIndex < lambdasCount; displacedIndex++) {
     gradient[displacedIndex] = 0;
   }
   // for each active feature in this mini batch
@@ -1045,6 +990,49 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // set active unconstrained feature's gradient
     gradient[derivativeIter->first - model.countOfConstrainedLambdaParameters] = derivativeIter->second;
   }
+
+  // accumulate nloglikelihood from all processes
+  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, mpi::minimum<double>());
+  // accumulate the gradient vectors from all processes
+  try {
+    vector<double> gradientVector(gradient, gradient + lambdasCount);
+    vector<double> gradientVector2;
+    mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector2, LatentCrfModel::AggregateVectors);
+    for(int i = 0; i < gradientVector2.size(); i++) {
+      gradient[i] = gradientVector2[i];
+    }
+  } catch (boost::exception &e) {
+    cerr << "all_reduce diagnostic info: " << boost::diagnostic_information(e);
+    exit(1);
+  }
+
+  // move-away penalty is applied for all features. however, features that didn't fire in
+  // this minibatch have a penalty of zero (and penalty derivative of zero). 
+  // so we only need to update the derivative and likelihood with the penalty 
+  // applied to features in derivativeWRTLambda (i.e. those that fired in this minibatch)
+  double totalMoveAwayPenalty = 0;
+  if(model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty != 0.0) {
+    for(unsigned displacedIndex = 0; displacedIndex < lambdasCount; displacedIndex++) {
+      if(gradient[displacedIndex] == 0) {
+	continue;
+      }
+      // get the difference
+      double newMinusOld = model.lambda->GetParamNewMinusOldWeight(displacedIndex + model.countOfConstrainedLambdaParameters);
+      // update the derivative for this feature
+      gradient[displacedIndex] += 2.0 * model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld;
+      // update the likelihood
+      nlogLikelihood += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
+      // update totalMoveAwayPenalty
+      totalMoveAwayPenalty += model.learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty * newMinusOld * newMinusOld;
+    }
+  }
+  // debug
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "-eval(nloglikelihood=" << nlogLikelihood << ",totalMoveAwayPenalty=" << totalMoveAwayPenalty << ") ";
+  }
+  //  cerr << "nloglikelihood derivative wrt lambdas: " << endl;
+  //  LogLinearParams::PrintParams(derivativeWRTLambda);
+
   // return the to-be-minimized objective function
   //  cerr << "Evaluate returning " << nlogLikelihood;
   //  cerr << ". step is " << step;
@@ -1057,7 +1045,6 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   //  }
   //  cerr << endl;
   if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-
     cerr << endl << " EvaluateNLogLikelihoodDerivativeWRTLambda() for this minibatch took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
     cerr << "listing the current values in the gradient array (no problem enountered though): " << endl;
     for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
@@ -1438,8 +1425,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
   }
   */
   mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
-  mpi::broadcast< vector<string> >(*learningInfo.mpiWorld, lambda->paramIds, 0);
-  mpi::broadcast< vector<double> >(*learningInfo.mpiWorld, lambda->paramWeights, 0);
+  lambda->Broadcast(*learningInfo.mpiWorld, 0);
 
   // TRAINING ITERATIONS
   bool converged = false;
@@ -1620,25 +1606,24 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	nlogLikelihood += optimizedMiniBatchNLogLikelihood;
       }
     }
-    
-    // debug
-    //    cerr << "lambda params:" << endl;
-    //    lambda.PrintParams();
-    //cerr << "=======================================" << endl;
-    stringstream lambdaParamsFilename;
-    lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-      cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
+
+    // debug info
+    if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": updated lambda params are" << endl;
+      lambda->PrintParams();
     }
-    lambda->PersistParams(lambdaParamsFilename.str());
 
-    // debug
-    //    temp = ComputeCorpusNloglikelihood();
-    //    cerr << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << endl;
-    //    cerr << "nloglikelihood after optimizing thetas and lambdas = " << temp << endl;
-    //    cerr << "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv" << endl;
+    // persist updated lambda params
+    stringstream lambdaParamsFilename;
+    if(learningInfo.persistParamsAfterEachIteration) {
+      lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
+      if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+	cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
+      }
+      lambda->PersistParams(lambdaParamsFilename.str());
+    }
 
-    // debug
+    // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
       cerr << "finished coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
     }

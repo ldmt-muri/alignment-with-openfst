@@ -16,13 +16,9 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <boost/archive/text_oarchive.hpp>
-
-#include "StringUtils.h"
-#include "FstUtils.h"
-#include "LbfgsUtils.h"
-#include "LogLinearParams.h"
-#include "MultinomialParams.h"
-#include "ClustersComparer.h"
+#include <boost/exception/all.hpp>
+#include <boost/exception/diagnostic_information.hpp> 
+#include <boost/exception_ptr.hpp> 
 
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
@@ -30,6 +26,13 @@
 #include "cdec-utils/fast_sparse_vector.h"
 
 #include "anneal/Cpp/simann.hpp"
+
+#include "StringUtils.h"
+#include "FstUtils.h"
+#include "LbfgsUtils.h"
+#include "LogLinearParams.h"
+#include "MultinomialParams.h"
+#include "ClustersComparer.h"
 
 using namespace fst;
 using namespace std;
@@ -158,6 +161,9 @@ class LatentCrfModel {
   
   // configure lbfgs parameters according to the LearningInfo member of the model
   lbfgs_parameter_t SetLbfgsConfig();
+
+  // broadcasts the essential member variables in LogLinearParam
+  void BroadcastLambdas();
     
  public:
 
@@ -166,6 +172,16 @@ class LatentCrfModel {
   static LatentCrfModel& GetInstance(const string &textFilename, 
 				     const string &outputPrefix, 
 				     LearningInfo &learningInfo);
+
+  // aggregates vectors for the mpi reduce operation
+  static std::vector<double> AggregateVectors(const std::vector<double> &v1, const std::vector<double> &v2) {
+    assert(v1.size() == v2.size());
+    std::vector<double> vTotal(v1.size());
+    for(unsigned i = 0; i < v1.size(); i++) {
+      vTotal[i] = v1[i] + v2[i];
+    }
+    return vTotal;
+  }  
   
   // train the model
   void Train();

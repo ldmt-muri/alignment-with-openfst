@@ -9,6 +9,12 @@
 #include <math.h>
 #include <cmath>
 
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/serialization/map.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/mpi/collectives.hpp>
+
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
 #include "cdec-utils/fast_sparse_vector.h"
@@ -224,6 +230,40 @@ class LogLinearParams {
 
   // writes the features to a text file formatted one feature per line. 
   void PersistParams(const std::string& outputFilename);
+
+  // call boost::mpi::broadcast for the essential member variables of this object
+  void Broadcast(boost::mpi::communicator &world, unsigned root) {
+    boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root);
+    boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root);
+    boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root);
+  }  
+
+  // checks whether the "otherParams" have the same parameters and values as this object
+  // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors
+  bool IsIdentical(const LogLinearParams &otherParams) {
+    if(paramIndexes.size() != otherParams.paramIndexes.size())
+      return false;
+    if(paramWeights.size() != otherParams.paramWeights.size())
+      return false;
+    if(paramIds.size() != otherParams.paramIds.size()) 
+      return false;
+    for(std::map<std::string, int>::const_iterator paramIndexesIter = paramIndexes.begin(); 
+	paramIndexesIter != paramIndexes.end();
+	++paramIndexesIter) {
+      std::map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first);
+      if(paramIndexesIter->second != otherIter->second) 
+	return false;
+    }
+    for(unsigned i = 0; i < paramWeights.size(); i++){
+      if(paramWeights[i] != otherParams.paramWeights[i])
+	return false;
+    }
+    for(unsigned i = 0; i < paramIds.size(); i++) {
+      if(paramIds[i] != otherParams.paramIds[i]) 
+	return false;
+    }
+    return true;
+  }
 
   // the actual parameters
   std::map< std::string, int > paramIndexes;
