@@ -145,11 +145,12 @@ int main(int argc, char **argv) {
 
   // add constraints
   learningInfo.constraints.clear();
-  cerr << "done." << endl;
+  if(world.rank() == 0) {
+    cerr << "done." << endl;
+  }
   
   // initialize the model
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
-  cerr << "model is at address " << &model << endl;
 
   /*  DistributeTasks(argc, argv, model, world); */
 

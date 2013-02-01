@@ -14,6 +14,7 @@
 #include <boost/thread/thread.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/serialization/set.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/exception/all.hpp>
@@ -89,6 +90,9 @@ class LatentCrfModel {
 			   VectorFst<LogArc> &fst, vector<fst::LogWeight>& alphas, vector<fst::LogWeight>& betas);
 
   // build an FST to compute Z(x)
+  void BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst);
+
+  // build an FST to compute Z(x). also computes potentials
   void BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas);
 
   // compute the partition function Z_\lambda(x)
@@ -165,6 +169,14 @@ class LatentCrfModel {
   // broadcasts the essential member variables in LogLinearParam
   void BroadcastLambdas();
     
+  // fire features in this sentence
+  void FireFeatures(const vector<int> &x,
+		    const VectorFst<LogArc> &fst,
+		    FastSparseVector<double> &h);
+
+  // add constrained features with hand-crafted weights
+  void AddConstrainedFeatures();
+
  public:
 
   static LatentCrfModel& GetInstance();
@@ -173,6 +185,9 @@ class LatentCrfModel {
 				     const string &outputPrefix, 
 				     LearningInfo &learningInfo);
 
+  // aggregates sets for the mpi reduce operation
+  static std::set<std::string> AggregateSets(const std::set<std::string> &v1, const std::set<std::string> &v2);
+  
   // aggregates vectors for the mpi reduce operation
   static std::vector<double> AggregateVectors(const std::vector<double> &v1, const std::vector<double> &v2) {
     assert(v1.size() == v2.size());

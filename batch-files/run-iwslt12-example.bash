@@ -9,7 +9,7 @@
 
 #python utils/encode-corpus.py example/iwslt12.eng example/iwslt12.eng.vocab example/iwslt12.eng.int
 #python utils/encode-corpus.py example/iwslt12.trk example/iwslt12.trk.vocab example/iwslt12.trk.int
-#make
+make
 
 #./train-model1 example/iwslt12.eng.int example/iwslt12.trk.int example/iwslt12.out
 
@@ -24,4 +24,4 @@
 #./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out
 #./train-latentCrfModel example/tb3-pos-wsj.eng example/tb3-pos-wsj.latentCrf.out example/tb3-pos-wsj.pos
 #valgrind mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out
-time mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-100.eng example/tb3-pos-wsj-100.latentCrf.out
+time mpirun -np 30 ./train-latentCrfModel example/tb3-pos-wsj-10000.eng example/tb3-pos-wsj-10000.latentCrf.out
