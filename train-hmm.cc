@@ -14,8 +14,10 @@ void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &t
     srcTestSetFilename = argv[3];
     tgtTestSetFilename = argv[4];
     outputFilepathPrefix = argv[5];
-  } else {
+  } else if(argc == 4) {
     outputFilepathPrefix = argv[3];
+  } else {
+    cerr << "invalid arguments" << endl;
   }
 }
 
