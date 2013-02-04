@@ -25,10 +25,12 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
 
   // initialize the model parameters
   cerr << "init hmm params" << endl;
-  stringstream initialModelFilename;
-  initialModelFilename << outputPrefix << ".param.init";
   InitParams();
-  PersistParams(initialModelFilename.str());
+  if(learningInfo.mpiWord->rank() == 0) {
+    stringstream initialModelFilename;
+    initialModelFilename << outputPrefix << ".param.init";
+    PersistParams(initialModelFilename.str());
+  }
 
   // create the initial grammar FST
   cerr << "create grammar fst" << endl;
@@ -118,7 +120,7 @@ void HmmModel::PrintParams() {
 
 void HmmModel::PersistParams(const string& outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
-  cerr << "writing model params at " << outputFilename << endl;
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": writing model params at " << outputFilename << endl;
   paramsFile << "=============== translation parameters p(tgtWord|srcWord) ============" << endl;
   MultinomialParams::PersistParams(paramsFile, tFractionalCounts);
   paramsFile << endl << "=============== alignment parameters p(a_i|a_{i-1}) ==================" << endl;
@@ -328,6 +330,11 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end(); 
 	 tgtIter++, srcIter++) {
 
+      // every core works on its sentences
+      if(sentsCounter % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+	continue;
+      }
+
       // build the alignment fst
       clock_t t20 = clock();
       const VectorFst< LogQuadArc > &tgtFst = *tgtIter, &srcFst = *srcIter;
@@ -406,18 +413,30 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       
       // logging
       if (++sentsCounter % 1000 == 0) {
-	cerr << sentsCounter << " sents processed. iterationLoglikelihood = " << logLikelihood <<  endl;
+	cerr << sentsCounter << " sents processed. so far, iterationLoglikelihood on this core = " << logLikelihood <<  endl;
       }
     }
     
-    // normalize fractional counts such that \sum_t p(t|s) = 1 \forall s
-    clock_t t50 = clock();
-    NormalizeFractionalCounts();
-    DeepCopy(aFractionalCounts, aParams);
-    normalizationClocks += clock() - t50;
+    // all processes send their fractional counts to the master and the master accumulates them
+    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, tFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
+    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, aFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
+    mpi::all_reduce<float>(*learningInfo.mpiWorld, logLikelihood, logLikelihood, std::plus<float>(), 0);
+
+    // master only: normalize fractional counts such that \sum_t p(t|s) = 1 \forall s
+    if(learningInfo.mpiWorld->rank() == 0) {
+      clock_t t50 = clock();
+      NormalizeFractionalCounts();
+      DeepCopy(aFractionalCounts, aParams);
+      normalizationClocks += clock() - t50;
+    }
     
-    // persist parameters
-    if(false) {
+    // update a few things on slaves
+    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, 0);    
+    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, 0);    
+    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aParams, 0);    
+    
+    // persist parameters, if need be
+    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
       stringstream filename;
       filename << outputPrefix << ".param." << learningInfo.iterationsCount;
       PersistParams(filename.str());
