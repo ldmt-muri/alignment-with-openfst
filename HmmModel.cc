@@ -18,6 +18,7 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
   this->learningInfo = learningInfo;
 
   // encode training data
+  vocabEncoder.useUnk = false;
   vocabEncoder.Read(srcIntCorpusFilename, srcSents);
   vocabEncoder.Read(tgtIntCorpusFilename, tgtSents);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
@@ -54,7 +55,16 @@ void HmmModel::Train() {
 void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector< int > &intTokens = srcSents[sentId];
-    assert(intTokens[0] == NULL_SRC_TOKEN_ID);
+    if(intTokens[0] != NULL_SRC_TOKEN_ID) {
+      intTokens.insert(intTokens.begin(), NULL_SRC_TOKEN_ID);
+    }
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "now creating src fst for sentence: ";
+      for(unsigned i = 0; i < intTokens.size(); i++) {
+	cerr << intTokens[i] << " ";
+      }
+      cerr << endl;
+    }
 
     // create the fst
     VectorFst< LogQuadArc > srcFst;
@@ -125,7 +135,9 @@ void HmmModel::InitParams() {
     vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
     
     // we want to allow target words to align to NULL (which has srcTokenId = 1).
-    srcTokens.push_back(NULL_SRC_TOKEN_ID); 
+    if(srcTokens[0] != NULL_SRC_TOKEN_ID) {
+      srcTokens.insert(srcTokens.begin(), NULL_SRC_TOKEN_ID);
+    }
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
@@ -133,7 +145,7 @@ void HmmModel::InitParams() {
       // INITIALIZE TRANSLATION PARAMETERS
       int srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      map<int, double> tParamsGivenS_i = tFractionalCounts[srcToken];
+      map<int, double> &tParamsGivenS_i = tFractionalCounts[srcToken];
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
 	int tgtToken = tgtTokens[j];
@@ -197,6 +209,7 @@ void HmmModel::CreateGrammarFst() {
   grammarFst.SetStart(0);
   grammarFst.SetFinal(0, LogQuadWeight::One());
   int fromState = 0, toState = 0;
+  assert(tFractionalCounts.size() > 0);
   for(ConditionalMultinomialParam::const_iterator srcIter = tFractionalCounts.begin(); srcIter != tFractionalCounts.end(); srcIter++) {
     for(MultinomialParam::const_iterator tgtIter = (*srcIter).second.begin(); tgtIter != (*srcIter).second.end(); tgtIter++) {
       int tgtToken = (*tgtIter).first;
@@ -210,7 +223,6 @@ void HmmModel::CreateGrammarFst() {
     }
   }
   ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
-  //  PrintFstSummary(grammarFst);
 }
 
 // assumptions:
@@ -280,6 +292,10 @@ void HmmModel::BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst,
 				 VectorFst< LogQuadArc > &alignmentFst) {
   VectorFst< LogQuadArc > temp;
   Compose(tgtFst, grammarFst, &temp);
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr<< "===GRAMMAR FST=== " << FstUtils::PrintFstSummary(grammarFst);
+    cerr << "===TGT o GRAMMAR FST=== " << FstUtils::PrintFstSummary(temp);
+  }
   Compose(temp, srcFst, &alignmentFst);  
 }
 
@@ -293,13 +309,18 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     cerr << "create src fsts" << endl;
     vector< VectorFst <LogQuadArc> > srcFsts;
     CreateSrcFsts(srcFsts);
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "created src fsts" << endl;
+    }
 
     clock_t t10 = clock();
     float logLikelihood = 0, validationLogLikelihood = 0;
-    //    cerr << "iteration's loglikelihood = " << logLikelihood << endl;
     
     // this vector will be used to accumulate fractional counts of parameter usages
     ClearFractionalCounts();
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "cleared fractional counts vector" << endl;
+    }
     
     // iterate over sentences
     int sentsCounter = 0;
@@ -313,19 +334,34 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       VectorFst< LogQuadArc > alignmentFst;
       BuildAlignmentFst(tgtFst, srcFst, alignmentFst);
       compositionClocks += clock() - t20;
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "built alignment fst. |tgtFst| = " << tgtFst.NumStates() << ", |srcFst| = " << srcFst.NumStates() << ", |alignmentFst| = " << alignmentFst.NumStates() << endl;
+	cerr << "===SRC FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(srcFst);
+	cerr << "===TGT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(tgtFst);
+	cerr << "===ALIGNMENT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(alignmentFst);
+      }
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
       vector<LogQuadWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "shortest distance (both directions) was computed" << endl;
+      }
       float fSentLogLikelihood, dummy;
+      cerr << "alignmentFst.Start() = " << alignmentFst.Start() << endl;
+      cerr << "betas[alignmentFst.Start()] = " << FstUtils::PrintWeight( betas[alignmentFst.Start()] ) << endl;
       FstUtils::DecodeQuad(betas[alignmentFst.Start()], 
 			     dummy, dummy, dummy, fSentLogLikelihood);
       forwardBackwardClocks += clock() - t30;
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "fSentLogLikelihood = " << fSentLogLikelihood << endl;
+      }
       
       // compute and accumulate fractional counts for model parameters
       clock_t t40 = clock();
+      cerr << "sentsCounter = " << sentsCounter << endl;
       bool excludeFractionalCountsInThisSent = 
 	learningInfo.useEarlyStopping && 
 	sentsCounter % learningInfo.trainToDevDataSize == 0;

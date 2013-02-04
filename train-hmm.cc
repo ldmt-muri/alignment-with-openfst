@@ -33,6 +33,7 @@ int main(int argc, char **argv) {
   learningInfo.useMaxIterationsCount = true;
   learningInfo.minLikelihoodDiff = 10.0;
   learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
 
   // initialize the model

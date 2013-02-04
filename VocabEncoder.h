@@ -25,6 +25,7 @@ class VocabEncoder {
   }
 
   VocabEncoder(const std::string& textFilename) {
+    useUnk = true;
     nextId = 2;
     UNK = "_unk_";
 
@@ -51,16 +52,24 @@ class VocabEncoder {
 	}
       }
     }
+    useUnk = true;
   }
 
   int Encode(const string& token) {
     if(tokenToInt.count(token) == 0) {
-      return tokenToInt[UNK];
+      if(useUnk) {
+	return tokenToInt[UNK];
+      }	else {
+	tokenToInt[token] = nextId;
+	intToToken[nextId++] = token;
+	assert(nextId != INT_MAX);
+	return tokenToInt[token];
+      }
     } else {
       return tokenToInt[token];
     }
   }
-
+  
   void Encode(const std::vector<std::string>& tokens, vector<int>& ids) {
     assert(ids.size() == 0);
     for(vector<string>::const_iterator tokenIter = tokens.begin();
@@ -70,37 +79,37 @@ class VocabEncoder {
     }
     assert(ids.size() == tokens.size());
   }
-
+  
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int> > &data) {
-
+    
     assert(data.size() == 0);
     
     // open data file
     std::ifstream textFile(textFilename.c_str(), std::ios::in);
-
+    
     // for each line
     std::string line;
     int lineNumber = -1;
     while(getline(textFile, line)) {
-
+      
       // skip empty lines
       if(line.size() == 0) {
 	continue;
       }
       lineNumber++;
-
+      
       // split tokens
       std::vector<string> splits;
       StringUtils::SplitString(line, ' ', splits);
-
+      
       // encode tokens    
       data.resize(lineNumber+1);
       Encode(splits, data[lineNumber]);
     }
   }
-
+  
   void PersistVocab(string filename) {
     std::ofstream vocabFile(filename.c_str(), std::ios::out);
     for(map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
@@ -121,6 +130,7 @@ class VocabEncoder {
   map<string, int> tokenToInt;
   map<int, string> intToToken;
   std::string UNK;
+  bool useUnk;
 };
 
 class VocabDecoder {
