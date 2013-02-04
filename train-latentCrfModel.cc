@@ -136,8 +136,8 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 5;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 5;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 9;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 7;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
@@ -151,8 +151,6 @@ int main(int argc, char **argv) {
   
   // initialize the model
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
-
-  /*  DistributeTasks(argc, argv, model, world); */
 
   // train the model
   cerr << "train the model..." << endl;

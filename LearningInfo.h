@@ -6,6 +6,7 @@
 #include <math.h>
 #include <assert.h>
 #include <map>
+
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 

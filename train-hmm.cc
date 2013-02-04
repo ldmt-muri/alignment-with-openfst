@@ -7,12 +7,16 @@ using namespace fst;
 using namespace std;
 
 void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &srcTestSetFilename, string &tgtTestSetFilename, string &outputFilepathPrefix) {
-  assert(argc == 6);
+  assert(argc == 6 || argc == 4);
   srcCorpusFilename = argv[1];
   tgtCorpusFilename = argv[2];
-  srcTestSetFilename = argv[3];
-  tgtTestSetFilename = argv[4];
-  outputFilepathPrefix = argv[5];
+  if(argc == 6) {
+    srcTestSetFilename = argv[3];
+    tgtTestSetFilename = argv[4];
+    outputFilepathPrefix = argv[5];
+  } else {
+    outputFilepathPrefix = argv[3];
+  }
 }
 
 int main(int argc, char **argv) {
@@ -36,9 +40,15 @@ int main(int argc, char **argv) {
   model.Train();
 
   // align the test set
-  string outputAlignmentsFilename = outputFilenamePrefix + ".align";
-  model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename);
+  if(srcTestSetFilename.size() > 0) {
+    string outputAlignmentsFilename = outputFilenamePrefix + ".test.align";
+    model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename);
+  } else {
+    string outputAlignmentsFilename = outputFilenamePrefix + ".train.align";
+    model.Align(outputAlignmentsFilename);
+  }
 
+  /*
   // sample a few translations
   vector<int> srcTokens;
   srcTokens.push_back(1);
@@ -48,11 +58,12 @@ int main(int argc, char **argv) {
   for(int i = 0; i < 500; i++) {
     vector<int> tgtTokens, alignments;
     double hmmLogProb;
-    model.SampleAT(srcTokens, 3, tgtTokens, alignments, hmmLogProb);
+    model.SampleATGivenS(srcTokens, 3, tgtTokens, alignments, hmmLogProb);
     cerr << endl << "translation: ";
     for(int j = 0; j < tgtTokens.size(); j++) {
       cerr << tgtTokens[j] << "(" << srcTokens[alignments[j]] << ") ";
     }
     cerr << hmmLogProb << "(" << FstUtils::nExp(hmmLogProb) << ")";
   }
+  */
 }

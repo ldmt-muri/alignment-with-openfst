@@ -397,3 +397,9 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
 void IbmModel1::Align() {
   
 }
+
+// TODO: not implemented 
+// given the current model, align a test set
+void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
+  assert(false);
+}

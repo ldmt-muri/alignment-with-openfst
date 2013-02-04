@@ -15,6 +15,15 @@ using namespace std;
 
 class VocabEncoder {
  public:
+  VocabEncoder() {
+    nextId = 2;
+    UNK = "_unk_";
+
+    // encode unk
+    tokenToInt[UNK] = nextId;
+    intToToken[nextId++] = UNK;
+  }
+
   VocabEncoder(const std::string& textFilename) {
     nextId = 2;
     UNK = "_unk_";

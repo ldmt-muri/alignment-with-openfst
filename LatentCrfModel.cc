@@ -1267,20 +1267,26 @@ void LatentCrfModel::WarmUp() {
     FastSparseVector<double> activeFeatures;
     FireFeatures(data[sentId], lambdaFst, activeFeatures);
   }
+
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
   
   // master collects all feature ids fired on any sentence
   set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
   mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, LatentCrfModel::AggregateSets, 0);
+
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": reduced localParamIds into allParamIds" << endl;
   
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
     for(set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
       lambda->AddParam(*paramIdIter);
     }
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": updated added all features in its local lambda" << endl;
   }
-
+  
   // master broadcasts the full set of features to all slaves
   lambda->Broadcast(*learningInfo.mpiWorld, 0);
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": sent/received the lambda parameters that includes everything" << endl;
 
   // debug info
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
@@ -1430,34 +1436,8 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
 void LatentCrfModel::BlockCoordinateDescent() {  
   
   // add all features in this data set to lambda.params
-  if(learningInfo.mpiWorld->rank() == 0) {
-    WarmUp();
-  }
+  WarmUp();
   
-  // broadcast the initial theta and lambda parameters to the slaves
-  /*
-  int dummy;
-  for(unsigned i = 1; i < learningInfo.mpiWorld->size(); i++) {
-    // theta params
-    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_THETA, nLogTheta);
-    cerr << "master syncronously sent slave#" << i << " the message 'UPDATE_SLAVE_THETA'" << endl;
-    //learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_THETA_UPDATED);
-    //cerr << "ACK RECEIVED\nmaster synchronously received an acknowledgement from slave#" << i << endl;
-    // lambda param ids
-    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS, lambda->paramIds);
-    cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA_IDS'" << endl;
-    cerr << "master's lambda->paramIds.size() = " << lambda->paramIds.size() << endl;
-    cerr << "master's lambda->paramWeights.size() = " << lambda->paramWeights.size() << endl;
-    cerr << "master's lambda->paramIndexes.size() = " << lambda->paramIndexes.size() << endl;
-    learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_INDEXES_UPDATED);
-    cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
-    // lambda params
-    learningInfo.mpiWorld->send(i, LatentCrfModel::MPI_TAG_UPDATE_SLAVE_LAMBDA, lambda->paramWeights);
-    cerr << "master synchronously sent slave#" << i << " the message 'UPDATE_SLAVE_LAMBDA'" << endl;
-    learningInfo.mpiWorld->recv(i, LatentCrfModel::MPI_TAG_ACK_LAMBDA_UPDATED);
-    cerr << "master synchronously received an acknowledgement from slave#" << i << endl;
-  }
-  */
   mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
   lambda->Broadcast(*learningInfo.mpiWorld, 0);
 

@@ -14,10 +14,13 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
   srand(425);
 
   // set member variables
-  this->srcCorpusFilename = srcIntCorpusFilename;
-  this->tgtCorpusFilename = tgtIntCorpusFilename;
   this->outputPrefix = outputFilenamePrefix;
   this->learningInfo = learningInfo;
+
+  // encode training data
+  vocabEncoder.Read(srcIntCorpusFilename, srcSents);
+  vocabEncoder.Read(tgtIntCorpusFilename, tgtSents);
+  assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
   // initialize the model parameters
   cerr << "init hmm params" << endl;
@@ -49,26 +52,15 @@ void HmmModel::Train() {
 
 // src fsts are 1st order markov models
 void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
-  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
-  
-  // for each line
-  string line;
-  while(getline(srcCorpus, line)) {
-    
-    // read the list of integers representing target tokens
-    vector< int > intTokens;
-    intTokens.push_back(NULL_SRC_TOKEN_ID);
-    StringUtils::ReadIntTokens(line, intTokens);
-    
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    vector< int > &intTokens = srcSents[sentId];
+    assert(intTokens[0] == NULL_SRC_TOKEN_ID);
+
     // create the fst
     VectorFst< LogQuadArc > srcFst;
     Create1stOrderSrcFst(intTokens, srcFst);
     srcFsts.push_back(srcFst);
-    
-    // for debugging
-    // PrintFstSummary(tgtFst);
   }
-  srcCorpus.close();
 }
 
 // assumptions:
@@ -93,25 +85,15 @@ void HmmModel::CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc >
 }
 
 void HmmModel::CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts) {
-  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
-  
   // for each line
-  string line;
-  while(getline(tgtCorpus, line)) {
-    
-    // read the list of integers representing target tokens
-    vector< int > intTokens;
-    StringUtils::ReadIntTokens(line, intTokens);
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    vector< int > &intTokens = tgtSents[sentId];
     
     // create the fst
     VectorFst< LogQuadArc > tgtFst;
     CreateTgtFst(intTokens, tgtFst);
     targetFsts.push_back(tgtFst);
-    
-    // for debugging
-    // PrintFstSummary(tgtFst);
   }
-  tgtCorpus.close();
 }
 
 void HmmModel::NormalizeFractionalCounts() {
@@ -136,19 +118,14 @@ void HmmModel::PersistParams(const string& outputFilename) {
 
 // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
 void HmmModel::InitParams() {
-  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in);
-  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
-  
-  // for each line
-  string srcLine, tgtLine;
-  while(getline(tgtCorpus, tgtLine) && getline(srcCorpus, srcLine)) {
-    
+  // for each parallel sentence
+  for(int sentId = 0; sentId < srcSents.size(); sentId++) {
+
     // read the list of integers representing target tokens
-    vector< int > tgtTokens, srcTokens;
-    StringUtils::ReadIntTokens(srcLine, srcTokens);
+    vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
+    
     // we want to allow target words to align to NULL (which has srcTokenId = 1).
     srcTokens.push_back(NULL_SRC_TOKEN_ID); 
-    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
@@ -156,7 +133,7 @@ void HmmModel::InitParams() {
       // INITIALIZE TRANSLATION PARAMETERS
       int srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      map<int, float> &tParamsGivenS_i = tFractionalCounts[srcToken];
+      map<int, double> tParamsGivenS_i = tFractionalCounts[srcToken];
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
 	int tgtToken = tgtTokens[j];
@@ -183,9 +160,6 @@ void HmmModel::InitParams() {
 
     }
   }
-  
-  srcCorpus.close();
-  tgtCorpus.close();
     
   NormalizeFractionalCounts();
   DeepCopy(aFractionalCounts, aParams);
@@ -441,7 +415,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 // assumptions:
 // - both aParams and tFractionalCounts are properly normalized logProbs
 // sample both an alignment and a translation, given src sentence and tgt length
-void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb) {
+void HmmModel::SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb) {
 
   // intialize
   int prevAlignment = INITIAL_SRC_POS;
@@ -482,6 +456,15 @@ void HmmModel::SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>
   assert(hmmLogProb >= 0);
 }
 
+// sample an alignment given a source sentence and a its translation.
+void HmmModel::SampleAGivenST(const std::vector<int> &srcTokens,
+		    const std::vector<int> &tgtTokens,
+		    std::vector<int> &alignments,
+		    double &logProb) {
+  cerr << "method not implemented" << endl;
+  assert(false);
+}
+
 // given the current model, align a test sentence
 // assumptions: 
 // - the null token has *NOT* been inserted yet
@@ -510,18 +493,34 @@ string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
 
 void HmmModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
 
-  ifstream srcTestSet(srcTestSetFilename.c_str(), ios::in); 
-  ifstream tgtTestSet(tgtTestSetFilename.c_str(), ios::in); 
+  vector< vector<int> > srcTestSents, tgtTestSents;
+  vocabEncoder.Read(srcTestSetFilename, srcTestSents);
+  vocabEncoder.Read(tgtTestSetFilename, tgtTestSents);
+  assert(srcTestSents.size() == tgtTestSents.size());
+  
   ofstream outputAlignments(outputAlignmentsFilename.c_str(), ios::out);
+
   // for each parallel line
-  string srcLine, tgtLine, alignmentsLine;
-  int sentsCounter = 0;
-  while(getline(srcTestSet, srcLine) && getline(tgtTestSet, tgtLine)) {
-    vector< int > srcTokens, tgtTokens;
-    StringUtils::ReadIntTokens(srcLine, srcTokens);
-    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
-    cout << "sent #" << sentsCounter << " |srcTokens| = " << srcTokens.size() << endl;
+  for(unsigned sentId = 0; sentId < srcTestSents.size(); sentId++) {
+    string alignmentsLine;
+    vector< int > &srcTokens = srcTestSents[sentId], &tgtTokens = tgtTestSents[sentId];
+    cout << "sent #" << sentId << " |srcTokens| = " << srcTokens.size() << endl;
     alignmentsLine = AlignSent(srcTokens, tgtTokens);
     outputAlignments << alignmentsLine;
   }
+  outputAlignments.close();
+}
+
+void HmmModel::Align() {
+  Align(outputPrefix + ".train.align");
+}
+
+void HmmModel::Align(const string &alignmentsFilename) {
+  ofstream outputAlignments(alignmentsFilename.c_str(), ios::out);
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+    string alignmentsLine = AlignSent(srcSent, tgtSent);
+    outputAlignments << alignmentsLine;
+  }
+  outputAlignments.close();
 }

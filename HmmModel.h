@@ -8,6 +8,7 @@
 #include "LearningInfo.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
+#include "IAlignmentModel.h"
 #include "IAlignmentSampler.h"
 #include "Samplers.h"
 #include "MultinomialParams.h"
@@ -70,13 +71,21 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
 
   virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &alignmentsFilename);
 
+  void Align(const string &alignmentsFilename);
+  
+  virtual void Align();
+
   void DeepCopy(const ConditionalMultinomialParam& original, 
 		ConditionalMultinomialParam& duplicate);
 
-  virtual void SampleAT(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
+  virtual void SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
 
- private:
-  string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
+  virtual void SampleAGivenST(const std::vector<int> &srcTokens,
+			      const std::vector<int> &tgtTokens,
+			      std::vector<int> &alignments,
+			      double &logProb);
+  private:
+  string outputPrefix;
 
   // tFractionalCounts are used (when normalized) to describe p(tgt_word|src_word). first key is the context (i.e. src_word) and nested key is the tgt_word.
   ConditionalMultinomialParam tFractionalCounts;
@@ -89,7 +98,12 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
 
   // configurations
   LearningInfo learningInfo;
+  
+  // vocab encoders
+  VocabEncoder vocabEncoder;
+
+  // training data (src, tgt)
+  vector< vector<int> > srcSents, tgtSents;
 };
 
 #endif
-
