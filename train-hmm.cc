@@ -20,6 +20,10 @@ void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &t
 }
 
 int main(int argc, char **argv) {
+  // boost mpi initialization
+  mpi::environment env(argc, argv);
+  mpi::communicator world;
+
   // parse arguments
   cout << "parsing arguments" << endl;
   string srcCorpusFilename, tgtCorpusFilename, srcTestSetFilename, tgtTestSetFilename, outputFilenamePrefix;
@@ -32,6 +36,8 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodDiff = 10.0;
   learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.useEarlyStopping = true;
+  learningInfo.mpiWorld = &world;
+  learningInfo.persistParamsAfterEachIteration = true;
 
   // initialize the model
   HmmModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);

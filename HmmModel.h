@@ -5,6 +5,10 @@
 #include <fstream>
 #include <math.h>
 
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/thread/thread.hpp>
+
 #include "LearningInfo.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
