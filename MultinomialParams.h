@@ -24,7 +24,7 @@ namespace MultinomialParams {
   typedef std::map<int, MultinomialParam> ConditionalMultinomialParam;
 
   // parameters for describing a set of conditional multinomial distributions p(x|y1,y2)=z such that tuple <y1,y2> is the first key, x is the nested key, and z is a log probability
-  typedef std::map< std::tuple<int, int>, MultinomialParam> DoubleConditionalMultinomialParam;
+  typedef std::map< std::pair<int, int>, MultinomialParam> DoubleConditionalMultinomialParam;
 
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
@@ -37,11 +37,30 @@ namespace MultinomialParams {
     return pTotal;
   }
 
+  static std::map< std::pair<int, int>, double> AccumulateDoubleMultinomials(const std::map< std::pair<int, int>, double>& p1, const std::map< std::pair<int, int>, double>& p2) {
+    std::map< std::pair<int, int>, double> pTotal(p1);
+    for(std::map< std::pair<int, int>, double>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+      pTotal[p2Iter->first] += p2Iter->second;
+    }
+    return pTotal;
+  }
+
   static ConditionalMultinomialParam AccumulateConditionalMultinomials(const ConditionalMultinomialParam& p1, const ConditionalMultinomialParam& p2) {
     ConditionalMultinomialParam pTotal(p1);
     for(std::map<int, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
       MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(std::map<int, double>::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
+	subPTotal[subP2Iter->first] += subP2Iter->second;
+      }
+    }
+    return pTotal;
+  }
+
+  static DoubleConditionalMultinomialParam AccumulateDoubleConditionalMultinomials(const DoubleConditionalMultinomialParam& p1, const DoubleConditionalMultinomialParam& p2) {
+    DoubleConditionalMultinomialParam pTotal(p1);
+    for(std::map< std::pair<int,int>, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+      MultinomialParam &subPTotal = pTotal[p2Iter->first];
+      for(std::map< int, double>::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
 	subPTotal[subP2Iter->first] += subP2Iter->second;
       }
     }
@@ -83,6 +102,10 @@ namespace MultinomialParams {
   void PersistParams(std::ofstream& paramsFile, const ConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
   void PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params);
   void PersistParams(const std::string& paramsFilename, const ConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
+  void PersistParams(std::ofstream& paramsFile, const DoubleConditionalMultinomialParam& params);
+  void PersistParams(std::ofstream& paramsFile, const DoubleConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
+  void PersistParams(const std::string& paramsFilename, const DoubleConditionalMultinomialParam& params);
+  void PersistParams(const std::string& paramsFilename, const DoubleConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder);
 
   // sample an integer from a multinomial
   int SampleFromMultinomial(const MultinomialParam params);

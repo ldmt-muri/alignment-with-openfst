@@ -15,6 +15,7 @@
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/set.hpp>
+#include <boost/serialization/utility.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/exception/all.hpp>
@@ -59,7 +60,7 @@ class LatentCrfModel {
 
   // normalize soft counts with identical content to sum to one
   void NormalizeThetaMle(MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-			 map<std::tuple<int, int>, double> &mleMarginals);
+			 map<std::pair<int, int>, double> &mleMarginals);
 
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void WarmUp();
@@ -115,7 +116,7 @@ class LatentCrfModel {
   void ComputeB(const vector<int> &x, const vector<int> &z, 
 		const VectorFst<LogArc> &fst, 
 		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-		map< std::tuple<int, int>, map< int, LogVal<double> > > &BXZ);
+		map< std::pair<int, int>, map< int, LogVal<double> > > &BXZ);
 
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
@@ -210,7 +211,7 @@ class LatentCrfModel {
 
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-			     map< std::tuple<int, int> , double > &mleMarginals);
+			     map< std::pair<int, int> , double > &mleMarginals);
 
   // collect soft counts from this sentence
   void UpdateThetaMleForSent(const unsigned sentId, 

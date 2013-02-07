@@ -129,6 +129,38 @@ void MultinomialParams::PersistParams(const std::string& paramsFilename, const C
   paramsFile.close();
 }
 
+void MultinomialParams::PersistParams(std::ofstream& paramsFile, const DoubleConditionalMultinomialParam& params) {
+  for (DoubleConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, double>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      // line format: 
+      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+      paramsFile << tgtIter->first << "|" << std::get<0>(srcIter->first) << "," << std::get<1>(srcIter->first) << " = nLog(" << tgtIter->second << ") = " << nExp(tgtIter->second) << std::endl;
+    }
+  }
+}
+
+void MultinomialParams::PersistParams(std::ofstream &paramsFile, const DoubleConditionalMultinomialParam &params, const VocabEncoder &vocabEncoder) {
+  for (DoubleConditionalMultinomialParam::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, double>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      // line format: 
+      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+      paramsFile << vocabEncoder.Decode(tgtIter->first) << "|" << std::get<0>(srcIter->first) << "," << std::get<1>(srcIter->first) << " = nLog(" << tgtIter->second << ") = " << nExp(tgtIter->second) << std::endl;
+    }
+  }
+}
+
+void MultinomialParams::PersistParams(const std::string& paramsFilename, const DoubleConditionalMultinomialParam& params) {
+  std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+  PersistParams(paramsFile, params);
+  paramsFile.close();
+}
+
+void MultinomialParams::PersistParams(const std::string& paramsFilename, const DoubleConditionalMultinomialParam& params, const VocabEncoder &vocabEncoder) {
+  std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+  PersistParams(paramsFile, params, vocabEncoder);
+  paramsFile.close();
+}
+
   // sample an integer from a multinomial
 int MultinomialParams::SampleFromMultinomial(const MultinomialParam params) {
     // generate a pseudo random number between 0 and 1

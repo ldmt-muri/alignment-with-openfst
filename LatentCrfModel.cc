@@ -29,7 +29,8 @@ LatentCrfModel::~LatentCrfModel() {
 
 // initialize model weights to zeros
 LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) : 
-  vocabEncoder(textFilename) {
+  vocabEncoder(textFilename),
+  gaussianSampler(0.0, 10.0) {
 
   if(learningInfo.mpiWorld->rank() == 0) {
     vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
@@ -108,10 +109,13 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   nLogTheta.clear();
   nLogTheta2.clear();
   if(learningInfo.zIDependsOnYIM1) {
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "initializing thetas...";
+    }
     for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter2 != yDomain.end(); yDomainIter2++) {
 	for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
-	  std::tuple<int, int> yIM1_yI = std::tuple<int, int>(*yDomainIter, *yDomainIter2);
+	  std::pair<int, int> yIM1_yI = std::pair<int, int>(*yDomainIter, *yDomainIter2);
 	  nLogTheta2[yIM1_yI][*zDomainIter] = abs(gaussianSampler.Draw());
 	}
       }
@@ -127,6 +131,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   // then normalize
   if(learningInfo.zIDependsOnYIM1) {
     MultinomialParams::NormalizeParams(nLogTheta2);
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "done" << endl;
+    }
   } else {
     MultinomialParams::NormalizeParams(nLogTheta);
   }
@@ -137,6 +144,20 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
       // TODO: MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
     } else {
       MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    }
+  }
+
+  // persist initial parameters
+  if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
+    stringstream thetaParamsFilename;
+    thetaParamsFilename << outputPrefix << ".initial.theta";
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
+    }
+    if(learningInfo.zIDependsOnYIM1) {
+      MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta2, vocabEncoder);
+    } else {
+      MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
     }
   }
 
@@ -536,7 +557,7 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
 			      const VectorFst<LogArc> &fst, 
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-			      map< std::tuple<int, int>, map< int, LogVal<double> > > &BXZ) {
+			      map< std::pair<int, int>, map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   //  cerr << "ComputeB(){"<<endl;
   assert(BXZ.size() == 0);
@@ -598,7 +619,7 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
 
 	// update the corresponding B value
-	std::tuple<int, int> yIM1AndyI = std::tuple<int, int>(yIM1, yI);
+	std::pair<int, int> yIM1AndyI = std::pair<int, int>(yIM1, yI);
 	if(BXZ.count(yIM1AndyI) == 0 || BXZ[yIM1AndyI].count(zI) == 0) {
 	  BXZ[yIM1AndyI][zI] = 0;
 	}
@@ -747,7 +768,7 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
-	std::tuple<int, int> yIM1_yI = std::tuple<int, int>(yIM1, yI);
+	std::pair<int, int> yIM1_yI = std::pair<int, int>(yIM1, yI);
 
 	// skip special classes
 	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
@@ -822,7 +843,7 @@ double LatentCrfModel::ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vec
     // multiply \theta_{z_i|y_i} (which is already stored using in its -log value)
     result += 
       learningInfo.zIDependsOnYIM1?
-      nLogTheta2[std::tuple<int, int>(yIM1, y[i])][z[i]]:
+      nLogTheta2[std::pair<int, int>(yIM1, y[i])][z[i]]:
       nLogTheta[y[i]][z[i]];
 
     // multiply \exp \lambda h(y_i, y_{i-1}, x, i)
@@ -858,7 +879,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
     // multiply \theta_{z_i|y_i} (which is already stored in its -log value)
     result += 
       learningInfo.zIDependsOnYIM1?
-      nLogTheta2[std::tuple<int, int>(yIM1, y[i])][z[i]]:
+      nLogTheta2[std::pair<int, int>(yIM1, y[i])][z[i]]:
       nLogTheta[y[i]][z[i]];
 
     // multiply \exp \lambda h(y_i, y_{i-1}, x, i)
@@ -904,7 +925,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
-	std::tuple<int, int> yIM1_yI = std::tuple<int, int>(yIM1, yI);
+	std::pair<int, int> yIM1_yI = std::pair<int, int>(yIM1, yI);
 
 	// skip special classes
 	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
@@ -1375,7 +1396,7 @@ set<string> LatentCrfModel::AggregateSets(const set<string> &v1, const set<strin
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::WarmUp() {
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "warming up..." << endl;
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": warming up..." << endl;
   }
 
   // only the master adds constrained features with hand-crafted weights depending on the feature type
@@ -1469,7 +1490,7 @@ void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 
 void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					   MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-					   map<std::tuple<int, int>, double> &mleMarginals) {
+					   map<std::pair<int, int>, double> &mleMarginals) {
   if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
     cerr << "sentId = " << sentId << endl;
   }
@@ -1479,15 +1500,15 @@ void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   vector<fst::LogWeight> alphas, betas;
   BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
   // compute the B matrix for this sentence
-  map< std::tuple<int, int>, map< int, LogVal<double> > > B;
+  map< std::pair<int, int>, map< int, LogVal<double> > > B;
   B.clear();
   ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, betas);
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
-  for(map< std::tuple<int, int>, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
-    std::tuple<int, int> y_ = yIter->first;
+  for(map< std::pair<int, int>, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    std::pair<int, int> y_ = yIter->first;
     for(map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
       double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
@@ -1531,10 +1552,10 @@ void LatentCrfModel::NormalizeThetaMle(MultinomialParams::ConditionalMultinomial
 }
 
 void LatentCrfModel::NormalizeThetaMle(MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-				       map<std::tuple<int, int>, double> &mleMarginals) {
+				       map<std::pair<int, int>, double> &mleMarginals) {
   // fix theta mle estimates
-  for(map<std::tuple<int, int>,  map<int, double> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
-    std::tuple<int, int> y_ = yIter->first;
+  for(map<std::pair<int, int>,  map<int, double> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
+    std::pair<int, int> y_ = yIter->first;
     double unnormalizedMarginalProbz_giveny_ = 0.0;
     // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
     for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
@@ -1581,7 +1602,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // add all features in this data set to lambda.params
   WarmUp();
   
-  mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
+  if(learningInfo.zIDependsOnYIM1) {
+    mpi::broadcast<MultinomialParams::DoubleConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta2, 0);
+  } else {
+    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
+  }
   lambda->Broadcast(*learningInfo.mpiWorld, 0);
 
   // TRAINING ITERATIONS
@@ -1591,7 +1616,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
     // data structure to hold theta MLE estimates
     MultinomialParams::ConditionalMultinomialParam mle;
+    MultinomialParams::DoubleConditionalMultinomialParam mle2;
     map<int, double> mleMarginals;
+    map<std::pair<int, int>, double> mleMarginals2;
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       double temp = ComputeCorpusNloglikelihood();
@@ -1609,29 +1636,38 @@ void LatentCrfModel::BlockCoordinateDescent() {
       if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
 	continue;
       }
-      UpdateThetaMleForSent(sentId, mle, mleMarginals);
+      if(learningInfo.zIDependsOnYIM1) {
+	UpdateThetaMleForSent(sentId, mle2, mleMarginals2);
+      } else {
+	UpdateThetaMleForSent(sentId, mle, mleMarginals);
+      }
     }
-    /*
-    // wait until all slaves finish their work and collect it
-    if(learningInfo.mpiWorld->size() > 1) {
-      mpi::wait_all(slavesMleRequests.data() + 1, slavesMleRequests.data() + slavesMleRequests.size());
-      mpi::wait_all(slavesMleMarginalRequests.data() + 1, slavesMleMarginalRequests.data() + slavesMleMarginalRequests.size());
-      CollectSlavesWork(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
-    }
-    */
     // accumulate mle counts from slaves
-    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, mle, mle, MultinomialParams::AccumulateConditionalMultinomials, 0);
-    mpi::reduce<MultinomialParams::MultinomialParam>(*learningInfo.mpiWorld, mleMarginals, mleMarginals, MultinomialParams::AccumulateMultinomials, 0);
+    if(learningInfo.zIDependsOnYIM1) {
+      mpi::reduce<MultinomialParams::DoubleConditionalMultinomialParam>(*learningInfo.mpiWorld, mle2, mle2, MultinomialParams::AccumulateDoubleConditionalMultinomials, 0);
+      mpi::reduce< std::map< std::pair<int,int>, double > >(*learningInfo.mpiWorld, mleMarginals2, mleMarginals2, MultinomialParams::AccumulateDoubleMultinomials, 0);
+    } else {
+      mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, mle, mle, MultinomialParams::AccumulateConditionalMultinomials, 0);
+      mpi::reduce< MultinomialParams::MultinomialParam >(*learningInfo.mpiWorld, mleMarginals, mleMarginals, MultinomialParams::AccumulateMultinomials, 0);
+    }
 
     // normalize mle and update nLogTheta on master
     if(learningInfo.mpiWorld->rank() == 0) {
-      NormalizeThetaMle(mle, mleMarginals);
-      nLogTheta = mle;
+      if(learningInfo.zIDependsOnYIM1) {
+	NormalizeThetaMle(mle2, mleMarginals2);
+	nLogTheta2 = mle2;
+      } else {
+	NormalizeThetaMle(mle, mleMarginals);
+	nLogTheta = mle;
+      }
     }
 
     // update nLogTheta on slaves
-    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
-
+    if(learningInfo.zIDependsOnYIM1) {
+      mpi::broadcast<MultinomialParams::DoubleConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta2, 0);
+    } else {
+      mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, nLogTheta, 0);
+    }
     // debug info
     if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
       stringstream thetaParamsFilename;
@@ -1640,11 +1676,20 @@ void LatentCrfModel::BlockCoordinateDescent() {
       if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
 	cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
       }
-      MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
+      if(learningInfo.zIDependsOnYIM1) {
+	MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta2, vocabEncoder);
+      } else {
+	MultinomialParams::PersistParams(thetaParamsFilename.str(), nLogTheta, vocabEncoder);
+      }
     }
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "theta params: " << endl;
-      MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+      if(learningInfo.zIDependsOnYIM1) {
+	// TODO: 
+	cerr << "TODO" << endl;
+      } else {
+	MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+      }
     }
 
     // update the lambdas with mini-batch lbfgs
@@ -1760,7 +1805,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // debug
   if(learningInfo.mpiWorld->rank() == 0) {
     lambda->PersistParams(outputPrefix + string(".final.lambda"));
-    MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta, vocabEncoder);
+    if(learningInfo.zIDependsOnYIM1) {
+      MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta2, vocabEncoder);
+    } else {
+      MultinomialParams::PersistParams(outputPrefix + string(".final.theta"), nLogTheta, vocabEncoder);
+    }
   }
 }
 

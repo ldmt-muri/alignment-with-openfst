@@ -32,18 +32,26 @@ int main(int argc, char **argv) {
   mpi::communicator world;
   
   // parse arguments
-  cerr << "parsing arguments...";
+  if(world.rank() == 0) {
+    cerr << "parsing arguments...";
+  }
   string textFilename, outputFilenamePrefix, goldLabelsFilename;
   ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename);
-  cerr << "done." << endl;
+  if(world.rank() == 0) {
+    cerr << "done." << endl;
+  }
 
   // randomize draws
   int seed = time(NULL);
-  cerr << "executing srand(" << seed << ")" << endl;
+  if(world.rank() == 0) {
+    cerr << "executing srand(" << seed << ")" << endl;
+  }
   srand(seed);
 
   // configurations
-  cerr << "setting configurations...";
+  if(world.rank() == 0) {
+    cerr << "setting configurations...";
+  }
   LearningInfo learningInfo;
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
@@ -56,6 +64,7 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = true;
+  learningInfo.persistParamsAfterEachIteration = false;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
@@ -82,9 +91,13 @@ int main(int argc, char **argv) {
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
 
   // train the model
-  cerr << "train the model..." << endl;
+  if(world.rank() == 0) {
+    cerr << "train the model..." << endl;
+  }
   model.Train();
-  cerr << "rank #" << world.rank() << ": training finished!" << endl;
+  if(world.rank() == 0) {
+    cerr << "rank #" << world.rank() << ": training finished!" << endl;
+  }
   
   // we don't need the slaves anymore
   if(world.rank() > 0) {
