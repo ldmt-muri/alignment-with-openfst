@@ -53,22 +53,24 @@ int main(int argc, char **argv) {
   //  learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.minLikelihoodDiff = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.001;
+  learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
+  learningInfo.zIDependsOnYIM1 = true;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
-  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.1;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 9;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 7;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 3;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
+  learningInfo.retryLbfgsOnRoundingErrors = false;
 
   // add constraints
   learningInfo.constraints.clear();
@@ -104,6 +106,8 @@ int main(int argc, char **argv) {
   if(goldLabelsFilename != "") {
     cerr << "comparing to gold standard tagging..." << endl;
     double vi = model.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
-    cerr << "done. variation of information = " << vi << endl;
+    cerr << "done. \nvariation of information = " << vi << endl;
+    double manyToOne = model.ComputeManyToOne(labelsFilename, goldLabelsFilename);
+    cerr << "many-to-one = " << manyToOne;
   }
 }

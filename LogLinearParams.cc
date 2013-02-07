@@ -10,7 +10,7 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
   tgtTypes(tgtTypes), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
   ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
-  COUNT_OF_FEATURE_TYPES(67) {
+  COUNT_OF_FEATURE_TYPES(100) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, 0.01);
 }
@@ -20,7 +20,7 @@ LogLinearParams::LogLinearParams(const VocabDecoder &types) :
   tgtTypes(types),
   ibmModel1ForwardScores(map<int, map<int, double> >()),
   ibmModel1BackwardScores(map<int, map<int, double> >()),
-  COUNT_OF_FEATURE_TYPES(67) {
+  COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, 0.01);
 }
 
@@ -194,7 +194,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F57: yI-i pair
   if(enabledFeatureTypes.size() > 57 && enabledFeatureTypes[57]) {
-    if(i < 2) {
+    if(i < 1) {
       temp.str("");
       temp << "F57:" << yI << ":" << i;
       AddParam(temp.str());
@@ -225,11 +225,12 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F59: yI-suffix(xI)
   if(enabledFeatureTypes.size() > 59 && enabledFeatureTypes[59]) {
-    //    if(xIStringSize > 0) {
-    //      temp.str("");
-    //      temp << "F59:" << yI << ":" << xIString[xIStringSize-1];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
+    if(xIStringSize > 0) {
+      temp.str("");
+      temp << "F59:" << yI << ":" << xIString[xIStringSize-1];
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    }
     if(xIStringSize > 1) {
       temp.str("");
       temp << "F59:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
@@ -354,20 +355,109 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F65: yI-capitalInitial(xI)
   if(enabledFeatureTypes.size() > 65 && enabledFeatureTypes[65]) {
-    temp.str("");
-    temp << "F65:" << yI << ":CapitalInitial";
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    if(xIString[0] >= 'A' && xIString[0] <= 'Z') { 
+      temp.str("");
+      temp << "F65:" << yI << ":CapitalInitial";
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    }
   }
 
   // F66: yI-(|x|-i)
   if(enabledFeatureTypes.size() > 66 && enabledFeatureTypes[66]) {
-    if(x.size() - i < 3) {
+    if(x.size() - i < 2) {
       temp.str("");
       temp << "F66:" << yI << ":" << (x.size()-i);
       AddParam(temp.str());
       activeFeatures[paramIndexes[temp.str()]] += 1.0;
     }
+  }
+
+  // F67: yI-capitalInitial(xI) && i > 0
+  if(enabledFeatureTypes.size() > 67 && enabledFeatureTypes[67]) {
+    if(i > 0 && xIString[0] >= 'A' && xIString[0] <= 'Z') { 
+      temp.str("");
+      temp << "F67:" << yI << ":CapitalInitialWithinSent";
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    }
+  }
+
+  // F68: yI-specialSuffix(xI)
+  if(enabledFeatureTypes.size() > 68 && enabledFeatureTypes[68]) {
+    if(xIStringSize > 0 && xIString[xIStringSize-1] == 's') {
+      temp.str("");
+      temp << "F68:" << yI << ":" << xIString[xIStringSize-1];
+      AddParam(temp.str());
+      activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    }
+    if(xIStringSize > 1) {
+      if((xIString[xIStringSize-2] == 'l' && xIString[xIStringSize-1] == 'y') ||
+	 (xIString[xIStringSize-2] == 'e' && xIString[xIStringSize-1] == 'd')) {
+	temp.str("");
+	temp << "F68:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
+	AddParam(temp.str());
+	activeFeatures[paramIndexes[temp.str()]] += 1.0;
+      }
+    }
+    if(xIStringSize > 2) {
+      if((xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'e' && xIString[xIStringSize-1] == 's') ||
+	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 't' && xIString[xIStringSize-1] == 'y') ||
+	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'o' && xIString[xIStringSize-1] == 'n') ||
+	 (xIString[xIStringSize-3] == 'o' && xIString[xIStringSize-2] == 'g' && xIString[xIStringSize-1] == 'y') ||
+	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'n' && xIString[xIStringSize-1] == 'g')) {      
+	temp.str("");
+	temp << "F68:" << yI << ":" << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
+	AddParam(temp.str());
+	activeFeatures[paramIndexes[temp.str()]] += 1.0;
+      }
+    }
+    if(xIStringSize > 3) {
+      if(xIString[xIStringSize-4] == 't' && xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'o' && xIString[xIStringSize-1] == 'n') {
+	temp.str("");
+	temp << "F68:" << yI << ":" << xIString[xIStringSize-4] << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
+	AddParam(temp.str());
+	activeFeatures[paramIndexes[temp.str()]] += 1.0;
+      }
+    }
+  }
+
+  // F69: yI-coarserHash(xI) ==> to be implemented in StringUtils ==> converts McDonald2s ==> AaAaaaia
+  if(enabledFeatureTypes.size() > 64 && enabledFeatureTypes[64]) {
+    bool small = false, capital = false, number = false, punctuation = false, other = false;
+    temp.str("");
+    temp << "F69:" << yI << ":";
+    for(int j = 0; j < xIStringSize; j++) {
+      char xIStringJ = xIString[j];
+      if(!small && xIStringJ >= 'a' && xIStringJ <= 'z') {
+	small = true;
+      } else if(!capital && xIStringJ >= 'A' && xIStringJ <= 'Z') {
+	capital = true;
+      } else if(!number && xIStringJ >= '0' && xIStringJ <= '9') {
+	number = true;
+      } else if(!punctuation && (xIStringJ == ':' || xIStringJ == '.' || xIStringJ == ';' || xIStringJ == ',' || xIStringJ == '?' || xIStringJ == '!')) {
+	punctuation = true;
+      } else if(!other) {
+	other = true;
+      }
+    }
+    if(small) {
+      temp << 'a'; 
+    }
+    if(capital) {
+      temp << 'A'; 
+    }
+    if(number) {
+      temp << '0';
+    } 
+    if(punctuation) {
+      temp << ';';
+    }
+    if(other) {
+      temp << '#';
+    }
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
 
 }

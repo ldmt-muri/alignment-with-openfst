@@ -204,6 +204,7 @@ class LearningInfo {
     useSparseVectors = true;
     persistParamsAfterEachIteration = false;
     retryLbfgsOnRoundingErrors = true;
+    zIDependsOnYIM1 = false;
   }
 
   bool IsModelConverged() {
@@ -337,6 +338,9 @@ class LearningInfo {
 
   // if lbfgs returns a rounding error. should we retry?
   bool retryLbfgsOnRoundingErrors;
+
+  // in the latent crf model, does the output observations z_i depend on y_{i-1}, or only y_i?
+  bool zIDependsOnYIM1;
 };
 
 

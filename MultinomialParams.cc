@@ -2,40 +2,74 @@
 
 using namespace MultinomialParams;
 
-  // refactor variable names here (e.g. translations)
-  // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
+// refactor variable names here (e.g. translations)
+// normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
 void MultinomialParams::NormalizeParams(ConditionalMultinomialParam& params) {
-    // iterate over src tokens in the model
-    for(ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      std::map< int, double > &translations = (*srcIter).second;
-      double fTotalProb = 0.0;
-      // iterate over tgt tokens logsumming over the logprob(tgt|src) 
-      for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	double temp = (*tgtIter).second;
-	fTotalProb += nExp(temp);
-      }
-      // exponentiate to find p(*|src) before normalization
-      // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
-      double fVerifyTotalProb = 0.0;
-      for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	double fUnnormalized = nExp((*tgtIter).second);
-	double fNormalized = fUnnormalized / fTotalProb;
-	fVerifyTotalProb += fNormalized;
-	double fLogNormalized = nLog(fNormalized);
-	(*tgtIter).second = fLogNormalized;
-      }
+  // iterate over src tokens in the model
+  for(ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    std::map< int, double > &translations = (*srcIter).second;
+    double fTotalProb = 0.0;
+    // iterate over tgt tokens logsumming over the logprob(tgt|src) 
+    for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      double temp = (*tgtIter).second;
+      fTotalProb += nExp(temp);
+    }
+    // exponentiate to find p(*|src) before normalization
+    // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
+    double fVerifyTotalProb = 0.0;
+    for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      double fUnnormalized = nExp((*tgtIter).second);
+      double fNormalized = fUnnormalized / fTotalProb;
+      fVerifyTotalProb += fNormalized;
+      double fLogNormalized = nLog(fNormalized);
+      (*tgtIter).second = fLogNormalized;
     }
   }
-  
-  // zero all parameters
+}
+
+// refactor variable names here (e.g. translations)
+// normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
+void MultinomialParams::NormalizeParams(DoubleConditionalMultinomialParam& params) {
+  // iterate over src tokens in the model
+  for(DoubleConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    std::map< int, double > &translations = (*srcIter).second;
+    double fTotalProb = 0.0;
+    // iterate over tgt tokens logsumming over the logprob(tgt|src) 
+    for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      double temp = (*tgtIter).second;
+      fTotalProb += nExp(temp);
+    }
+    // exponentiate to find p(*|src) before normalization
+    // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
+    double fVerifyTotalProb = 0.0;
+    for(std::map< int, double >::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+      double fUnnormalized = nExp((*tgtIter).second);
+      double fNormalized = fUnnormalized / fTotalProb;
+      fVerifyTotalProb += fNormalized;
+      double fLogNormalized = nLog(fNormalized);
+      (*tgtIter).second = fLogNormalized;
+    }
+  }
+}
+
+// zero all parameters
 void MultinomialParams::ClearParams(ConditionalMultinomialParam& params) {
-    for (ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-      for (std::map<int, double>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	tgtIter->second = NLOG_ZERO;
-      }
+  for (ConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, double>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      tgtIter->second = NLOG_ZERO;
     }
   }
-  
+}
+
+// zero all parameters
+void MultinomialParams::ClearParams(DoubleConditionalMultinomialParam& params) {
+  for (DoubleConditionalMultinomialParam::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for (std::map<int, double>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+	tgtIter->second = NLOG_ZERO;
+    }
+  }
+}
+
   // refactor variable names here (e.g. translations)
 void MultinomialParams::PrintParams(const ConditionalMultinomialParam& params) {
     // iterate over src tokens in the model

@@ -57,6 +57,10 @@ class LatentCrfModel {
   void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam &mle, 
 			 map<int, double> &mleMarginals);
 
+  // normalize soft counts with identical content to sum to one
+  void NormalizeThetaMle(MultinomialParams::DoubleConditionalMultinomialParam &mle, 
+			 map<std::tuple<int, int>, double> &mleMarginals);
+
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void WarmUp();
 
@@ -104,7 +108,14 @@ class LatentCrfModel {
   void ComputeB(const vector<int> &x, const vector<int> &z, 
 		const VectorFst<LogArc> &fst, 
 		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-		map< int, map< int, double > > &BXZ);
+		map< int, map< int, LogVal<double> > > &BXZ);
+
+  // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
+  // assumptions: BXZ is cleared
+  void ComputeB(const vector<int> &x, const vector<int> &z, 
+		const VectorFst<LogArc> &fst, 
+		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
+		map< std::tuple<int, int>, map< int, LogVal<double> > > &BXZ);
 
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
@@ -128,7 +139,7 @@ class LatentCrfModel {
   void ComputeD(const vector<int> &x, const vector<int> &z, 
 		const VectorFst<LogArc> &fst,
 		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-		FastSparseVector<double> &DXZk);
+		FastSparseVector<LogVal<double> > &DXZk);
     
   // assumptions:
   // - fst, betas are populated using BuildThetaLambdaFst()
@@ -145,24 +156,6 @@ class LatentCrfModel {
     
   double ComputeCorpusNloglikelihood();
 
-  // keeps looking for a slave that's not busy and return its rank
-  unsigned FindASlackingSlave(vector<bool> &busySlaves, 
-			      vector<boost::mpi::request> &slavesMleRequests, 
-			      vector<boost::mpi::request> &slavesMleMarginalRequests, 
-			      vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
-			      vector< map<int, double> > &slavesMleMarginalResults,
-			      MultinomialParams::ConditionalMultinomialParam &mle,
-			      map<int, double> &mleMarginals);
-
-  // collect results from slaves
-  void CollectSlavesWork(vector<bool> &busySlaves, 
-			 vector<boost::mpi::request> &slavesMleRequests, 
-			 vector<boost::mpi::request> &slavesMleMarginalRequests, 
-			 vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
-			 vector< map<int, double> > &slavesMleMarginalResults,
-			 MultinomialParams::ConditionalMultinomialParam &mle,
-			 map<int, double> &mleMarginals);
-  
   // configure lbfgs parameters according to the LearningInfo member of the model
   lbfgs_parameter_t SetLbfgsConfig();
 
@@ -201,7 +194,7 @@ class LatentCrfModel {
   // train the model
   void Train();
 
-  // label
+  // given an observation sequence x (i.e. tokens), find the most likely label sequence y (i.e. labels)
   void Label(vector<int> &tokens, vector<int> &labels);
   void Label(vector<string> &tokens, vector<int> &labels);
   void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
@@ -213,30 +206,22 @@ class LatentCrfModel {
 
   // evaluate
   double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
+  double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
+
+  void UpdateThetaMleForSent(const unsigned sentId, 
+			     MultinomialParams::DoubleConditionalMultinomialParam &mle, 
+			     map< std::tuple<int, int> , double > &mleMarginals);
 
   // collect soft counts from this sentence
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam &mle, 
 			     map<int, double> &mleMarginals);
 
-
   vector<vector<int> > data;
   LearningInfo learningInfo;
   MultinomialParams::ConditionalMultinomialParam nLogTheta;
+  MultinomialParams::DoubleConditionalMultinomialParam nLogTheta2;
   LogLinearParams *lambda;
-
-  // mpi messages from master to slaves
-  const static int MPI_TAG_UPDATE_SLAVE_THETA = 1;
-  const static int MPI_TAG_UPDATE_SLAVE_LAMBDA = 2;
-  const static int MPI_TAG_UPDATE_SLAVE_LAMBDA_IDS = 3;
-  const static int MPI_TAG_COMPUTE_PARTIAL_THETA_MLE = 4;
-  const static int MPI_TAG_DIE = 5;
-  // mpi messages from slaves to master
-  const static int MPI_TAG_RETURN_PARTIAL_THETA_MLE = 11;
-  const static int MPI_TAG_RETURN_PARTIAL_THETA_MLE_MARGINAL = 12;
-  const static int MPI_TAG_ACK_THETA_UPDATED = 13;
-  const static int MPI_TAG_ACK_LAMBDA_UPDATED = 14;
-  const static int MPI_TAG_ACK_LAMBDA_INDEXES_UPDATED = 15;
 
  private:
   VocabEncoder vocabEncoder;

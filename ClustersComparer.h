@@ -54,7 +54,7 @@ class ClustersComparer {
 	bIter++) {
       ss << bIter->first << "\t";
     }
-    ss << endl;
+    ss << endl << endl;
     for(std::map<std::string, std::map<std::string, unsigned> >::const_iterator aIter = confusionMatrix.begin();
 	aIter != confusionMatrix.end();
 	aIter++) {
@@ -65,7 +65,7 @@ class ClustersComparer {
 	  bIter++) {
 	ss << bIter->second << "\t";
       }
-      ss << endl;
+      ss << endl << endl;
     }
     return ss.str();
   }
@@ -114,7 +114,7 @@ class ClustersComparer {
 	}		  
 	double term = (double) intersectionSize / dataSize;
 	term *= log(term / ((double)aIter->second/dataSize * bIter->second/dataSize));
-	assert(!isnan(term));
+	assert(!std::isnan(term));
 	mutualInformation += term;
       }
     }
@@ -134,10 +134,38 @@ class ClustersComparer {
     ComputeClusterSizes(a, aCounts);
     ComputeClusterSizes(b, bCounts);
     double aEntropy = ComputeClusterEntropies(aCounts, a.size());
+    cerr << "H(A) = " << aEntropy << endl;
     double bEntropy = ComputeClusterEntropies(bCounts, b.size());
+    cerr << "H(B) = " << bEntropy << endl;
     double mi = ComputeMutualInformation(confusionMatrix, aCounts, bCounts, a.size());
+    cerr << "MI(A,B) = " << mi << endl;
     double vi = aEntropy - mi + bEntropy - mi;
+    cerr << "VI = " << vi << endl;
+    double ht = bEntropy, hc = aEntropy, ht2c = hc - mi, hc2t = ht - mi, h = 1 - hc2t / ht, c = 1 - ht2c / hc, vm = 2 * h * c / (h + c);
+    cerr << "VMeasure = " << vm << endl;
     return vi;
+  }
+
+  // assumes b is the gold/reference
+  static double ComputeManyToOne(const std::vector<std::string> &a, const std::vector<std::string> &b) {
+    assert(VerifyTwoClusteringsAreValid(a, b));
+    std::map<std::string, std::map<std::string, unsigned> > confusionMatrix;
+    BuildConfusionMatrix(a, b, confusionMatrix);
+    unsigned correct = 0;
+    for(std::map<std::string, std::map<std::string, unsigned> >::const_iterator aIter = confusionMatrix.begin(); 
+	aIter != confusionMatrix.end(); 
+	aIter++) {
+      unsigned max = 0;
+      for(std::map<std::string, unsigned>::const_iterator bIter = aIter->second.begin();
+	  bIter != aIter->second.end();
+	  bIter++) {
+	if(bIter->second > max) {
+	  max = bIter->second;
+	}
+      }
+      correct += max;
+    }
+    return 1.0 * correct / a.size();
   }
 };
 

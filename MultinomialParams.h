@@ -9,6 +9,8 @@
 #include <assert.h>
 #include <math.h>
 #include <cmath>
+#include <utility>
+#include <tuple>
 
 #include "Samplers.h"
 #include "VocabEncoder.h"
@@ -20,6 +22,9 @@ namespace MultinomialParams {
   
   // parameters for describing a set of conditional multinomial distributions p(x|y)=z such that y is the first key, x is the nested key, z is a log probability
   typedef std::map<int, MultinomialParam> ConditionalMultinomialParam;
+
+  // parameters for describing a set of conditional multinomial distributions p(x|y1,y2)=z such that tuple <y1,y2> is the first key, x is the nested key, and z is a log probability
+  typedef std::map< std::tuple<int, int>, MultinomialParam> DoubleConditionalMultinomialParam;
 
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
@@ -64,9 +69,11 @@ namespace MultinomialParams {
   // refactor variable names here (e.g. translations)
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeParams(ConditionalMultinomialParam& params);
+  void NormalizeParams(DoubleConditionalMultinomialParam& params);
   
   // zero all parameters
   void ClearParams(ConditionalMultinomialParam& params);
+  void ClearParams(DoubleConditionalMultinomialParam& params);
 
   // refactor variable names here (e.g. translations)
   void PrintParams(const ConditionalMultinomialParam& params);

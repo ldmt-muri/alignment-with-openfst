@@ -48,7 +48,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->END_OF_SENTENCE_Y_VALUE = 3;
 
   // POS tag yDomain
-  unsigned latentClasses = 10;
+  unsigned latentClasses = 47;
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
     this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
@@ -85,22 +85,59 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   }
   // only enable hmm-like features -- for better comparison with HMM
   enabledFeatureTypes[51] = true;
+  enabledFeatureTypes[52] = true;
+  enabledFeatureTypes[53] = true;
   enabledFeatureTypes[54] = true;
+  enabledFeatureTypes[55] = true;
+  enabledFeatureTypes[56] = true;
+  //  enabledFeatureTypes[57] = true;
+  //  enabledFeatureTypes[58] = true;
+  //  enabledFeatureTypes[59] = true;
+  //  enabledFeatureTypes[60] = true;
+  //  enabledFeatureTypes[61] = true;
+  //  enabledFeatureTypes[62] = true;
+  //  enabledFeatureTypes[63] = true;
+  //  enabledFeatureTypes[64] = true;
+  //  enabledFeatureTypes[65] = true;
+  enabledFeatureTypes[66] = true;
+  enabledFeatureTypes[67] = true;
+  enabledFeatureTypes[68] = true;
+  enabledFeatureTypes[69] = true;
 
   // initialize the log theta params to unnormalized gaussians
   nLogTheta.clear();
-  for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-    for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
-      //      nLogTheta[*yDomainIter][*zDomainIter] = 1;
-      nLogTheta[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
+  nLogTheta2.clear();
+  if(learningInfo.zIDependsOnYIM1) {
+    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+	for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
+	  std::tuple<int, int> yIM1_yI = std::tuple<int, int>(*yDomainIter, *yDomainIter2);
+	  nLogTheta2[yIM1_yI][*zDomainIter] = abs(gaussianSampler.Draw());
+	}
+      }
+    }
+  } else {
+    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+      for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
+	nLogTheta[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
+      }
     }
   }
 
   // then normalize
-  MultinomialParams::NormalizeParams(nLogTheta);
+  if(learningInfo.zIDependsOnYIM1) {
+    MultinomialParams::NormalizeParams(nLogTheta2);
+  } else {
+    MultinomialParams::NormalizeParams(nLogTheta);
+  }
+
   //  MultinomialParams::PrintParams(nLogTheta);
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    if(learningInfo.zIDependsOnYIM1) {
+      // TODO: MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    } else {
+      MultinomialParams::PrintParams(nLogTheta, vocabEncoder);
+    }
   }
 
   // lambdas are initialized to all zeros
@@ -333,7 +370,7 @@ void LatentCrfModel::FireFeatures(const vector<int> &x,
 void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z, 
 			      const VectorFst<LogArc> &fst,
 			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-			      FastSparseVector<double> &DXZk) {
+			      FastSparseVector<LogVal<double> > &DXZk) {
   //  cerr << "ComputeD(){";
   clock_t timestamp = clock();
 
@@ -375,7 +412,7 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
 	  if(DXZk.find(h_k->first) == DXZk.end()) {
 	    DXZk[h_k->first] = 0;
 	  }
-	  DXZk[h_k->first] += MultinomialParams::nExp(nLogMarginal) * h_k->second;
+	  DXZk[h_k->first] += LogVal<double>(-nLogMarginal, init_lnx()) * LogVal<double>(h_k->second);
 	}
 
 	// prepare the schedule for visiting states in the next timestep
@@ -410,7 +447,7 @@ double LatentCrfModel::ComputeNLogC(const VectorFst<LogArc> &fst,
 void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
 			   const VectorFst<LogArc> &fst, 
 			   const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-			   map< int, map< int, double > > &BXZ) {
+			      map< int, map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   //  cerr << "ComputeB(){"<<endl;
   assert(BXZ.size() == 0);
@@ -476,7 +513,97 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 	  BXZ[yI][zI] = 0;
 	}
 	//	cerr << BXZ[yI][zI];
-	BXZ[yI][zI] += MultinomialParams::nExp(nLogMarginal);
+	BXZ[yI][zI] += LogVal<double>(-nLogMarginal, init_lnx());
+	//	cerr << " => " << BXZ[yI][zI] << endl;
+
+	// prepare the schedule for visiting states in the next timestep
+	iP1States.insert(toState);
+      } 
+    }
+
+    // prepare for next timestep
+    iStates = iP1States;
+    iP1States.clear();
+  }
+  
+  //  cerr << "}\n";
+}
+
+// compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
+// assumptions: 
+// - BXZ is cleared
+// - fst, alphas, and betas are populated using BuildThetaLambdaFst
+void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
+			      const VectorFst<LogArc> &fst, 
+			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
+			      map< std::tuple<int, int>, map< int, LogVal<double> > > &BXZ) {
+  // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
+  //  cerr << "ComputeB(){"<<endl;
+  assert(BXZ.size() == 0);
+
+  // debug
+  if(learningInfo.debugLevel == DebugLevel::REDICULOUS) {
+    cerr << "thetas are: " << endl;
+    // TODO:    MultinomialParams::PrintParams(nLogTheta2);
+    cerr << "thetas (with string observables): " << endl;
+    // TODO:    MultinomialParams::PrintParams(nLogTheta2, vocabEncoder);
+    cerr << "lambdas are: " << endl;
+    lambda->PrintParams();
+    cerr << "ComputeB() is called with the following params: " << endl;
+    cerr << "x = ";
+    for(unsigned i = 0; i < x.size(); i++) {
+      cerr << x[i] << " ";
+    }
+    cerr << endl << "z = ";
+    for(unsigned i = 0; i < z.size(); i++) {
+      cerr << z[i] << " ";
+    }
+    cerr << endl << "thetaLambdaFst = " << endl;
+    cerr << FstUtils::PrintFstSummary(fst) << endl;
+    cerr << "alphas = ";
+    for(unsigned i = 0; i < alphas.size(); i++) {
+      cerr << i << ":" << alphas[i].Value() << "(" << MultinomialParams::nExp(alphas[i].Value()) << ") ";
+    }
+    cerr << endl << "betas = ";
+    for(unsigned i = 0; i < betas.size(); i++) {
+      cerr << i << ":" << betas[i].Value() << "(" << MultinomialParams::nExp(betas[i].Value()) << ") ";
+    }
+    cerr << endl << endl;
+  }
+
+  // schedule for visiting states such that we know the timestep for each arc
+  set<int> iStates, iP1States;
+  iStates.insert(fst.Start());
+
+  // for each timestep
+  for(int i = 0; i < x.size(); i++) {
+    int xI = x[i];
+    int zI = z[i];
+    
+    // from each state at timestep i
+    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+	iStatesIter != iStates.end(); 
+	iStatesIter++) {
+      int fromState = *iStatesIter;
+
+      // for each arc leaving this state
+      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	LogArc arc = aiter.Value();
+	int yIM1 = arc.ilabel;
+	int yI = arc.olabel;
+	double arcWeight = arc.weight.Value();
+	int toState = arc.nextstate;
+
+	// compute marginal weight of passing on this arc
+	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
+
+	// update the corresponding B value
+	std::tuple<int, int> yIM1AndyI = std::tuple<int, int>(yIM1, yI);
+	if(BXZ.count(yIM1AndyI) == 0 || BXZ[yIM1AndyI].count(zI) == 0) {
+	  BXZ[yIM1AndyI][zI] = 0;
+	}
+	//	cerr << BXZ[yI][zI];
+	BXZ[yIM1AndyI][zI] += LogVal<double>(-nLogMarginal, init_lnx());
 	//	cerr << " => " << BXZ[yI][zI] << endl;
 
 	// prepare the schedule for visiting states in the next timestep
@@ -620,6 +747,7 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+	std::tuple<int, int> yIM1_yI = std::tuple<int, int>(yIM1, yI);
 
 	// skip special classes
 	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
@@ -632,11 +760,14 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
 
 	// prepare -log \theta_{z_i|y_i}
 	int zI = z[i];
-	double nLogTheta_zI_yI = this->nLogTheta[yI][zI];
+	double nLogTheta_zI_y = 
+	  learningInfo.zIDependsOnYIM1? 
+	  nLogTheta2[yIM1_yI][zI]:
+	  nLogTheta[yI][zI];
 
 	// compute the weight of this transition: \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representatio
 	double nLambdaH = -1.0 * lambda->DotProduct(h);
-	double weight = nLambdaH + nLogTheta_zI_yI;
+	double weight = nLambdaH + nLogTheta_zI_y;
 
 	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
 	int toState;	
@@ -682,8 +813,17 @@ double LatentCrfModel::ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vec
 
   for(int i = 0; i < x.size(); i++) {
 
+    // y_{i-1}
+    int yIM1 = 
+      i == 0? 
+      START_OF_SENTENCE_Y_VALUE:
+      y[i-1];
+
     // multiply \theta_{z_i|y_i} (which is already stored using in its -log value)
-    result += nLogTheta[y[i]][z[i]];
+    result += 
+      learningInfo.zIDependsOnYIM1?
+      nLogTheta2[std::tuple<int, int>(yIM1, y[i])][z[i]]:
+      nLogTheta[y[i]][z[i]];
 
     // multiply \exp \lambda h(y_i, y_{i-1}, x, i)
     //  compute h(y_i, y_{i-1}, x, i)
@@ -709,8 +849,17 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
   // multiply the numerator
   for(int i = 0; i < x.size(); i++) {
 
+    // y_{i-1}
+    int yIM1 = 
+      i == 0? 
+      START_OF_SENTENCE_Y_VALUE:
+      y[i-1];
+
     // multiply \theta_{z_i|y_i} (which is already stored in its -log value)
-    result += nLogTheta[y[i]][z[i]];
+    result += 
+      learningInfo.zIDependsOnYIM1?
+      nLogTheta2[std::tuple<int, int>(yIM1, y[i])][z[i]]:
+      nLogTheta[y[i]][z[i]];
 
     // multiply \exp \lambda h(y_i, y_{i-1}, x, i)
     //  compute h(y_i, y_{i-1}, x, i)
@@ -755,6 +904,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 	  yDomainIter++) {
 
 	int yI = *yDomainIter;
+	std::tuple<int, int> yIM1_yI = std::tuple<int, int>(yIM1, yI);
 
 	// skip special classes
 	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
@@ -766,9 +916,14 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
 	// \lambda h(...,i)
 	double lambdaH = -1.0 * lambda->DotProduct(h);
+	// \theta(z_i | y_i, y_{i-1})
+	double nLogTheta_zI_y =
+	  learningInfo.zIDependsOnYIM1?
+	  nLogTheta2[yIM1_yI][z[i]]:
+	  nLogTheta[yI][z[i]];
 	// compute the weight of this transition: -log p_\theta(z_i|y_i) -log \exp \lambda h(y_i, y_{i-1}, x, i)
 	// note: parameters theta[y_{i-1}][y_i] is already in the -log representation
-	double weight = lambdaH + nLogTheta[yI][z[i]];
+	double weight = lambdaH + nLogTheta_zI_y;
 	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
 	int toState;	
 	if(yIToState.count(yI) == 0) {
@@ -909,11 +1064,11 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     model.BuildThetaLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     model.BuildLambdaFst(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
     // compute the D map for this sentence
-    FastSparseVector<double> DSparseVector;
+    FastSparseVector<LogVal<double> > DSparseVector;
     model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
     // compute the C value for this sentence
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
-    if(isnan(nLogC) || isinf(nLogC)) {
+    if(std::isnan(nLogC) || std::isinf(nLogC)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: nLogC = " << nLogC << ". my mistake. will halt!" << endl;
 	cerr << "thetaLambdaFst summary:" << endl;
@@ -924,13 +1079,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // update the loglikelihood
     nlogLikelihood += nLogC;
     // add D/C to the gradient
-    for(FastSparseVector<double>::iterator dIter = DSparseVector.begin(); dIter != DSparseVector.end(); ++dIter) {
-      double d = dIter->second;
-      double nLogd = MultinomialParams::nLog(d);
+    for(FastSparseVector<LogVal<double> >::iterator dIter = DSparseVector.begin(); dIter != DSparseVector.end(); ++dIter) {
+      double nLogd = dIter->second.s_? dIter->second.v_ : -dIter->second.v_; // multiply the inner logD representation by -1.
       double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-      if(isnan(dOverC) || isinf(dOverC)) {
+      if(std::isnan(dOverC) || std::isinf(dOverC)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ", d = " << d << ". my mistake. will halt!" << endl;
+	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ". my mistake. will halt!" << endl;
 	}
         assert(false);
       }
@@ -942,7 +1096,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // compute the Z value for this sentence
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     // update the log likelihood
-    if(isnan(nLogZ) || isinf(nLogZ)) {
+    if(std::isnan(nLogZ) || std::isinf(nLogZ)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
       }
@@ -954,14 +1108,14 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
       double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
-      if(isnan(fOverZ) || isinf(fOverZ)) {
+      if(std::isnan(fOverZ) || std::isinf(fOverZ)) {
 	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
 	}
 	assert(false);
       }
       derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
-      if(isnan(derivativeWRTLambdaSparseVector[fIter->first]) || isinf(derivativeWRTLambdaSparseVector[fIter->first])) {
+      if(std::isnan(derivativeWRTLambdaSparseVector[fIter->first]) || std::isinf(derivativeWRTLambdaSparseVector[fIter->first])) {
 	cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
 	assert(false);
       }
@@ -1055,25 +1209,6 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     cerr << endl;
   }
 
-  // make sure the gradient and lambdas don't contain a nan
-  /*
-  for(int displacedIndex = 0; displacedIndex < model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters; displacedIndex++) {
-    if(isnan(gradient[displacedIndex]) || isinf(gradient[displacedIndex])) {
-      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: gradient[" << displacedIndex << "] = " << gradient[displacedIndex] << ". my mistake. will halt!" << endl;
-      }
-      assert(false);
-    }
-    if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
-      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake. will halt!" << endl;
-      }
-      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
-      assert(false);
-    }
-  }
-  */
-  //  cerr << "}" << endl;
   return nlogLikelihood;  
 }
 
@@ -1231,7 +1366,7 @@ void LatentCrfModel::AddConstrainedFeatures() {
 // reduces two sets into one
 set<string> LatentCrfModel::AggregateSets(const set<string> &v1, const set<string> &v2) {
   set<string> vTotal(v2);
-  for(set<string>::const_iterator v1Iter = v1.begin(); v1Iter != v2.end(); ++v1Iter) {
+  for(set<string>::const_iterator v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
     vTotal.insert(*v1Iter);
   }
   return vTotal;
@@ -1292,6 +1427,8 @@ void LatentCrfModel::WarmUp() {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
     cerr << "lambdas initialized to: " << endl;
     lambda->PrintParams();
+  }
+  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
     cerr << "warmup done. Lambda params count:" << lambda->GetParamsCount() << endl;
   }
 }
@@ -1308,22 +1445,55 @@ void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   vector<fst::LogWeight> alphas, betas;
   BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
   // compute the B matrix for this sentence
-  map< int, map< int, double > > B;
+  map< int, map< int, LogVal<double> > > B;
   B.clear();
   ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, betas);
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
-  for(map< int, map<int, double> >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+  for(map< int, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
     int y_ = yIter->first;
-    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+    for(map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
-      double b = zIter->second;
-      double nLogb = MultinomialParams::nLog(b);
+      double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
       double bOverC = MultinomialParams::nExp(nLogb - nLogC);
       if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
 	cerr << "b(" << z_ << "|" << y_ << ")/c = " << bOverC << endl;
+      }
+      mle[y_][z_] += bOverC;
+      mleMarginals[y_] += bOverC;
+    }
+  }
+}
+
+void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
+					   MultinomialParams::DoubleConditionalMultinomialParam &mle, 
+					   map<std::tuple<int, int>, double> &mleMarginals) {
+  if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+    cerr << "sentId = " << sentId << endl;
+  }
+  assert(sentId < data.size());
+  // build the FST
+  VectorFst<LogArc> thetaLambdaFst;
+  vector<fst::LogWeight> alphas, betas;
+  BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
+  // compute the B matrix for this sentence
+  map< std::tuple<int, int>, map< int, LogVal<double> > > B;
+  B.clear();
+  ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
+  // compute the C value for this sentence
+  double nLogC = ComputeNLogC(thetaLambdaFst, betas);
+  //cerr << "nloglikelihood += " << nLogC << endl;
+  // update mle for each z^*|y^* fired
+  for(map< std::tuple<int, int>, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    std::tuple<int, int> y_ = yIter->first;
+    for(map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
+      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+      if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+	cerr << "b(" << z_ << "|" << std::get<0>(y_) << "," << std::get<1>(y_) << ")/c = " << bOverC << endl;
       }
       mle[y_][z_] += bOverC;
       mleMarginals[y_] += bOverC;
@@ -1360,58 +1530,31 @@ void LatentCrfModel::NormalizeThetaMle(MultinomialParams::ConditionalMultinomial
   }
 }
 
-// keeps looking for a slave that's not busy and return its rank
-unsigned LatentCrfModel::FindASlackingSlave(vector<bool> &busySlaves, 
-					    vector<boost::mpi::request> &slavesMleRequests, 
-					    vector<boost::mpi::request> &slavesMleMarginalRequests,
-					    vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
-					    vector< map<int, double> > &slavesMleMarginalResults,
-					    MultinomialParams::ConditionalMultinomialParam &mle,
-					    map<int, double> &mleMarginals) {
-  while(true) {
-    for(unsigned i = 1; i < busySlaves.size(); i++) {
-      if(!busySlaves[i]) {
-	busySlaves[i] = true;
-	return i;
-      }
+void LatentCrfModel::NormalizeThetaMle(MultinomialParams::DoubleConditionalMultinomialParam &mle, 
+				       map<std::tuple<int, int>, double> &mleMarginals) {
+  // fix theta mle estimates
+  for(map<std::tuple<int, int>,  map<int, double> >::const_iterator yIter = mle.begin(); yIter != mle.end(); yIter++) {
+    std::tuple<int, int> y_ = yIter->first;
+    double unnormalizedMarginalProbz_giveny_ = 0.0;
+    // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
+    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double unnormalizedProbz_giveny_ = zIter->second;
+      unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
     }
-    boost::this_thread::sleep( boost::posix_time::seconds(1) );
-    //    cerr << "none of hte slaves are slacking. lets see if any of them finished their work!" << endl;
-    // may one of them finished its work by now!
-    CollectSlavesWork(busySlaves, slavesMleRequests, slavesMleMarginalRequests, slavesMleResults, slavesMleMarginalResults, mle, mleMarginals);
-  }
-}
-
-// collect results from slaves
-void LatentCrfModel::CollectSlavesWork(vector<bool> &busySlaves, 
-				       vector<boost::mpi::request> &slavesMleRequests, 
-				       vector<boost::mpi::request> &slavesMleMarginalRequests, 
-				       vector<MultinomialParams::ConditionalMultinomialParam> &slavesMleResults,
-				       vector< map<int, double> > &slavesMleMarginalResults,
-				       MultinomialParams::ConditionalMultinomialParam &mle,
-				       map<int, double> &mleMarginals) {
-  for(unsigned i = 1; i < busySlaves.size(); i++) {
-    if(busySlaves[i]) {
-      boost::optional<boost::mpi::status> mleStatus = slavesMleRequests[i].test();
-      boost::optional<boost::mpi::status> mleMarginalStatus = slavesMleMarginalRequests[i].test();
-      if(mleStatus && mleMarginalStatus) {
-	cerr << "master recieved an mle communication from slave#" << i << " with error code " << mleStatus->error()<< endl;
-	cerr << "master recieved an mleMarginal communication from slave#" << i << " with error code " << mleMarginalStatus->error()<< endl;
-	busySlaves[i] = false;
-	// now, that our slave has done the hard work, the master gets to accumulate those numbers on its own numbers
-	for(MultinomialParams::ConditionalMultinomialParam::const_iterator yIter = slavesMleResults[i].begin();
-	    yIter != slavesMleResults[i].end();
-	    yIter++) {
-	  // accumulate mle
-	  for(std::map<int, double>::const_iterator zIter = yIter->second.begin(); 
-	      zIter != yIter->second.end();
-	      zIter++) {
-	    mle[yIter->first][zIter->first] += zIter->second;
-	  }
-	  // accumulate mle marginals
-	  mleMarginals[yIter->first] += slavesMleMarginalResults[i][yIter->first];
-	}
-      }
+    if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
+      cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
+      cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
+      cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
+	cerr << " --error ignored, but try to figure out what's wrong!" << endl;
+    }
+    // normalize the mle estimates to sum to one for each context
+    for(map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
+      mle[y_][z_] = normalizedProbz_giveny_;
+      // take the nlog
+      mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
     }
   }
 }
@@ -1570,7 +1713,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
       // update iteration's nloglikelihood
-      if(isnan(optimizedMiniBatchNLogLikelihood) || isinf(optimizedMiniBatchNLogLikelihood)) {
+      if(std::isnan(optimizedMiniBatchNLogLikelihood) || std::isinf(optimizedMiniBatchNLogLikelihood)) {
 	if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
 	  cerr << "ERROR: optimizedMiniBatchNLogLikelihood = " << optimizedMiniBatchNLogLikelihood << ". didn't add this batch's likelihood to the total likelihood. will halt!" << endl;
 	}
@@ -1729,4 +1872,20 @@ double LatentCrfModel::ComputeVariationOfInformation(string &aLabelsFilename, st
     }
   }
   return ClustersComparer::ComputeVariationOfInformation(clusteringA, clusteringB);
+}
+
+double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabelsFilename) {
+  vector<string> clusteringA, clusteringB;
+  vector<vector<string> > clusteringAByLine, clusteringBByLine;
+  StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
+  StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
+  assert(clusteringAByLine.size() == clusteringBByLine.size());
+  for(int i = 0; i < clusteringAByLine.size(); i++) {
+    assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
+    for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+      clusteringA.push_back(clusteringAByLine[i][j]);
+      clusteringB.push_back(clusteringBByLine[i][j]);			    
+    }
+  }
+  return ClustersComparer::ComputeManyToOne(clusteringA, clusteringB);
 }
