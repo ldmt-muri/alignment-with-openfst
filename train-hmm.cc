@@ -5,6 +5,7 @@
 
 using namespace fst;
 using namespace std;
+using namespace boost;
 
 void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &srcTestSetFilename, string &tgtTestSetFilename, string &outputFilepathPrefix) {
   assert(argc == 6 || argc == 4);
@@ -34,9 +35,10 @@ int main(int argc, char **argv) {
   // specify stopping criteria
   LearningInfo learningInfo;
   learningInfo.maxIterationsCount = 1;
-  learningInfo.useMaxIterationsCount = true;
+  learningInfo.useMaxIterationsCount = false;
   learningInfo.minLikelihoodDiff = 10.0;
   learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterEachIteration = true;

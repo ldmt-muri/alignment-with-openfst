@@ -3,6 +3,7 @@
 using namespace std;
 using namespace fst;
 using namespace MultinomialParams;
+using namespace boost;
 
 // initialize model 1 scores
 HmmModel::HmmModel(const string& srcIntCorpusFilename, 
@@ -18,45 +19,61 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
   this->learningInfo = learningInfo;
 
   // encode training data
+  vocabEncoder.useUnk = false;
   vocabEncoder.Read(srcIntCorpusFilename, srcSents);
   vocabEncoder.Read(tgtIntCorpusFilename, tgtSents);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
   // initialize the model parameters
-  cerr << "init hmm params" << endl;
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": init hmm params" << endl;
   InitParams();
-  if(learningInfo.mpiWord->rank() == 0) {
+  if(learningInfo.mpiWorld->rank() == 0) {
     stringstream initialModelFilename;
     initialModelFilename << outputPrefix << ".param.init";
     PersistParams(initialModelFilename.str());
   }
 
   // create the initial grammar FST
-  cerr << "create grammar fst" << endl;
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create grammar fst" << endl;
   CreateGrammarFst();
 }
 
 void HmmModel::Train() {
 
   // create tgt fsts
-  cerr << "create tgt fsts" << endl;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create tgt fsts" << endl;
+  }
   vector< VectorFst <LogQuadArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
   // training iterations
-  cerr << "train!" << endl;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": train!" << endl;
+  }
   LearnParameters(tgtFsts);
 
-  // persist parameters
-  cerr << "persist" << endl;
-  PersistParams(outputPrefix + ".param.final");
+  // persist parameters (master only)
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": persist" << endl;
+    PersistParams(outputPrefix + ".param.final");
+  }
 }
 
 // src fsts are 1st order markov models
 void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector< int > &intTokens = srcSents[sentId];
-    assert(intTokens[0] == NULL_SRC_TOKEN_ID);
+    if(intTokens[0] != NULL_SRC_TOKEN_ID) {
+      intTokens.insert(intTokens.begin(), NULL_SRC_TOKEN_ID);
+    }
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now creating src fst for sentence: ";
+      for(unsigned i = 0; i < intTokens.size(); i++) {
+	cerr << intTokens[i] << " ";
+      }
+      cerr << endl;
+    }
 
     // create the fst
     VectorFst< LogQuadArc > srcFst;
@@ -127,7 +144,9 @@ void HmmModel::InitParams() {
     vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
     
     // we want to allow target words to align to NULL (which has srcTokenId = 1).
-    srcTokens.push_back(NULL_SRC_TOKEN_ID); 
+    if(srcTokens[0] != NULL_SRC_TOKEN_ID) {
+      srcTokens.insert(srcTokens.begin(), NULL_SRC_TOKEN_ID);
+    }
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
@@ -135,7 +154,7 @@ void HmmModel::InitParams() {
       // INITIALIZE TRANSLATION PARAMETERS
       int srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      map<int, double> tParamsGivenS_i = tFractionalCounts[srcToken];
+      map<int, double> &tParamsGivenS_i = tFractionalCounts[srcToken];
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
 	int tgtToken = tgtTokens[j];
@@ -199,6 +218,7 @@ void HmmModel::CreateGrammarFst() {
   grammarFst.SetStart(0);
   grammarFst.SetFinal(0, LogQuadWeight::One());
   int fromState = 0, toState = 0;
+  assert(tFractionalCounts.size() > 0);
   for(ConditionalMultinomialParam::const_iterator srcIter = tFractionalCounts.begin(); srcIter != tFractionalCounts.end(); srcIter++) {
     for(MultinomialParam::const_iterator tgtIter = (*srcIter).second.begin(); tgtIter != (*srcIter).second.end(); tgtIter++) {
       int tgtToken = (*tgtIter).first;
@@ -212,7 +232,6 @@ void HmmModel::CreateGrammarFst() {
     }
   }
   ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
-  //  PrintFstSummary(grammarFst);
 }
 
 // assumptions:
@@ -282,6 +301,10 @@ void HmmModel::BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst,
 				 VectorFst< LogQuadArc > &alignmentFst) {
   VectorFst< LogQuadArc > temp;
   Compose(tgtFst, grammarFst, &temp);
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr<< "===GRAMMAR FST=== " << FstUtils::PrintFstSummary(grammarFst);
+    cerr << "===TGT o GRAMMAR FST=== " << FstUtils::PrintFstSummary(temp);
+  }
   Compose(temp, srcFst, &alignmentFst);  
 }
 
@@ -292,22 +315,29 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     clock_t t05 = clock();
 
     // create src fsts (these encode the aParams as weights on their arcs)
-    cerr << "create src fsts" << endl;
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create src fsts" << endl;
+    }
     vector< VectorFst <LogQuadArc> > srcFsts;
     CreateSrcFsts(srcFsts);
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": created src fsts" << endl;
+    }
 
     clock_t t10 = clock();
     float logLikelihood = 0, validationLogLikelihood = 0;
-    //    cerr << "iteration's loglikelihood = " << logLikelihood << endl;
     
     // this vector will be used to accumulate fractional counts of parameter usages
     ClearFractionalCounts();
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": cleared fractional counts vector" << endl;
+    }
     
     // iterate over sentences
     int sentsCounter = 0;
     for( vector< VectorFst< LogQuadArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(); 
 	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end(); 
-	 tgtIter++, srcIter++) {
+	 tgtIter++, srcIter++, sentsCounter++) {
 
       // every core works on its sentences
       if(sentsCounter % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -320,19 +350,36 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       VectorFst< LogQuadArc > alignmentFst;
       BuildAlignmentFst(tgtFst, srcFst, alignmentFst);
       compositionClocks += clock() - t20;
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "built alignment fst. |tgtFst| = " << tgtFst.NumStates() << ", |srcFst| = " << srcFst.NumStates() << ", |alignmentFst| = " << alignmentFst.NumStates() << endl;
+	cerr << "===SRC FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(srcFst);
+	cerr << "===TGT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(tgtFst);
+	cerr << "===ALIGNMENT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(alignmentFst);
+      }
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
       vector<LogQuadWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "shortest distance (both directions) was computed" << endl;
+	cerr << "alignmentFst.Start() = " << alignmentFst.Start() << endl;
+	cerr << "betas[alignmentFst.Start()] = " << FstUtils::PrintWeight( betas[alignmentFst.Start()] ) << endl;
+      }
       float fSentLogLikelihood, dummy;
       FstUtils::DecodeQuad(betas[alignmentFst.Start()], 
 			     dummy, dummy, dummy, fSentLogLikelihood);
       forwardBackwardClocks += clock() - t30;
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "fSentLogLikelihood = " << fSentLogLikelihood << endl;
+      }
       
       // compute and accumulate fractional counts for model parameters
       clock_t t40 = clock();
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "rank #" << learningInfo.mpiWorld->rank() << ": sentsCounter = " << sentsCounter << endl;
+      }
       bool excludeFractionalCountsInThisSent = 
 	learningInfo.useEarlyStopping && 
 	sentsCounter % learningInfo.trainToDevDataSize == 0;
@@ -376,15 +423,19 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       //	cout << "iteration's loglikelihood = " << logLikelihood << endl;
       
       // logging
-      if (++sentsCounter % 1000 == 0) {
-	cerr << sentsCounter << " sents processed. so far, iterationLoglikelihood on this core = " << logLikelihood <<  endl;
+      if (sentsCounter > 0 && sentsCounter % 1000 == 0 && learningInfo.debugLevel == DebugLevel::CORPUS) {
+	cerr << ".";
       }
+    }
+
+    if(learningInfo.debugLevel == DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": fractional counts collected from all sentences for this iteration." << endl;
     }
     
     // all processes send their fractional counts to the master and the master accumulates them
-    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, tFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
-    mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, aFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
-    mpi::all_reduce<float>(*learningInfo.mpiWorld, logLikelihood, logLikelihood, std::plus<float>(), 0);
+    boost::mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, tFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
+    boost::mpi::reduce<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, aFractionalCounts, MultinomialParams::AccumulateConditionalMultinomials, 0);
+    boost::mpi::all_reduce<float>(*learningInfo.mpiWorld, logLikelihood, logLikelihood, std::plus<float>());
 
     // master only: normalize fractional counts such that \sum_t p(t|s) = 1 \forall s
     if(learningInfo.mpiWorld->rank() == 0) {
@@ -395,9 +446,9 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     }
     
     // update a few things on slaves
-    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, 0);    
-    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, 0);    
-    mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aParams, 0);    
+    boost::mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, tFractionalCounts, 0);    
+    boost::mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aFractionalCounts, 0);    
+    boost::mpi::broadcast<MultinomialParams::ConditionalMultinomialParam>(*learningInfo.mpiWorld, aParams, 0);    
     
     // persist parameters, if need be
     if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
@@ -411,7 +462,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     CreateGrammarFst();
 
     // logging
-    cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(logLikelihood);
@@ -422,13 +473,15 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
   } while(!learningInfo.IsModelConverged());
 
   // logging
-  cerr << endl;
-  cerr << "trainTime        = " << (float) (clock() - t00) / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "compositionTime  = " << (float) compositionClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "forward/backward = " << (float) forwardBackwardClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "fractionalCounts = " << (float) updatingFractionalCountsClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << endl;
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << endl;
+    cerr << "trainTime        = " << (float) (clock() - t00) / CLOCKS_PER_SEC << " sec." << endl;
+    cerr << "compositionTime  = " << (float) compositionClocks / CLOCKS_PER_SEC << " sec." << endl;
+    cerr << "forward/backward = " << (float) forwardBackwardClocks / CLOCKS_PER_SEC << " sec." << endl;
+    cerr << "fractionalCounts = " << (float) updatingFractionalCountsClocks / CLOCKS_PER_SEC << " sec." << endl;
+    cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
+    cerr << endl;
+  }
 }
 
 // assumptions:
@@ -442,18 +495,12 @@ void HmmModel::SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vecto
 
   // for each target position,
   for(int i = 0; i < tgtLength; i++) {
-    // for debugging only
-    //cerr << "at tgtPos=" << i << ", prevAlignment=" << prevAlignment << ", ";
-
     // sample a src position (i.e. an alignment)
     int currentAlignment;
     do {
       currentAlignment = SampleFromMultinomial(aParams[prevAlignment]);
     } while(currentAlignment >= srcTokens.size());
     alignments.push_back(currentAlignment);
-    // for debugging only
-    // cerr << "sample srcPos=" << currentAlignment << " which happens to be (" << srcTokens[currentAlignment] << "), ";
-    
     // sample a translation
     int currentTranslation = SampleFromMultinomial(tFractionalCounts[srcTokens[currentAlignment]]);
     tgtTokens.push_back(currentTranslation);
@@ -535,11 +582,22 @@ void HmmModel::Align() {
 }
 
 void HmmModel::Align(const string &alignmentsFilename) {
-  ofstream outputAlignments(alignmentsFilename.c_str(), ios::out);
-  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
-    vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
-    string alignmentsLine = AlignSent(srcSent, tgtSent);
-    outputAlignments << alignmentsLine;
+  ofstream outputAlignments;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    outputAlignments.open(alignmentsFilename.c_str(), ios::out);
   }
-  outputAlignments.close();
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    string alignmentsLine;
+    if(sentId % learningInfo.mpiWorld->size() == learningInfo.mpiWorld->rank()) {
+      vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+      alignmentsLine = AlignSent(srcSent, tgtSent);
+    } 
+    boost::mpi::broadcast<string>(*learningInfo.mpiWorld, alignmentsLine, sentId % learningInfo.mpiWorld->size());
+    if(learningInfo.mpiWorld->rank() == 0) {
+      outputAlignments << alignmentsLine;
+    }
+  }
+  if(learningInfo.mpiWorld->rank() == 0) {
+    outputAlignments.close();
+  }
 }
