@@ -29,12 +29,13 @@
 
 #include "anneal/Cpp/simann.hpp"
 
+#include "ClustersComparer.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "LbfgsUtils.h"
+
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
-#include "ClustersComparer.h"
 
 using namespace fst;
 using namespace std;
@@ -55,13 +56,36 @@ class LatentCrfModel {
   void BlockCoordinateDescent();
 
   // normalize soft counts with identical content to sum to one
-  void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam &mle, 
-			 map<int, double> &mleMarginals);
-
-  // normalize soft counts with identical content to sum to one
-  void NormalizeThetaMle(MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-			 map<std::pair<int, int>, double> &mleMarginals);
-
+  template <typename ContextType>
+  void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
+					 map<ContextType, double> &mleMarginals) {
+    // fix theta mle estimates
+    for(typename map<ContextType, MultinomialParams::MultinomialParam >::const_iterator yIter = mle.params.begin(); yIter != mle.params.end(); yIter++) {
+      ContextType y_ = yIter->first;
+      double unnormalizedMarginalProbz_giveny_ = 0.0;
+      // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
+      for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	int z_ = zIter->first;
+	double unnormalizedProbz_giveny_ = zIter->second;
+	unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
+      }
+      if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
+	cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
+	cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
+	cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
+	cerr << " --error ignored, but try to figure out what's wrong!" << endl;
+      }
+      // normalize the mle estimates to sum to one for each context
+      for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	int z_ = zIter->first;
+	double normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
+	mle[y_][z_] = normalizedProbz_giveny_;
+	// take the nlog
+	mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
+      }
+    }
+  }
+  
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void WarmUp();
 
@@ -171,6 +195,14 @@ class LatentCrfModel {
   // add constrained features with hand-crafted weights
   void AddConstrainedFeatures();
 
+  void BroadcastTheta();
+
+  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
+			     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels,
+			     map<int, double> mleMarginalsGivenOneLabel,
+			     map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
+    
+
  public:
 
   static LatentCrfModel& GetInstance();
@@ -209,22 +241,63 @@ class LatentCrfModel {
   double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
   double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
 
-  void UpdateThetaMleForSent(const unsigned sentId, 
-			     MultinomialParams::DoubleConditionalMultinomialParam &mle, 
-			     map< std::pair<int, int> , double > &mleMarginals);
-
   // collect soft counts from this sentence
+  void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+				       std::map<int, double> &mleMarginalsGivenOneLabel,
+				       MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
+				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
+  
+  template <typename ContextType>
   void UpdateThetaMleForSent(const unsigned sentId, 
-			     MultinomialParams::ConditionalMultinomialParam &mle, 
-			     map<int, double> &mleMarginals);
+					     MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
+					     map<ContextType, double> &mleMarginals) {
+    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+      cerr << "sentId = " << sentId << endl;
+    }
+    assert(sentId < data.size());
+    // build the FST
+    VectorFst<LogArc> thetaLambdaFst;
+    vector<fst::LogWeight> alphas, betas;
+    BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
+    // compute the B matrix for this sentence
+    map< ContextType, map< int, LogVal<double> > > B;
+    B.clear();
+    ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
+    // compute the C value for this sentence
+    double nLogC = ComputeNLogC(thetaLambdaFst, betas);
+    //cerr << "nloglikelihood += " << nLogC << endl;
+    // update mle for each z^*|y^* fired
+    for(typename map< ContextType, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+      const ContextType &y_ = yIter->first;
+      for(map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	int z_ = zIter->first;
+	double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
+	double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+	mle[y_][z_] += bOverC;
+	mleMarginals[y_] += bOverC;
+      }
+    }
+  }
+  void UpdateThetaMleForSent(const unsigned sentId, 
+			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+			     map<int, double> &mleMarginalsGivenOneLabel,
+			     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
+			     map< pair<int, int>, double> &mleMarginalsGivenTwoLabels);
 
+  void InitTheta();
+
+  double GetNLogTheta(int yim1, int yi, int zi);
+
+  void PersistTheta(string thetaParamsFilename);
+
+ public:
   vector<vector<int> > data;
   LearningInfo learningInfo;
-  MultinomialParams::ConditionalMultinomialParam nLogTheta;
-  MultinomialParams::DoubleConditionalMultinomialParam nLogTheta2;
   LogLinearParams *lambda;
 
  private:
+  MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
+  MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE;
   string textFilename, outputPrefix;

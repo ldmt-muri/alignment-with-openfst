@@ -44,9 +44,9 @@ class ClustersComparer {
     }
   }
 
-  static string PrintConfusionMatrix(const std::map<std::string, std::map<std::string, unsigned> > &confusionMatrix) {
+  static std::string PrintConfusionMatrix(const std::map<std::string, std::map<std::string, unsigned> > &confusionMatrix) {
     assert(confusionMatrix.size() != 0);
-    stringstream ss;
+    std::stringstream ss;
     // print headers (i.e. b clusters)
     ss << "\t";
     for(std::map<std::string, unsigned>::const_iterator bIter = confusionMatrix.begin()->second.begin(); 
@@ -54,7 +54,7 @@ class ClustersComparer {
 	bIter++) {
       ss << bIter->first << "\t";
     }
-    ss << endl << endl;
+    ss << std::endl << std::endl;
     for(std::map<std::string, std::map<std::string, unsigned> >::const_iterator aIter = confusionMatrix.begin();
 	aIter != confusionMatrix.end();
 	aIter++) {
@@ -65,7 +65,7 @@ class ClustersComparer {
 	  bIter++) {
 	ss << bIter->second << "\t";
       }
-      ss << endl << endl;
+      ss << std::endl << std::endl;
     }
     return ss.str();
   }
@@ -129,20 +129,20 @@ class ClustersComparer {
     assert(VerifyTwoClusteringsAreValid(a, b));
     std::map<std::string, std::map<std::string, unsigned> > confusionMatrix;
     BuildConfusionMatrix(a, b, confusionMatrix);
-    cerr << "confusion matrix:" << endl << PrintConfusionMatrix(confusionMatrix) << endl;
+    std::cerr << "confusion matrix:" << std::endl << PrintConfusionMatrix(confusionMatrix) << std::endl;
     std::map<std::string, unsigned> aCounts, bCounts;
     ComputeClusterSizes(a, aCounts);
     ComputeClusterSizes(b, bCounts);
     double aEntropy = ComputeClusterEntropies(aCounts, a.size());
-    cerr << "H(A) = " << aEntropy << endl;
+    std::cerr << "H(A) = " << aEntropy << std::endl;
     double bEntropy = ComputeClusterEntropies(bCounts, b.size());
-    cerr << "H(B) = " << bEntropy << endl;
+    std::cerr << "H(B) = " << bEntropy << std::endl;
     double mi = ComputeMutualInformation(confusionMatrix, aCounts, bCounts, a.size());
-    cerr << "MI(A,B) = " << mi << endl;
+    std::cerr << "MI(A,B) = " << mi << std::endl;
     double vi = aEntropy - mi + bEntropy - mi;
-    cerr << "VI = " << vi << endl;
+    std::cerr << "VI = " << vi << std::endl;
     double ht = bEntropy, hc = aEntropy, ht2c = hc - mi, hc2t = ht - mi, h = 1 - hc2t / ht, c = 1 - ht2c / hc, vm = 2 * h * c / (h + c);
-    cerr << "VMeasure = " << vm << endl;
+    std::cerr << "VMeasure = " << vm << std::endl;
     return vi;
   }
 

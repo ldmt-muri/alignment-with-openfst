@@ -2,9 +2,6 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
-#include "LearningInfo.h"
-#include "FstUtils.h"
-#include "StringUtils.h"
 #include "LatentCrfModel.h"
 
 using namespace fst;
@@ -63,13 +60,13 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
-  learningInfo.zIDependsOnYIM1 = true;
+  learningInfo.zIDependsOnYIM1 = false;
   learningInfo.persistParamsAfterEachIteration = false;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::SIMULATED_ANNEALING;
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
@@ -79,7 +76,7 @@ int main(int argc, char **argv) {
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
-  learningInfo.retryLbfgsOnRoundingErrors = false;
+  learningInfo.retryLbfgsOnRoundingErrors = true;
 
   // add constraints
   learningInfo.constraints.clear();

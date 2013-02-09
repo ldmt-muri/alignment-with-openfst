@@ -15,9 +15,10 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/mpi/collectives.hpp>
 
+#include "cdec-utils/fast_sparse_vector.h"
+
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
-#include "cdec-utils/fast_sparse_vector.h"
 #include "Samplers.h"
 
 class LogLinearParams {
