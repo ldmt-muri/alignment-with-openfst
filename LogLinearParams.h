@@ -287,6 +287,9 @@ class LogLinearParams {
   const LearningInfo *learningInfo;
 
   const GaussianSampler *gaussianSampler;
+
+  const std::set< int > *englishClosedClassTypes;
+
 };
 
 #endif

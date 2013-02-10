@@ -52,6 +52,8 @@ class LatentCrfModel {
 
   static LatentCrfModel *instance;
 
+  void AddEnglishClosedVocab();
+
   // optimize the likelihood with block coordinate descent
   void BlockCoordinateDescent();
 

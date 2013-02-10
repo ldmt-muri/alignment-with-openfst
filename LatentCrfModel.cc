@@ -32,6 +32,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   vocabEncoder(textFilename),
   gaussianSampler(0.0, 10.0) {
 
+  AddEnglishClosedVocab();
+  
   if(learningInfo.mpiWorld->rank() == 0) {
     vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
   }
@@ -88,7 +90,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   enabledFeatureTypes[51] = true;
   //  enabledFeatureTypes[52] = true;
   //enabledFeatureTypes[53] = true;
-  //enabledFeatureTypes[54] = true;
+  enabledFeatureTypes[54] = true;
   //enabledFeatureTypes[55] = true;
   //enabledFeatureTypes[56] = true;
   //  enabledFeatureTypes[57] = true;
@@ -104,6 +106,12 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   //enabledFeatureTypes[67] = true;
   //enabledFeatureTypes[68] = true;
   //enabledFeatureTypes[69] = true;
+  //enabledFeatureTypes[70] = true;
+  enabledFeatureTypes[71] = true;
+  //enabledFeatureTypes[72] = true;
+  enabledFeatureTypes[73] = true;
+  //enabledFeatureTypes[74] = true;
+  //enabledFeatureTypes[75] = true;
 
   // initialize the log theta params to unnormalized gaussians
   InitTheta();
@@ -124,6 +132,31 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   // hand-crafted weights for constrained features
   REWARD_FOR_CONSTRAINED_FEATURES = 10.0;
   PENALTY_FOR_CONSTRAINED_FEATURES = -10.0;
+}
+
+void LatentCrfModel::AddEnglishClosedVocab() {
+  char* closedVocab[] = {"a", "an", "the", 
+			  "some", "one", "many", "few", "much",
+			  "from", "to", "at", "by", "in", "on", "for", "as",
+			  ".", ",", ";", "!", "?",
+			  "is", "are", "be", "am", "was", "were",  
+			  "has", "have", "had",
+			  "i", "you", "he", "she", "they", "we", "it",
+			  "myself", "himself", "themselves", "herself", "yourself",
+			  "this", "that", "which",
+			  "and", "or", "but", "not",
+			  "what", "how", "why", "when",
+			  "can", "could", "will", "would", "shall", "should", "must"
+  };
+  vector<string> closedVocabVector (closedVocab, closedVocab + sizeof(closedVocab) / sizeof(closedVocab[0]) );
+  for(unsigned i = 0; i < closedVocabVector.size(); i++) {
+    vocabEncoder.AddToClosedVocab(closedVocabVector[i]);
+    // add the capital initial version as well
+    if(closedVocabVector[i][0] >= 'a' && closedVocabVector[i][0] <= 'z') {
+      closedVocabVector[i][0] += ('A' - 'a');
+       vocabEncoder.AddToClosedVocab(closedVocabVector[i]);
+    }
+  }
 }
 
 void LatentCrfModel::InitTheta() {

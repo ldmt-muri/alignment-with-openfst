@@ -15,6 +15,14 @@ using namespace std;
 
 class VocabEncoder {
  public:
+  int nextId;
+  map<string, int> tokenToInt;
+  map<int, string> intToToken;
+  std::string UNK;
+  bool useUnk;
+  std::set<int> closedVocab;
+  
+ public:
   VocabEncoder() {
     nextId = 2;
     UNK = "_unk_";
@@ -55,9 +63,18 @@ class VocabEncoder {
     useUnk = true;
   }
 
-  int Encode(const string& token) {
+  bool IsClosedVocab(int wordId) const {
+    return (closedVocab.find(wordId) != closedVocab.end());
+  }
+
+  void AddToClosedVocab(std::string &word) {
+    int code = Encode(word, false);
+    closedVocab.insert(code);
+  }
+
+  int Encode(const string& token, bool explicitUseUnk) {
     if(tokenToInt.count(token) == 0) {
-      if(useUnk) {
+      if(explicitUseUnk) {
 	return tokenToInt[UNK];
       }	else {
 	tokenToInt[token] = nextId;
@@ -68,6 +85,10 @@ class VocabEncoder {
     } else {
       return tokenToInt[token];
     }
+  }
+
+  int Encode(const string& token) {
+    return Encode(token, useUnk);
   }
   
   void Encode(const std::vector<std::string>& tokens, vector<int>& ids) {
@@ -113,7 +134,9 @@ class VocabEncoder {
   void PersistVocab(string filename) {
     std::ofstream vocabFile(filename.c_str(), std::ios::out);
     for(map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
-      vocabFile << intToTokenIter->first << " " << intToTokenIter->second << endl;
+      bool inClosedVocab = closedVocab.find(intToTokenIter->first) != closedVocab.end();
+      // c for closed, o for open
+      vocabFile << intToTokenIter->first << " " << intToTokenIter->second << " " << (inClosedVocab? "c" : "o") << endl;
     }
     vocabFile.close();
   }
@@ -126,11 +149,6 @@ class VocabEncoder {
     }
   }
 
-  int nextId;
-  map<string, int> tokenToInt;
-  map<int, string> intToToken;
-  std::string UNK;
-  bool useUnk;
 };
 
 class VocabDecoder {
@@ -159,6 +177,15 @@ class VocabDecoder {
       int wordId;
       ss >> wordId;
       vocab[wordId].assign(splits[1]);
+      if(splits[2] == "c") {
+	closedVocab.insert(wordId);
+      } else if(splits[2] == "o") {
+	// do nothing
+      } else {
+	// format error!
+	assert(false);
+      }
+      
       //      cerr << "vocab[" << wordId << "] = " << vocab.find(wordId)->second << endl;
       //      cerr << "&(splits[0])=" << &(splits[0]) << ", &(vocab.find(wordId)->second)=" << &(vocab.find(wordId)->second) << endl;
     }
@@ -175,8 +202,13 @@ class VocabDecoder {
     }
   }
 
+  bool IsClosedVocab(int wordId) const {
+    return (closedVocab.find(wordId) != closedVocab.end());
+  }
+
   std::map<int, std::string> vocab;
   std::string UNK;
+  std::set<int> closedVocab;
 };
 
 #endif

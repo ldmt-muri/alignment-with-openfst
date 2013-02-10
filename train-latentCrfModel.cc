@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::SIMULATED_ANNEALING;
+  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
