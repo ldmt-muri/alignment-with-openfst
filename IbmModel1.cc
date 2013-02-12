@@ -11,6 +11,12 @@ IbmModel1::IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCor
   this->outputPrefix = outputFilenamePrefix;
   this->learningInfo = learningInfo;
 
+  // encode and memorize training data
+  vocabEncoder.useUnk = false;
+  vocabEncoder.Read(srcCorpusFilename, srcSents);
+  vocabEncoder.Read(tgtCorpusFilename, tgtSents);
+  assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
+
   // initialize the model parameters
   cerr << "init model1 params" << endl;
   stringstream initialModelFilename;
@@ -41,15 +47,10 @@ void IbmModel1::Train() {
 }
 
 void IbmModel1::CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts) {
-  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
-  
-  // for each line
-  string line;
-  while(getline(tgtCorpus, line)) {
-    
+
+  for(unsigned i = 0; i < tgtSents.size(); i++) {
     // read the list of integers representing target tokens
-    vector< int > intTokens;
-    StringUtils::ReadIntTokens(line, intTokens);
+    vector< int > &intTokens  =tgtSents[i];
     
     // create the fst
     VectorFst< LogArc > tgtFst;
@@ -68,105 +69,51 @@ void IbmModel1::CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts) {
     // for debugging
     // PrintFstSummary(tgtFst);
   }
-  tgtCorpus.close();
 }
 
 // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
 void IbmModel1::NormalizeParams() {
-  // iterate over src tokens in the model
-  for(Model1Param::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    //cout << "=======================" << endl << "normalizing srcToken = " << (*srcIter).first << endl;
-    map< int, float > *translations = &(*srcIter).second;
-    float fTotalProb = 0.0;
-    //cout << "totalProb = " << fTotalProb << endl;
-    // iterate over tgt tokens logsumming over the logprob(tgt|src) 
-    for(map< int, float >::iterator tgtIter = translations->begin(); tgtIter != translations->end(); tgtIter++) {
-      LogWeight temp = (*tgtIter).second;
-      fTotalProb += exp(-1.0 * temp.Value());
-      //cout << "fTotalProb += " << exp(-1.0 * temp.Value()) << "(i.e. e^-" << temp.Value() << ") ==> " << fTotalProb << endl;
-    }
-    // exponentiate to find p(*|src) before normalization
-    // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
-    float fVerifyTotalProb = 0.0;
-    for(map< int, float >::iterator tgtIter = translations->begin(); tgtIter != translations->end(); tgtIter++) {
-      float fUnnormalized = exp( -1.0 * (*tgtIter).second );
-      float fNormalized = fUnnormalized / fTotalProb;
-      fVerifyTotalProb += fNormalized;
-      float fLogNormalized = -1 * log(fNormalized);
-      //cout << "prob(" << (*tgtIter).first << "|" << (*srcIter).first << ") = " << fUnnormalized << " ==> " << fNormalized << endl;
-      //cout << "-logprob(" << (*tgtIter).first << "|" << (*srcIter).first << ") = " << (*tgtIter).second << " ==> ";
-      (*tgtIter).second = fLogNormalized;
-      //cout << (*tgtIter).second << endl;
-    }
-    //cout << "verify totalProb = " << fVerifyTotalProb << endl << endl;
-  }
+  MultinomialParams::NormalizeParams<int>(params);
 }
 
 void IbmModel1::PrintParams() {
-  // iterate over src tokens in the model
-  int counter =0;
-  for(Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    map< int, float > translations = (*srcIter).second;
-    // iterate over tgt tokens 
-    for(map< int, float >::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-      cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=log(" << exp(-1.0 * (*tgtIter).second) << ")=" << (*tgtIter).second << endl;
-    }
-  } 
+  MultinomialParams::PrintParams<int>(params);
 }
 
 void IbmModel1::PersistParams(const string& outputFilename) {
-  ofstream paramsFile(outputFilename.c_str());
-  cerr << "writing model params at " << outputFilename << endl;
-  
-  for (Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (map<int, float>::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-      // line format: 
-      // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-      paramsFile << srcIter->first << " " << tgtIter->first << " " << tgtIter->second << " " << exp(-1.0 * tgtIter->second) << endl;
-    }
-  }
-  paramsFile.close();
+  MultinomialParams::PersistParams1(outputFilename, params, vocabEncoder);
 }
 
 // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
 void IbmModel1::InitParams() {
-  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in);
-  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in); 
-  
-  // for each line
-  string srcLine, tgtLine;
-  while(getline(tgtCorpus, tgtLine) && getline(srcCorpus, srcLine)) {
-    
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     // read the list of integers representing target tokens
-    vector< int > tgtTokens, srcTokens;
-    StringUtils::ReadIntTokens(srcLine, srcTokens);
+    vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
     // we want to allow target words to align to NULL (which has srcTokenId = 1).
-    srcTokens.push_back(NULL_SRC_TOKEN_ID); 
-    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+    if(srcTokens[0] != NULL_SRC_TOKEN_ID) {
+      srcTokens.insert(srcTokens.begin(), NULL_SRC_TOKEN_ID);
+    } 
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
       int srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      map<int, float> *translations = &(params[srcToken]);
+      map<int, double> &translations = params.params[srcToken];
       
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
 	int tgtToken = tgtTokens[j];
 	// if this the first time the pair(tgtToken, srcToken) is experienced, give it a value of 1 (i.e. prob = exp(-1) ~= 1/3)
-	if( translations->count(tgtToken) == 0) {
-	  (*translations)[tgtToken] = FstUtils::nLog(1/3.0);
+	if( translations.count(tgtToken) == 0) {
+	  translations[tgtToken] = FstUtils::nLog(1/3.0);
 	} else {
 	  // otherwise, add nLog(1/3) to the original value, effectively counting the number of times 
 	  // this srcToken-tgtToken pair appears in the corpus
-	  (*translations)[tgtToken] = Plus( LogWeight((*translations)[tgtToken]), LogWeight(FstUtils::nLog(1/3.0)) ).Value();
+	  translations[tgtToken] = Plus( LogWeight(translations[tgtToken]), LogWeight(FstUtils::nLog(1/3.0)) ).Value();
 	}
       }
     }
   }
-  
-  srcCorpus.close();
-  tgtCorpus.close();
     
   NormalizeParams();
 }
@@ -184,11 +131,11 @@ void IbmModel1::CreateGrammarFst() {
   grammarFst.SetStart(0);
   grammarFst.SetFinal(0, 0);
   int fromState = 0, toState = 0;
-  for(Model1Param::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for(map<int,float>::const_iterator tgtIter = (*srcIter).second.begin(); tgtIter != (*srcIter).second.end(); tgtIter++) {
-      int tgtToken = (*tgtIter).first;
-      int srcToken = (*srcIter).first;
-      float paramValue = (*tgtIter).second;
+  for(map<int, MultinomialParams::MultinomialParam>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for(MultinomialParams::MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+      int tgtToken = tgtIter->first;
+      int srcToken = srcIter->first;
+      double paramValue = tgtIter->second;
       grammarFst.AddArc(fromState, LogArc(tgtToken, srcToken, paramValue, toState));
     }
   }
@@ -197,20 +144,14 @@ void IbmModel1::CreateGrammarFst() {
 }
 
 void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentGrammarFsts) {
-  ifstream srcCorpus(srcCorpusFilename.c_str(), ios::in); 
-  ifstream tgtCorpus(tgtCorpusFilename.c_str(), ios::in);
   
-  // for each line
-  string srcLine, tgtLine;
-  while(getline(srcCorpus, srcLine) && getline(tgtCorpus, tgtLine)) {
-    
-    // read the list of integers representing source tokens
-    vector<int> srcTokens;
-    set<int> tgtTokens;
-    StringUtils::ReadIntTokens(srcLine, srcTokens);
-    StringUtils::ReadIntTokens(tgtLine, tgtTokens);
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    vector<int> &srcTokens = srcSents[sentId];
+    vector<int> &tgtTokensVector = tgtSents[sentId];
+    set<int> tgtTokens(tgtTokensVector.begin(), tgtTokensVector.end());
+
     // allow null alignments
-    srcTokens.push_back(NULL_SRC_TOKEN_ID);
+    assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
     
     // create the fst
     VectorFst< LogArc > grammarFst;
@@ -227,14 +168,12 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentG
     perSentGrammarFsts.push_back(grammarFst);
     
   }
-  srcCorpus.close();
-  tgtCorpus.close();
 }
 
 // zero all parameters
 void IbmModel1::ClearParams() {
-  for (Model1Param::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-    for (map<int, float>::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+  for (map<int, MultinomialParams::MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for (MultinomialParams::MultinomialParam::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
       tgtIter->second = FstUtils::LOG_ZERO;
     }
   }
@@ -399,27 +338,96 @@ void IbmModel1::Align() {
 
 void IbmModel1::Align(const string &alignmentsFilename) {
   ofstream outputAlignments;
-  if(learningInfo.mpiWorld->rank() == 0) {
-    outputAlignments.open(alignmentsFilename.c_str(), ios::out);
-  }
+  outputAlignments.open(alignmentsFilename.c_str(), ios::out);
+
+  vector< VectorFst< LogArc > > perSentGrammarFsts;
+  CreatePerSentGrammarFsts(perSentGrammarFsts);
+  vector< VectorFst <LogArc> > tgtFsts;
+  CreateTgtFsts(tgtFsts);
+
+  assert(tgtFsts.size() == srcSents.size());
+  assert(perSentGrammarFsts.size() == srcSents.size());
+  assert(tgtSents.size() == srcSents.size());
+
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
-    string alignmentsLine;
-    if(sentId % learningInfo.mpiWorld->size() == learningInfo.mpiWorld->rank()) {
-      vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
-      alignmentsLine = AlignSent(srcSent, tgtSent);
-    } 
-    boost::mpi::broadcast<string>(*learningInfo.mpiWorld, alignmentsLine, sentId % learningInfo.mpiWorld->size());
-    if(learningInfo.mpiWorld->rank() == 0) {
-      outputAlignments << alignmentsLine;
+    vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+    VectorFst< LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
+    
+    // given a src token id, what are the possible src position (in this sentence)
+    map<int, set<int> > srcTokenToSrcPos;
+    for(unsigned srcPos = 0; srcPos < srcSent.size(); srcPos++) {
+      srcTokenToSrcPos[ srcSent[srcPos] ].insert(srcPos);
     }
+    
+    // build alignment fst and compute potentials
+    Compose(tgtFst, perSentGrammarFst, &alignmentFst);
+    vector<LogWeight> alphas, betas;
+    ShortestDistance(alignmentFst, &alphas, false);
+    ShortestDistance(alignmentFst, &betas, true);
+    double fSentLogLikelihood = betas[alignmentFst.Start()].Value();
+    
+    // tropical has the path property. we need this property to compute the shortest path
+    VectorFst< StdArc > alignmentFstProbsWithPathProperty, bestAlignment, corrected;
+    ArcMap(alignmentFst, &alignmentFstProbsWithPathProperty, LogToTropicalMapper());
+    ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
+   
+    // fix labels
+    // - the input labels are tgt positions
+    // - the output labels are the corresponding src positions according to the alignment
+    // traverse the transducer beginning with the start state
+    stringstream alignmentsLine;
+    int startState = bestAlignment.Start();
+    int currentState = startState;
+    int tgtPos = 0;
+    while(bestAlignment.Final(currentState) == LogWeight::Zero()) {
+      // get hold of the arc
+      ArcIterator< VectorFst< StdArc > > aiter(bestAlignment, currentState);
+      // identify the next state
+      int nextState = aiter.Value().nextstate;
+      // skip epsilon arcs
+      if(aiter.Value().ilabel == FstUtils::EPSILON && aiter.Value().olabel == FstUtils::EPSILON) {
+	currentState = nextState;
+	continue;
+      }
+      // update tgt pos
+      tgtPos++;
+      // find src pos
+      int srcPos = 0;
+      assert(srcTokenToSrcPos[aiter.Value().olabel].size() > 0);
+      if(srcTokenToSrcPos[aiter.Value().olabel].size() == 1) {
+	srcPos = *(srcTokenToSrcPos[aiter.Value().olabel].begin());
+      } else {
+	float distortion = 100;
+	for(set<int>::iterator srcPosIter = srcTokenToSrcPos[aiter.Value().olabel].begin(); srcPosIter != srcTokenToSrcPos[aiter.Value().olabel].end(); srcPosIter++) {
+	  if(*srcPosIter - tgtPos < distortion) {
+	    srcPos = *srcPosIter;
+	    distortion = abs(*srcPosIter - tgtPos);
+	  }
+	}
+      }
+      // print the alignment giza-style
+      // giza++ does not write null alignments
+      if(srcPos != 0) {
+	// giza++ uses zero-based src and tgt positions, and writes the src position first
+	alignmentsLine << (srcPos - 1) << "-" << (tgtPos - 1) << " ";
+      }
+      // this state shouldn't have other arcs!
+      aiter.Next();
+      assert(aiter.Done());
+      // move forward to the next state
+      currentState = nextState;
+    }
+    alignmentsLine << endl;
+
+    // write the best alignment to file
+    outputAlignments << alignmentsLine.str();
   }
-  if(learningInfo.mpiWorld->rank() == 0) {
-    outputAlignments.close();
-  }
+  outputAlignments.close();
 }
+
 
 // TODO: not implemented 
 // given the current model, align a test set
-void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
+void IbmModel1::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
   assert(false);
 }

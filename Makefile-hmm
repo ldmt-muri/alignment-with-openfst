@@ -1,5 +1,5 @@
 all:
 
 #	echo #compile the hmm model
-	mpiCC -x c++ IAlignmentModel.h Samplers.h MultinomialParams.h  MultinomialParams.cc LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc HmmModel.h HmmModel.cc train-hmm.cc  -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -o train-hmm
+	mpiCC -x c++ -std=c++11 IAlignmentModel.h Samplers.h MultinomialParams.h LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc HmmModel.h HmmModel.cc train-hmm.cc  -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -o train-hmm
 

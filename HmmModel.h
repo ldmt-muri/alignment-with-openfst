@@ -50,9 +50,10 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
   // creates an fst for each src sentence, which remembers the last visited src token
   void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
 
-  void CreateGrammarFst();
-
-  void CreatePerSentGrammarFsts(vector< VectorFst< LogQuadArc > >& perSentGrammarFsts);
+  // create a grammar
+  void CreateGrammarFst(); // deprecated
+  void CreatePerSentGrammarFsts();
+  void CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokens, VectorFst< LogQuadArc >& perSentGrammarFst);
   
   // zero all parameters
   void ClearFractionalCounts();
@@ -60,6 +61,7 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
   void LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts);
   
   void BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst, 
+			 const VectorFst< LogQuadArc > &perSentGrammarFst,
 			 const VectorFst< LogQuadArc > &srcFst, 
 			 VectorFst< LogQuadArc > &alignmentFst);
 
@@ -86,8 +88,8 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
   
   virtual void Align();
 
-  void DeepCopy(const ConditionalMultinomialParam& original, 
-		ConditionalMultinomialParam& duplicate);
+  void DeepCopy(const ConditionalMultinomialParam<int>& original, 
+		ConditionalMultinomialParam<int>& duplicate);
 
   virtual void SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
 
@@ -99,13 +101,14 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
   string outputPrefix;
 
   // tFractionalCounts are used (when normalized) to describe p(tgt_word|src_word). first key is the context (i.e. src_word) and nested key is the tgt_word.
-  ConditionalMultinomialParam tFractionalCounts;
+  ConditionalMultinomialParam<int> tFractionalCounts;
   // aParams are used to describe p(a_i|a_{i-1}). first key is the context (i.e. previous alignment a_{i-1}) and nested key is the current alignment a_i.
-  ConditionalMultinomialParam aFractionalCounts, aParams;
+  ConditionalMultinomialParam<int> aFractionalCounts, aParams;
 
   // Compose(perSentTgtFst * grammarFst * perSentSrcFst) => alignment fst
   // weight = (currentSrcPos, prevSrcPos, arcWeight)
-  VectorFst<LogQuadArc> grammarFst;
+  //  VectorFst<LogQuadArc> grammarFst;
+  vector<VectorFst<LogQuadArc> > perSentGrammarFsts;
 
   // configurations
   LearningInfo learningInfo;

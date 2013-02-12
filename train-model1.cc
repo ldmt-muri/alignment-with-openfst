@@ -96,8 +96,8 @@ int main(int argc, char **argv) {
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  //    learningInfo.maxIterationsCount = 1;
-  //    learningInfo.useMaxIterationsCount = true;
+  learningInfo.maxIterationsCount = 10;
+  learningInfo.useMaxIterationsCount = true;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.minLikelihoodDiff = 100.0;
   learningInfo.useMinLikelihoodDiff = true;
@@ -107,5 +107,6 @@ int main(int argc, char **argv) {
 
   // train model parameters
   model.Train();
+  model.Align();
 
 }

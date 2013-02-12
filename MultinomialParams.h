@@ -14,6 +14,7 @@
 
 #include "Samplers.h"
 #include "VocabEncoder.h"
+#include "FstUtils.h"
 
 namespace MultinomialParams {
 
@@ -39,6 +40,7 @@ namespace MultinomialParams {
     std::map<ContextType, MultinomialParam> params;
   };
 
+  static const int NLOG_SMOOTHING_CONSTANT = 1;
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
 
@@ -57,9 +59,24 @@ namespace MultinomialParams {
 										    const std::map<ContextType, MultinomialParam>& p2) {
     std::map<ContextType, MultinomialParam> pTotal(p1);
     for(typename std::map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
-      MultinomialParam &subPTotal = pTotal[p2Iter->first];
+      //MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
-	subPTotal[subP2Iter->first] += subP2Iter->second;
+	pTotal[p2Iter->first][subP2Iter->first] += subP2Iter->second;
+      }
+    }
+    return pTotal;
+  }
+
+  template <typename ContextType>
+  static std::map<ContextType, MultinomialParam> AccumulateConditionalMultinomialsLogSpace(const std::map<ContextType, MultinomialParam>& p1,
+											   const std::map<ContextType, MultinomialParam>& p2) {
+    std::map<ContextType, MultinomialParam> pTotal(p1);
+    for(typename std::map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+      //MultinomialParam &subPTotal = pTotal[p2Iter->first];
+      for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
+	pTotal[p2Iter->first][subP2Iter->first] = 
+	  fst::Plus(fst::LogWeight( pTotal[p2Iter->first][subP2Iter->first] ),
+		    fst::LogWeight(subP2Iter->second)).Value();
       }
     }
     return pTotal;
@@ -116,10 +133,14 @@ namespace MultinomialParams {
   
   // zero all parameters
   template <typename ContextType>
-  void ClearParams(ConditionalMultinomialParam<ContextType>& params) {
-    for (typename map<ContextType, MultinomialParam>::iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    void ClearParams(ConditionalMultinomialParam<ContextType>& params, bool smooth=false) {
+    for (typename map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       for (MultinomialParam::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	tgtIter->second = NLOG_ZERO;
+	if(smooth) {
+	  tgtIter->second = NLOG_SMOOTHING_CONSTANT;
+	} else {
+	  tgtIter->second = NLOG_ZERO;
+	}
       }
     }
   }
@@ -129,7 +150,7 @@ namespace MultinomialParams {
   void PrintParams(const ConditionalMultinomialParam<ContextType>& params) {
     // iterate over src tokens in the model
     int counter = 0;
-    for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       const MultinomialParam &translations = (*srcIter).second;
       // iterate over tgt tokens 
       for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
@@ -143,7 +164,7 @@ namespace MultinomialParams {
   void PrintParams(const ConditionalMultinomialParam<ContextType>& params, const VocabEncoder &encoder) {
     // iterate over src tokens in the model
     int counter = 0;
-    for(typename ConditionalMultinomialParam<ContextType>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+    for(typename ConditionalMultinomialParam<ContextType>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       const MultinomialParam &translations = (*srcIter).second;
       // iterate over tgt tokens 
       for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {

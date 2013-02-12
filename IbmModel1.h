@@ -9,13 +9,12 @@
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "IAlignmentModel.h"
+#include "MultinomialParams.h"
 
 using namespace fst;
 using namespace std;
 
 #define NULL_SRC_TOKEN_ID 1
-
-typedef map<int, map< int, float > >  Model1Param;
 
 class IbmModel1 : public IAlignmentModel {
 
@@ -51,6 +50,7 @@ class IbmModel1 : public IAlignmentModel {
   virtual void Train();
 
   virtual void Align();
+  void Align(const string &alignmentsFilename);
 
   virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
@@ -58,9 +58,11 @@ class IbmModel1 : public IAlignmentModel {
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
   VectorFst<LogArc> grammarFst;
   LearningInfo learningInfo;
+  vector< vector<int> > srcSents, tgtSents;
+  VocabEncoder vocabEncoder;
 
  public:  
-  Model1Param params;
+  MultinomialParams::ConditionalMultinomialParam<int> params;
 
 };
 

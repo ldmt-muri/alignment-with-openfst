@@ -1,4 +1,4 @@
 all:
 
 	#echo # compile ibm model 1
-	mpiCC -x c++ Samplers.h StringUtils.h VocabEncoder.h MultinomialParams.h MultinomialParams.cc LearningInfo.h FstUtils.h FstUtils.cc IbmModel1.h IbmModel1.cc train-model1.cc -lfst -lboost_mpi -lboost_serialization -lboost_thread -lboost_system  -ldl -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -g -ggdb -o train-model1
+	mpiCC -x c++ -std=c++11 Samplers.h StringUtils.h VocabEncoder.h MultinomialParams.h LearningInfo.h FstUtils.h FstUtils.cc IbmModel1.h IbmModel1.cc train-model1.cc -lfst -lboost_mpi -lboost_serialization -lboost_thread -lboost_system  -ldl -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -o train-model1

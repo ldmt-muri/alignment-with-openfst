@@ -203,8 +203,10 @@ class LearningInfo {
     debugLevel = 1;
     useSparseVectors = true;
     persistParamsAfterEachIteration = false;
+    persistFinalParams = true;
     retryLbfgsOnRoundingErrors = true;
     zIDependsOnYIM1 = false;
+    smoothMultinomialParams = false;
   }
 
   bool IsModelConverged() {
@@ -333,6 +335,9 @@ class LearningInfo {
   // frequency of persisting the params
   bool persistParamsAfterEachIteration;
 
+  // persist the parameters after training?
+  bool persistFinalParams;
+
   // boost mpi communicator
   boost::mpi::communicator *mpiWorld;
 
@@ -341,6 +346,8 @@ class LearningInfo {
 
   // in the latent crf model, does the output observations z_i depend on y_{i-1}, or only y_i?
   bool zIDependsOnYIM1;
+
+  bool smoothMultinomialParams;
 };
 
 

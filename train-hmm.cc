@@ -34,14 +34,18 @@ int main(int argc, char **argv) {
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 5;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.minLikelihoodDiff = 10.0;
+  learningInfo.minLikelihoodDiff = 100.0;
   learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
+  learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterEachIteration = true;
+  learningInfo.persistParamsAfterEachIteration = false;
+  learningInfo.persistFinalParams = false;
+  learningInfo.smoothMultinomialParams = true;
 
   // initialize the model
   HmmModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
