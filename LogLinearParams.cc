@@ -164,7 +164,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 
   // F57: yI-i pair
   if(enabledFeatureTypes.size() > 57 && enabledFeatureTypes[57]) {
-    if(i < 1) {
+    if(i < 2) {
       temp.str("");
       temp << "F57:" << yI << ":" << i;
       AddParam(temp.str());

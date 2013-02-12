@@ -87,13 +87,13 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
     enabledFeatureTypes.push_back(false);
   }
   // only enable hmm-like features -- for better comparison with HMM
-  enabledFeatureTypes[51] = true;
+  enabledFeatureTypes[51] = true; // y_i:y_{i-1}
   //  enabledFeatureTypes[52] = true;
-  //enabledFeatureTypes[53] = true;
-  enabledFeatureTypes[54] = true;
-  //enabledFeatureTypes[55] = true;
+  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
+  enabledFeatureTypes[54] = true; // y_i:x_i
+  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
   //enabledFeatureTypes[56] = true;
-  //  enabledFeatureTypes[57] = true;
+  enabledFeatureTypes[57] = true; // y_i:i
   //  enabledFeatureTypes[58] = true;
   //  enabledFeatureTypes[59] = true;
   //  enabledFeatureTypes[60] = true;
@@ -102,16 +102,16 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   //  enabledFeatureTypes[63] = true;
   //  enabledFeatureTypes[64] = true;
   //  enabledFeatureTypes[65] = true;
-  //enabledFeatureTypes[66] = true;
-  //enabledFeatureTypes[67] = true;
+  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
+  enabledFeatureTypes[67] = true; // capital and i != 0
   //enabledFeatureTypes[68] = true;
-  //enabledFeatureTypes[69] = true;
+  enabledFeatureTypes[69] = true; // coarse hash functions
   //enabledFeatureTypes[70] = true;
-  enabledFeatureTypes[71] = true;
+  //enabledFeatureTypes[71] = true; // y_i:x_{i-1} where x_{i-1} is closed vocab
   //enabledFeatureTypes[72] = true;
-  enabledFeatureTypes[73] = true;
+  //enabledFeatureTypes[73] = true; // y_i:x_{i+1} where x_{i+1} is closed vocab
   //enabledFeatureTypes[74] = true;
-  //enabledFeatureTypes[75] = true;
+  //enabledFeatureTypes[75] = true; // y_i
 
   // initialize the log theta params to unnormalized gaussians
   InitTheta();

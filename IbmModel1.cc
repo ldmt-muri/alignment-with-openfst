@@ -392,10 +392,30 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
   cerr << endl;
 }
 
-// TODO: not implemented
 // given the current model, align the corpus
 void IbmModel1::Align() {
-  
+  Align(outputPrefix + ".train.align");
+}
+
+void IbmModel1::Align(const string &alignmentsFilename) {
+  ofstream outputAlignments;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    outputAlignments.open(alignmentsFilename.c_str(), ios::out);
+  }
+  for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    string alignmentsLine;
+    if(sentId % learningInfo.mpiWorld->size() == learningInfo.mpiWorld->rank()) {
+      vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+      alignmentsLine = AlignSent(srcSent, tgtSent);
+    } 
+    boost::mpi::broadcast<string>(*learningInfo.mpiWorld, alignmentsLine, sentId % learningInfo.mpiWorld->size());
+    if(learningInfo.mpiWorld->rank() == 0) {
+      outputAlignments << alignmentsLine;
+    }
+  }
+  if(learningInfo.mpiWorld->rank() == 0) {
+    outputAlignments.close();
+  }
 }
 
 // TODO: not implemented 
