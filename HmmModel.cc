@@ -540,8 +540,9 @@ string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   // insert the null token
   assert(srcTokens.size() > 0);
-  assert(srcTokens[0] != NULL_SRC_TOKEN_ID);
-  srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
+  if(srcTokens[0] != NULL_SRC_TOKEN_ID){
+    srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
+  }
   
   // build aGivenTS
   VectorFst<LogQuadArc> tgtFst, srcFst, alignmentFst;

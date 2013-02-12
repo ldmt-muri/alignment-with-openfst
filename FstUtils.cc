@@ -325,8 +325,8 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
 string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
   stringstream output;
   
-  cerr << "best alignment FST summary: " << endl;
-  cerr << PrintFstSummary<StdArc>(bestAlignment) << endl;
+  //  cerr << "best alignment FST summary: " << endl;
+  //  cerr << PrintFstSummary<StdArc>(bestAlignment) << endl;
 
   // traverse the transducer beginning with the start state
   int startState = bestAlignment.Start();
@@ -372,6 +372,7 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
     currentState = nextState;
   }
 
+  output << endl;
   return output.str();
 }
 

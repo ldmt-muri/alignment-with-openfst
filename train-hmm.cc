@@ -34,8 +34,8 @@ int main(int argc, char **argv) {
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 1;
-  learningInfo.useMaxIterationsCount = false;
+  learningInfo.maxIterationsCount = 5;
+  learningInfo.useMaxIterationsCount = true;
   learningInfo.minLikelihoodDiff = 10.0;
   learningInfo.useMinLikelihoodDiff = true;
   learningInfo.debugLevel = DebugLevel::CORPUS;
