@@ -118,6 +118,10 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
 
   // training data (src, tgt)
   vector< vector<int> > srcSents, tgtSents;
+
+  // gaussian sampler
+  GaussianSampler gaussianSampler;
+  
 };
 
 #endif

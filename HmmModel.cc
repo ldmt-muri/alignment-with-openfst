@@ -198,6 +198,7 @@ void HmmModel::InitParams() {
 	  // this srcToken-tgtToken pair appears in the corpus
 	  tParamsGivenS_i[tgtToken] = Plus( LogWeight(tParamsGivenS_i[tgtToken]), LogWeight(FstUtils::nLog(1/3.0)) ).Value();
 	}
+	tParamsGivenS_i[tgtToken] = fabs(gaussianSampler.Draw());
       }
 
       // INITIALIZE ALIGNMENT PARAMETERS
@@ -206,10 +207,11 @@ void HmmModel::InitParams() {
       for(int k=-1; k<srcTokens.size(); k++) {
       // assume that previous alignment = k, initialize p(i|k)
 	aFractionalCounts[k][i] = FstUtils::nLog(1/3.0);
+	aFractionalCounts[k][i] = gaussianSampler.Draw();
       }
       // also initialize aFractionalCounts[-1][i]
       aFractionalCounts[INITIAL_SRC_POS][i] = FstUtils::nLog(1/3.0);
-
+      aFractionalCounts[INITIAL_SRC_POS][i] = gaussianSampler.Draw();
     }
   }
     

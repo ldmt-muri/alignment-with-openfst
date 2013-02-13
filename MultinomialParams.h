@@ -184,7 +184,7 @@ namespace MultinomialParams {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
 	// line format: 
 	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << srcIter->first << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
+	paramsFile << vocabEncoder.Decode(tgtIter->first) << " " << vocabEncoder.Decode(srcIter->first) << " " << nExp(tgtIter->second) << std::endl;
       }
     }
 

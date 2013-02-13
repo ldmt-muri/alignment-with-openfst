@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 3;
   learningInfo.useMaxIterationsCount = true;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.minLikelihoodDiff = 100.0;

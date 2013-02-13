@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterEachIteration = false;
   learningInfo.persistFinalParams = false;
-  learningInfo.smoothMultinomialParams = true;
+  learningInfo.smoothMultinomialParams = false;
 
   // initialize the model
   HmmModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
