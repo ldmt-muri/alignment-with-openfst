@@ -365,34 +365,11 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": cleared fractional counts vector" << endl;
     }
     
-    // write alignments of the first 300 sentence pairs in each iteration
-    ofstream alignmentsFile;
-    stringstream alignmentsFilename;
-    if(learningInfo.mpiWorld->rank() == 0) {
-      alignmentsFilename << outputPrefix;
-      alignmentsFilename << ".align300." << learningInfo.iterationsCount;
-      alignmentsFile.open(alignmentsFilename.str());
-    }
-
     // iterate over sentences
     int sentsCounter = 0;
     for( vector< VectorFst< LogQuadArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(), perSentGrammarIter = perSentGrammarFsts.begin(); 
 	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end() && perSentGrammarIter != perSentGrammarFsts.end(); 
 	 tgtIter++, srcIter++, perSentGrammarIter++, sentsCounter++) {
-
-      // every core works on its sentences
-      string alignmentsLine;
-      if(sentsCounter % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-	// but everyone has to listen to the alignments of the first 300 sents
-	if(sentsCounter < 300) {
-	  boost::mpi::broadcast<string>(*learningInfo.mpiWorld, alignmentsLine, sentsCounter % learningInfo.mpiWorld->size());
-	  // and the master is responsible for writing it to a file
-	  if(learningInfo.mpiWorld->rank() == 0) {
-	    alignmentsFile << alignmentsLine;
-	  }
-	}
-	continue;
-      }
 
       // build the alignment fst
       clock_t t20 = clock();
@@ -429,22 +406,6 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 	cerr << "fSentLogLikelihood = " << fSentLogLikelihood << endl;
       }
       
-      // broadcast alignments
-      if(sentsCounter < 300) {
-	VectorFst< LogArc > alignmentFstProbs;
-	ArcMap(alignmentFst, &alignmentFstProbs, LogQuadToLogPositionMapper());
-	// tropical has the path property
-	VectorFst< StdArc > alignmentFstProbsWithPathProperty, bestAlignment;
-	ArcMap(alignmentFstProbs, &alignmentFstProbsWithPathProperty, LogToTropicalMapper());
-	ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
-	alignmentsLine = FstUtils::PrintAlignment(bestAlignment);
-	boost::mpi::broadcast<string>(*learningInfo.mpiWorld, alignmentsLine, sentsCounter % learningInfo.mpiWorld->size());
-	// master can't depend on another core to write to file
-	if(learningInfo.mpiWorld->rank() == 0) {
-	  alignmentsFile << alignmentsLine;
-	}
-      }
-
       // compute and accumulate fractional counts for model parameters
       clock_t t40 = clock();
       if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
@@ -501,12 +462,6 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
       if (sentsCounter > 0 && sentsCounter % 1000 == 0 && learningInfo.debugLevel == DebugLevel::CORPUS) {
 	cerr << ".";
       }
-    }
-
-    // close alignments file 300
-    if(learningInfo.mpiWorld->rank() == 0) {
-      alignmentsFile.close();
-      cerr << "best alignments of the first 300 sents, as of iteration #" << learningInfo.iterationsCount << " has been written to " << alignmentsFilename.str() << endl; 
     }
 
     if(learningInfo.debugLevel == DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
