@@ -28,11 +28,14 @@ class LogLinearParams {
   LogLinearParams(const VocabDecoder &srcTypes, 
 		  const VocabDecoder &tgtTypes, 
 		  const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
-		  const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs);
+		  const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
+		  double gaussianStdDev = 1);
 
   // for the latent CRF model
-  LogLinearParams(const VocabDecoder &types);
+  LogLinearParams(const VocabDecoder &types, double gaussianStdDev = 1);
   
+  double Hash();
+
   // set learning info
   void SetLearningInfo(const LearningInfo &learningInfo);
 
@@ -68,6 +71,18 @@ class LogLinearParams {
       dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
     }
     return dotProduct;
+  }
+
+  inline double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights) {
+    double dotProduct = 0;
+    for(FastSparseVector<double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); ++valuesIter) {
+      dotProduct += valuesIter->second * weights[valuesIter->first];
+    }
+    return dotProduct;
+  }
+
+  inline double DotProduct(const FastSparseVector<double> &values) {
+    return DotProduct(values, paramWeights);
   }
 
   // compute dot product of two vectors
@@ -176,103 +191,103 @@ class LogLinearParams {
   }
 
   // returns a pointer to the array of parameter weights
-  inline double* GetParamWeightsArray() {
-    return paramWeights.data();
-  }
+   inline double* GetParamWeightsArray() { 
+     return paramWeights.data(); 
+   } 
 
-  // returns a pointer to the array of old parameter weights
-  inline double* GetOldParamWeightsArray() {
-    return oldParamWeights.data();
-  }
+   // returns a pointer to the array of old parameter weights 
+   inline double* GetOldParamWeightsArray() { 
+     return oldParamWeights.data(); 
+   } 
 
-  // converts a map into an array.
-  // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount,
-  // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount 
-  void ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0) {
-    // init to 0
-    for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) {
-      valuesArray[i-constrainedFeaturesCount] = 0;
-    }
-    // set the active features
-    for(map<string, double>::const_iterator valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) {
-      // skip constrained features
-      if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) {
-	continue;
-      }
-      // set the modified index in valuesArray
-      valuesArray[ paramIndexes[valuesMapIter->first]-constrainedFeaturesCount ] = valuesMapIter->second;
-    }
-  }
+   // converts a map into an array. 
+   // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
+   // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
+   void ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0) { 
+     // init to 0 
+     for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
+       valuesArray[i-constrainedFeaturesCount] = 0; 
+     } 
+     // set the active features 
+     for(map<string, double>::const_iterator valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) { 
+       // skip constrained features 
+       if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) { 
+   	continue; 
+       } 
+       // set the modified index in valuesArray 
+       valuesArray[ paramIndexes[valuesMapIter->first]-constrainedFeaturesCount ] = valuesMapIter->second; 
+     } 
+   } 
 
-  // 1/2 * sum of the squares
-  double ComputeL2Norm() {
-    double l2 = 0;
-    for(int i = 0; i < paramWeights.size(); i++) {
-      l2 += paramWeights[i] * paramWeights[i];
-    }
-    return l2/2;
-  }
+   // 1/2 * sum of the squares 
+   double ComputeL2Norm() { 
+     double l2 = 0; 
+     for(int i = 0; i < paramWeights.size(); i++) { 
+       l2 += paramWeights[i] * paramWeights[i]; 
+     } 
+     return l2/2; 
+   } 
   
-  // applies the cumulative l1 penalty on feature weights, also updates the appliedL1Penalty values
-  void ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
-				LogLinearParams& appliedL1Penalty,
-				const double correctL1Penalty);
+   // applies the cumulative l1 penalty on feature weights, also updates the appliedL1Penalty values 
+   void ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere, 
+   				LogLinearParams& appliedL1Penalty, 
+   				const double correctL1Penalty); 
 
-  // clear model parameters
-  inline void Clear() {
-    paramIndexes.clear();
-    paramWeights.clear();
-  }
+   // clear model parameters 
+   inline void Clear() { 
+     paramIndexes.clear(); 
+     paramWeights.clear(); 
+   } 
 
-  void PrintFirstNParams(unsigned n);
+   void PrintFirstNParams(unsigned n); 
 
-  void PrintParams();
+   void PrintParams(); 
   
-  static void PrintParams(std::map<std::string, double> tempParams);
+   static void PrintParams(std::map<std::string, double> tempParams); 
 
-  // writes the features to a text file formatted one feature per line. 
-  void PersistParams(const std::string& outputFilename);
+   // writes the features to a text file formatted one feature per line.  
+   void PersistParams(const std::string& outputFilename); 
 
-  // call boost::mpi::broadcast for the essential member variables of this object
-  void Broadcast(boost::mpi::communicator &world, unsigned root) {
-    boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root);
-    boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root);
-    boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root);
-    boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root);
-  }  
+   // call boost::mpi::broadcast for the essential member variables of this object 
+   void Broadcast(boost::mpi::communicator &world, unsigned root) { 
+     boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root); 
+     boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
+     boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
+     boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root); 
+   }   
 
-  // checks whether the "otherParams" have the same parameters and values as this object
-  // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors
-  bool IsIdentical(const LogLinearParams &otherParams) {
-    if(paramIndexes.size() != otherParams.paramIndexes.size())
-      return false;
-    if(paramWeights.size() != otherParams.paramWeights.size())
-      return false;
-    if(paramIds.size() != otherParams.paramIds.size()) 
-      return false;
-    for(std::map<std::string, int>::const_iterator paramIndexesIter = paramIndexes.begin(); 
-	paramIndexesIter != paramIndexes.end();
-	++paramIndexesIter) {
-      std::map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first);
-      if(paramIndexesIter->second != otherIter->second) 
-	return false;
-    }
-    for(unsigned i = 0; i < paramWeights.size(); i++){
-      if(paramWeights[i] != otherParams.paramWeights[i])
-	return false;
-    }
-    for(unsigned i = 0; i < paramIds.size(); i++) {
-      if(paramIds[i] != otherParams.paramIds[i]) 
-	return false;
-    }
-    return true;
-  }
+   // checks whether the "otherParams" have the same parameters and values as this object 
+   // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors 
+   bool IsIdentical(const LogLinearParams &otherParams) { 
+     if(paramIndexes.size() != otherParams.paramIndexes.size()) 
+       return false; 
+     if(paramWeights.size() != otherParams.paramWeights.size()) 
+       return false; 
+     if(paramIds.size() != otherParams.paramIds.size())  
+       return false; 
+     for(std::map<std::string, int>::const_iterator paramIndexesIter = paramIndexes.begin();  
+   	paramIndexesIter != paramIndexes.end(); 
+   	++paramIndexesIter) { 
+       std::map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+       if(paramIndexesIter->second != otherIter->second)  
+   	return false; 
+     } 
+     for(unsigned i = 0; i < paramWeights.size(); i++){ 
+       if(paramWeights[i] != otherParams.paramWeights[i]) 
+   	return false; 
+     } 
+     for(unsigned i = 0; i < paramIds.size(); i++) { 
+       if(paramIds[i] != otherParams.paramIds[i])  
+   	return false; 
+     } 
+     return true; 
+   } 
 
-  // the actual parameters
-  std::map< std::string, int > paramIndexes;
-  std::vector< double > paramWeights;
-  std::vector< double > oldParamWeights;
-  std::vector< std::string > paramIds;
+   // the actual parameters 
+   std::map< std::string, int > paramIndexes; 
+   std::vector< double > paramWeights; 
+   std::vector< double > oldParamWeights; 
+   std::vector< std::string > paramIds; 
 
   // maps a word id into a string
   const VocabDecoder &srcTypes, &tgtTypes;

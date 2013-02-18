@@ -15,7 +15,7 @@ using namespace std;
 
 class VocabEncoder {
  public:
-  int nextId;
+  int firstId, nextId;
   map<string, int> tokenToInt;
   map<int, string> intToToken;
   std::string UNK;
@@ -24,7 +24,8 @@ class VocabEncoder {
   
  public:
   VocabEncoder() {
-    nextId = 2;
+    firstId = 2;
+    nextId = firstId;
     UNK = "_unk_";
 
     // encode unk
@@ -32,9 +33,10 @@ class VocabEncoder {
     intToToken[nextId++] = UNK;
   }
 
-  VocabEncoder(const std::string& textFilename) {
+  VocabEncoder(const std::string& textFilename, unsigned firstId = 2) {
     useUnk = true;
-    nextId = 2;
+    this->firstId = firstId;
+    nextId = firstId;
     UNK = "_unk_";
 
     // encode unk

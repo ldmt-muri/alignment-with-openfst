@@ -19,11 +19,11 @@ class LbfgsUtils {
     case LBFGS_SUCCESS:
       return "LBFGS_SUCCESS";
       break;
-    case LBFGS_ALREADY_MINIMIZED:
-      return "LBFGS_ALREADY_MINIMIZED";
-      break;
     case LBFGSERR_UNKNOWNERROR:
       return "LBFGSERR_UNKNOWNERROR";
+      break;
+    case LBFGS_ALREADY_MINIMIZED:
+      return "LBFGS_ALREADY_MINIMIZED";
       break;
     case LBFGSERR_LOGICERROR:
       return "LBFGSERR_LOGICERROR";

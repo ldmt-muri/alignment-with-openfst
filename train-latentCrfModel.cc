@@ -27,7 +27,19 @@ int main(int argc, char **argv) {
   // boost mpi initialization
   mpi::environment env(argc, argv);
   mpi::communicator world;
-  
+
+  /*// wait for gdb to attach
+  if(world.rank() == 0) {
+    int i = 0;
+    char hostname[256];
+    gethostname(hostname, sizeof(hostname));
+    printf("PID %d on %s ready for attach\n", getpid(), hostname);
+    fflush(stdout);
+    while (0 == i)
+      ;
+  }
+  */
+
   // parse arguments
   if(world.rank() == 0) {
     cerr << "parsing arguments...";
@@ -87,9 +99,18 @@ int main(int argc, char **argv) {
   // initialize the model
   LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
 
-  // train the model
+  // use gold labels to do supervised training
+  if(learningInfo.supervisedTraining) {
+    model.SupervisedTrain(goldLabelsFilename);
+    if(learningInfo.mpiWorld->rank() == 0) {
+      model.PersistTheta(outputFilenamePrefix + ".supervised.theta");
+      model.lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
+    }
+  }
+
+  // unsupervised training of the model
   if(world.rank() == 0) {
-    cerr << "train the model..." << endl;
+    cerr << "master: train the model..." << endl;
   }
   model.Train();
   if(world.rank() == 0) {

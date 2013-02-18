@@ -23,12 +23,10 @@ make
 #./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out
 #./train-latentCrfModel example/tb3-pos-wsj.eng example/tb3-pos-wsj.latentCrf.out example/tb3-pos-wsj.pos
 #valgrind mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out
-#time mpirun -np 12 ./train-latentCrfModel example/tb3-pos-wsj-100.eng example/tb3-pos-wsj-100.latentCrf.out example/tb3-pos-wsj-100.pos &> example/tb3-pos-wsj-100.latentCrf.out.log &
 echo "////////////////////////////before:\\\\\\\\\\\\\\\\\\\\\\\\"
 date &> example/run$1.log
 
 rm example/run$1.vocab
-time mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-1000.eng example/run$1 example/tb3-pos-wsj-1000.pos &>> example/run$1.log &
+#valgrind --tool=memcheck --leak-check=yes mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out example/tb3-pos-wsj-10.pos
+mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/run$1 example/tb3-pos-wsj-10.pos
 
-echo "\\\\\\\\\\\\\\\\\\\\\\\\\\\\after:///////////////////////"
-date &> example/run$1.log

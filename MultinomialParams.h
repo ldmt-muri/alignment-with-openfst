@@ -35,6 +35,15 @@ namespace MultinomialParams {
     inline MultinomialParam& operator[](ContextType key) {
       return params[key];
     }
+    double Hash() {
+      double hash = 0.0;
+      for(typename std::map<ContextType, MultinomialParam>::const_iterator cIter = params.begin(); cIter != params.end(); cIter++) {
+	for(MultinomialParam::const_iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
+	  hash += mIter->second;
+	}
+      }
+      return hash;
+    }
     
   public:
     std::map<ContextType, MultinomialParam> params;

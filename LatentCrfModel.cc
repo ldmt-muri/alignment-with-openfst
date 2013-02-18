@@ -32,6 +32,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   vocabEncoder(textFilename),
   gaussianSampler(0.0, 10.0) {
 
+  countOfConstrainedLambdaParameters = 0;
+
   AddEnglishClosedVocab();
   
   if(learningInfo.mpiWorld->rank() == 0) {
@@ -49,7 +51,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = 2;
   this->END_OF_SENTENCE_Y_VALUE = 3;
-  
+  this->FIRST_ALLOWED_LABEL_VALUE = 4;
+
   // POS tag yDomain
   unsigned latentClasses = 47;
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
@@ -113,14 +116,18 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   //enabledFeatureTypes[74] = true;
   //enabledFeatureTypes[75] = true; // y_i
 
-  // initialize the log theta params to unnormalized gaussians
+  // initialize (and normalize) the log theta params to gaussians
   InitTheta();
+
+  // make sure all slaves have the same theta values
+  BroadcastTheta();
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after broadcast: thetaSum = " << nLogThetaGivenOneLabel.Hash() << endl;
 
   // persist initial parameters
   if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
     stringstream thetaParamsFilename;
     thetaParamsFilename << outputPrefix << ".initial.theta";
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
     }
     PersistTheta(thetaParamsFilename.str());
@@ -132,10 +139,14 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   // hand-crafted weights for constrained features
   REWARD_FOR_CONSTRAINED_FEATURES = 10.0;
   PENALTY_FOR_CONSTRAINED_FEATURES = -10.0;
+
+  // initialize the lambda parameters
+  // add all features in this data set to lambda.params
+  WarmUp();
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {
-  char* closedVocab[] = {"a", "an", "the", 
+  string closedVocab[] = {"a", "an", "the", 
 			  "some", "one", "many", "few", "much",
 			  "from", "to", "at", "by", "in", "on", "for", "as",
 			  ".", ",", ";", "!", "?",
@@ -146,9 +157,8 @@ void LatentCrfModel::AddEnglishClosedVocab() {
 			  "this", "that", "which",
 			  "and", "or", "but", "not",
 			  "what", "how", "why", "when",
-			  "can", "could", "will", "would", "shall", "should", "must"
-  };
-  vector<string> closedVocabVector (closedVocab, closedVocab + sizeof(closedVocab) / sizeof(closedVocab[0]) );
+			  "can", "could", "will", "would", "shall", "should", "must"};
+  vector<string> closedVocabVector(closedVocab, closedVocab + sizeof(closedVocab) / sizeof(closedVocab[0]) );
   for(unsigned i = 0; i < closedVocabVector.size(); i++) {
     vocabEncoder.AddToClosedVocab(closedVocabVector[i]);
     // add the capital initial version as well
@@ -846,6 +856,62 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
   return result;
 }
 
+void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
+  // encode labels
+  assert(goldLabelsFilename.size() != 0);
+  VocabEncoder labelsEncoder(goldLabelsFilename, FIRST_ALLOWED_LABEL_VALUE);
+  labels.clear();
+  labelsEncoder.Read(goldLabelsFilename, labels);
+  
+  // use lbfgs to fit the lambda CRF parameters
+  double *lambdasArray = lambda->GetParamWeightsArray();
+  unsigned lambdasArrayLength = lambda->GetParamsCount();
+  lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();  
+  lbfgsParams.max_iterations = 10;
+  lbfgsParams.m = 50;
+  lbfgsParams.max_linesearch = 20;
+  lbfgsParams.orthantwise_c = 0;
+  double optimizedNLoglikelihoodYGivenX = 0;
+  int allSents = -1;
+  int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedNLoglikelihoodYGivenX, 
+			  EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda, LbfgsProgressReport, &allSents, &lbfgsParams);
+  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": loglikelihood_{p(y|x)}(\\lambda) = " << -optimizedNLoglikelihoodYGivenX << endl;
+  }
+  
+  // optimize theta (i.e. multinomial) parameters to maximize the likeilhood of the data
+  MultinomialParams::ConditionalMultinomialParam<int> thetaMle;
+  MultinomialParams::MultinomialParam thetaMleMarginals;
+  // for each sentence
+  for(unsigned sentId = 0; sentId < data.size(); sentId++) {
+    // collect number of times each theta parameter has been used
+    vector<int> &z = data[sentId];
+    vector<int> &y = labels[sentId];
+    assert(z.size() == y.size());
+    for(unsigned i = 0; i < z.size(); i++) {
+      thetaMle[y[i]][z[i]] += 1;
+      thetaMleMarginals[y[i]] += 1;
+    }
+  }
+  // normalize thetas
+  NormalizeThetaMle<int>(thetaMle, thetaMleMarginals);
+  nLogThetaGivenOneLabel = thetaMle;
+  // compute likelihood of \theta for z|y
+  double nloglikelihoodZGivenY = 0; 
+  for(unsigned sentId = 0; sentId < data.size(); sentId++) {
+    vector<int> &z = data[sentId];
+    vector<int> &y = labels[sentId];
+    for(unsigned i = 0; i < z.size(); i++){ 
+      nloglikelihoodZGivenY += nLogThetaGivenOneLabel[y[i]][z[i]];
+    }
+  } 
+  if(learningInfo.debugLevel == DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": loglikelihood_{p(z|y)}(\\theta) = " << - nloglikelihoodZGivenY << endl;
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": loglikelihood_{p(z|x)}(\\theta, \\lambda) = " << - optimizedNLoglikelihoodYGivenX - nloglikelihoodZGivenY << endl;
+  }
+}
+
 void LatentCrfModel::Train() {
   switch(learningInfo.optimizationMethod.algorithm) {
   case BLOCK_COORD_DESCENT:
@@ -902,15 +968,161 @@ FastSparseVector<double> LatentCrfModel::AccumulateDerivatives(const FastSparseV
   return vTotal;
 }
 
+double LatentCrfModel::EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *uselessPtr,
+									const double *lambdasArray,
+									double *gradient,
+									const int lambdasCount,
+									const double step) {
+  
+  LatentCrfModel &model = LatentCrfModel::GetInstance();
+  
+  if(model.learningInfo.debugLevel  >= DebugLevel::REDICULOUS){
+    cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": entered EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda" << endl;
+  }
+
+  // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
+
+  double nlogLikelihood = 0;
+  FastSparseVector<double> nDerivative;
+  unsigned from = 0, to = model.data.size();
+  assert(model.data.size() == model.labels.size());
+
+  // for each training example (x, y)
+  for(unsigned sentId = from; sentId < to; sentId++) {
+    if(sentId % model.learningInfo.mpiWorld->size() != model.learningInfo.mpiWorld->rank()) {
+      continue;
+    }
+
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": proessing sentId " << sentId << endl;
+    }
+
+    // Make |y| = |x|
+    assert(model.data[sentId].size() == model.labels[sentId].size());
+    vector<int> &x = model.data[sentId];
+    vector<int> &y = model.labels[sentId];
+
+    // build the FSTs
+    VectorFst<LogArc> lambdaFst;
+    vector<fst::LogWeight> lambdaAlphas, lambdaBetas;
+    model.BuildLambdaFst(x, lambdaFst, lambdaAlphas, lambdaBetas);
+
+    // compute the Z value for this sentence
+    double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+    if(std::isnan(nLogZ) || std::isinf(nLogZ)) {
+      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
+      }
+      assert(false);
+    } 
+    
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": nLogZ = " << nLogZ << endl;
+    }
+
+    // compute the F map fro this sentence
+    FastSparseVector<LogVal<double> > FSparseVector;
+    model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": F.size = " << FSparseVector.size();
+    }
+
+    // compute feature aggregate values on the gold labels of this sentence
+    FastSparseVector<double> goldFeatures;
+    for(unsigned i = 0; i < x.size(); i++) {
+      model.lambda->FireFeatures(y[i], i==0?model.START_OF_SENTENCE_Y_VALUE:y[i-1], x, i, model.enabledFeatureTypes, goldFeatures);
+    }
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": size of gold features = " << goldFeatures.size() << endl; 
+    }
+
+    // update the loglikelihood
+    double dotProduct = model.lambda->DotProduct(goldFeatures);
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": dotProduct of gold features with crf params = " << dotProduct << endl;
+    }
+    if(nLogZ == 0 ||  dotProduct == 0 || nLogZ - dotProduct == 0) {
+      cerr << "something is wrong! tell me more about lambdaFst." << endl << "lambdaFst has " << lambdaFst.NumStates() << "states. " << endl;
+      if(model.learningInfo.mpiWorld->rank() == 0) {
+	cerr << "lambda parameters are: ";
+	model.lambda->PrintParams();
+      }
+    } 
+    nlogLikelihood += - dotProduct - nLogZ;
+    if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": nlogLikelihood = " << nlogLikelihood << endl; 
+    }
+
+    // update the gradient
+    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
+      double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
+      double nFOverZ = - MultinomialParams::nExp(nLogf - nLogZ);
+      if(std::isnan(nFOverZ) || std::isinf(nFOverZ)) {
+	if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+	  cerr << "ERROR: nFOverZ = " << nFOverZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
+	}
+        assert(false);
+      }
+      nDerivative[fIter->first] += - goldFeatures[fIter->first] - nFOverZ;
+    }
+    if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": nDerivative size = " << nDerivative.size() << endl;
+    }
+
+    if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      cerr << ".";
+    }
+  }
+
+  // write the gradient in the array 'gradient' (which is pre-allocated by the lbfgs library)
+  // init gradient to zero
+  for(unsigned gradientIter = 0; gradientIter < model.lambda->GetParamsCount(); gradientIter++) {
+    gradient[gradientIter] = 0;
+  }
+  // for each active feature 
+  for(FastSparseVector<double>::iterator derivativeIter = nDerivative.begin(); 
+      derivativeIter != nDerivative.end(); 
+      ++derivativeIter) {
+    // set active feature's value in the gradient
+    gradient[derivativeIter->first] = derivativeIter->second;
+  }
+
+  // accumulate nloglikelihood from all processes
+  mpi::all_reduce<double>(*model.learningInfo.mpiWorld, nlogLikelihood, nlogLikelihood, std::plus<double>());
+  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS && model.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": nloglikelihood after all_reduce = " << nlogLikelihood << endl;
+  }
+
+  // accumulate the gradient vectors from all processes
+  vector<double> gradientVector(model.lambda->GetParamsCount());
+  for(unsigned gradientIter = 0; gradientIter < model.lambda->GetParamsCount(); gradientIter++) {
+    gradientVector[gradientIter] = gradient[gradientIter];
+  }
+  //  vector<double> gradientVector(gradient, gradient + model.lambda->GetParamsCount());
+  mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector, LatentCrfModel::AggregateVectors);
+  assert(gradientVector.size() == lambdasCount);
+  for(int i = 0; i < gradientVector.size(); i++) {
+    gradient[i] = gradientVector[i];
+  }
+  
+  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": exiting EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda" << endl;
+  }
+
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    cerr << "eval(y|x) = " << nlogLikelihood << endl;
+  }
+  return nlogLikelihood;
+}
+
 // a call back function that computes the gradient and the nloglikelihood function for the lbfgs minimizer
 double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
 								 const double *lambdasArray,
 								 double *gradient,
 								 const int lambdasCount,
 								 const double step) {
-  //  cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda(){" << endl;
   clock_t timestamp = clock();
-
+ 
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
@@ -954,6 +1166,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     vector<fst::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
     model.BuildThetaLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     model.BuildLambdaFst(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
+
     // compute the D map for this sentence
     FastSparseVector<LogVal<double> > DSparseVector;
     model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
@@ -1011,9 +1224,11 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
 	assert(false);
       }
     }
-    if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+    if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
       cerr << ".";
-      cerr << "EvaluateNLogLikelihoodDerivativeWRTLambda() for this sentence took " << (float) (clock() - timestamp2) / CLOCKS_PER_SEC << " sec." << endl;
+    }
+    if(model.learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+      cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": EvaluateNLogLikelihoodDerivativeWRTLambda() for this sentence took " << (float) (clock() - timestamp2) / CLOCKS_PER_SEC << " sec." << endl;
     }
   }
 
@@ -1113,23 +1328,23 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 					int n,
 					int k,
 					int ls) {
+  
   LatentCrfModel &model = LatentCrfModel::GetInstance();
-
   // for debugging only
   /*
-  double *lambdasArray = model.lambda->GetParamWeightsArray() + model.countOfConstrainedLambdaParameters;
-  unsigned lambdasArrayLength = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
-  for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
+    double *lambdasArray = model.lambda->GetParamWeightsArray() + model.countOfConstrainedLambdaParameters;
+    unsigned lambdasArrayLength = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
+    for(int displacedIndex = 0; displacedIndex < lambdasArrayLength; displacedIndex++) {
     if(isnan(lambdasArray[displacedIndex]) || isinf(lambdasArray[displacedIndex])) {
-      if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
-      }
-      //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
-      assert(false);
+    if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+    cerr << "ERROR: lambdasArray[" << displacedIndex << "] = " << lambdasArray[displacedIndex] << ". my mistake (in LatentCrfModel::LbfgsProgressReport). will halt!" << endl;
     }
-  }
+    //      model.lambda->UpdateParam(displacedIndex + model.countOfConstrainedLambdaParameters, 0.0);
+    assert(false);
+    }
+    }
   */
-
+  
   int index = *((int*)ptrFromSentId), from, to;
   if(index == -1) {
     from = 0;
@@ -1265,8 +1480,8 @@ set<string> LatentCrfModel::AggregateSets(const set<string> &v1, const set<strin
 
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::WarmUp() {
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": warming up..." << endl;
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": warming up..." << endl;
   }
 
   // only the master adds constrained features with hand-crafted weights depending on the feature type
@@ -1278,9 +1493,10 @@ void LatentCrfModel::WarmUp() {
 
   // then, each process discovers the features that may show up in their sentences.
   for(int sentId = 0; sentId < data.size(); sentId++) {
+
     // skip sentences not assigned to this process
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-      continue;
+      ;//continue;
     }
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
@@ -1292,34 +1508,49 @@ void LatentCrfModel::WarmUp() {
     // compute the F map from this sentence (implicitly adds the fired features to lambda parameters)
     FastSparseVector<double> activeFeatures;
     FireFeatures(data[sentId], lambdaFst, activeFeatures);
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": extracted " << activeFeatures.size() << " features from sent Id " << sentId << endl;
   }
 
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
-  
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
+  }
+
+  stringstream removemefilename;
+  removemefilename << "khaled." << learningInfo.mpiWorld->rank();
+  lambda->PersistParams(removemefilename.str());
+
   // master collects all feature ids fired on any sentence
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": I've found " << lambda->GetParamsCount() << endl;
   set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
   mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, LatentCrfModel::AggregateSets, 0);
-
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": reduced localParamIds into allParamIds" << endl;
   
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
     for(set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
       lambda->AddParam(*paramIdIter);
     }
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": updated added all features in its local lambda" << endl;
   }
   
   // master broadcasts the full set of features to all slaves
   lambda->Broadcast(*learningInfo.mpiWorld, 0);
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": sent/received the lambda parameters that includes everything" << endl;
+  if(learningInfo.debugLevel == DebugLevel::REDICULOUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": sent/received the lambda parameters that includes everything" << endl;
+  }
+  double lambdaSum = 0;
+  double* lambdaWeights = lambda->GetParamWeightsArray();
+  for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
+    lambdaSum += lambdaWeights[i];
+  }
+  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after the broadcast, lambda paramscount = " << lambda->GetParamsCount() << " and they sum to" << lambdaSum << endl;
 
   // debug info
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
     cerr << "lambdas initialized to: " << endl;
     lambda->PrintParams();
   }
-  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+  cerr << "hash of lambda = " << lambda->Hash() << endl;
+  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      //if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
     cerr << "warmup done. Lambda params count:" << lambda->GetParamsCount() << endl;
   }
 }
@@ -1405,9 +1636,6 @@ void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
 
 void LatentCrfModel::BlockCoordinateDescent() {  
   
-  // add all features in this data set to lambda.params
-  WarmUp();
-
   BroadcastTheta();
   lambda->Broadcast(*learningInfo.mpiWorld, 0);
 
@@ -1497,27 +1725,29 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
       // call the lbfgs minimizer for this mini-batch
       double optimizedMiniBatchNLogLikelihood = 0;
-      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
 	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
-	cerr << "calling lbfgs on sents " << sentId << "-" << to << endl;
+	if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::MINI_BATCH) { 
+	  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": calling lbfgs on sents " << sentId << "-" << to << endl;
+	}
       }
       if(learningInfo.optimizationMethod.subOptMethod->algorithm == LBFGS) {
 
 	int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood, 
 				EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 	// debug
-	if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-	  cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+	if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
 	}
 	if(learningInfo.retryLbfgsOnRoundingErrors && 
 	   (lbfgsStatus == LBFGSERR_ROUNDING_ERROR || lbfgsStatus == LBFGSERR_MAXIMUMLINESEARCH)) {
 	  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-	    cerr << "rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
+	    cerr << "master: rounding error (" << lbfgsStatus << "). my gradient might be buggy." << endl << "retry..." << endl;
 	  }
 	  lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNLogLikelihood,
 			      EvaluateNLogLikelihoodDerivativeWRTLambda, LbfgsProgressReport, &sentId, &lbfgsParams);
 	  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-	    cerr << "lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+	    cerr << "master: lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
 	  }
 	}
       } else if(learningInfo.optimizationMethod.subOptMethod->algorithm == SIMULATED_ANNEALING) {
@@ -1540,8 +1770,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
       // debug info
-      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-	cerr << "optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
+      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+	cerr << "rank #" << learningInfo.mpiWorld->rank() << ": optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
       }
       
       // update iteration's nloglikelihood
@@ -1564,7 +1794,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     stringstream lambdaParamsFilename;
     if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
       lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
-      if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
 	cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
       }
       lambda->PersistParams(lambdaParamsFilename.str());

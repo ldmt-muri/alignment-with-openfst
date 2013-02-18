@@ -5,23 +5,24 @@ using namespace std;
 LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes, 
 				 const VocabDecoder &tgtTypes, 
 				 const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
-				 const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs) :
+				 const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
+				 double gaussianStdDev) :
   srcTypes(srcTypes), 
   tgtTypes(tgtTypes), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
   ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
   COUNT_OF_FEATURE_TYPES(100) {
   learningInfo = 0;
-  gaussianSampler = new GaussianSampler(0.0, 0.01);
+  gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
 
-LogLinearParams::LogLinearParams(const VocabDecoder &types) : 
+LogLinearParams::LogLinearParams(const VocabDecoder &types, double gaussianStdDev) : 
   srcTypes(types), 
   tgtTypes(types),
   ibmModel1ForwardScores(map<int, map<int, double> >()),
   ibmModel1BackwardScores(map<int, map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(100) {
-  gaussianSampler = new GaussianSampler(0.0, 0.01);
+  gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
@@ -151,7 +152,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     temp.str("");
     temp << "F55:" << yI << ":" << xIP1String;
     AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] = 1.0;
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
 
   // F56: yI-xIP2 pair
@@ -483,6 +484,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
 }
+
+double LogLinearParams::Hash() {
+  double hash = 0.0;
+  for(vector<double>::const_iterator paramIter = paramWeights.begin(); paramIter != paramWeights.end(); paramIter++) {
+    hash += *paramIter;
+  }
+  return hash;
+} 
 
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 

@@ -292,8 +292,16 @@ class LatentCrfModel {
 
   void PersistTheta(string thetaParamsFilename);
 
+  void SupervisedTrain(string goldLabelsFilename);
+
+  static double EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *uselessPtr,
+								 const double *lambdasArray,
+								 double *gradient,
+								 const int lambdasCount,
+								 const double step);
+
  public:
-  vector<vector<int> > data;
+  vector<vector<int> > data, labels;
   LearningInfo learningInfo;
   LogLinearParams *lambda;
 
@@ -301,7 +309,7 @@ class LatentCrfModel {
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
   MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
   VocabEncoder vocabEncoder;
-  int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE;
+  int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   string textFilename, outputPrefix;
   set<int> xDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
