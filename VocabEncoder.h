@@ -156,23 +156,18 @@ class VocabEncoder {
 class VocabDecoder {
  public:
   VocabDecoder(const VocabDecoder& another) {
-    cerr << "VocabDecoder(const VocabDecoder& another) started" << endl;
     vocab = another.vocab;
     UNK = another.UNK;
     closedVocab = another.closedVocab;
-    cerr << "VocabDecoder(const VocabDecoder& another) ENDED" << endl;
   }
 
   VocabDecoder(VocabDecoder& another) {
-    cerr << "VocabDecoder(VocabDecoder& another) started" << endl;
     vocab = another.vocab;
     UNK = another.UNK;
     closedVocab = another.closedVocab;
-    cerr << "VocabDecoder(VocabDecoder& another) ENDED" << endl;
   }
 
   VocabDecoder(const std::string& vocabFilename) {
-    cerr << "VocabDecoder(const std::string& vocabFilename) started" << endl;
     std::ifstream vocabFile(vocabFilename.c_str(), std::ios::in);
     std::string line;
     UNK = "_unk_";
@@ -195,15 +190,11 @@ class VocabDecoder {
 	assert(false);
       }
       
-      //      cerr << "vocab[" << wordId << "] = " << vocab.find(wordId)->second << endl;
-      //      cerr << "&(splits[0])=" << &(splits[0]) << ", &(vocab.find(wordId)->second)=" << &(vocab.find(wordId)->second) << endl;
     }
     vocabFile.close();
-    cerr << "finished reading" << endl;
     vocab[1] = "_null_";
     vocab[-1] = "_<s>_";
     //vocab[0] = "_zero_"; // shouldn't happen!
-    cerr << "VocabDecoder(const std::string& vocabFilename) ENDED" << endl;
   }
   
   const std::string& Decode(int wordId) const {

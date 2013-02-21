@@ -28,5 +28,5 @@ date &> example/run$1.log
 
 rm example/run$1.vocab
 #valgrind --tool=memcheck --leak-check=yes mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out example/tb3-pos-wsj-10.pos
-mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/run$1 example/tb3-pos-wsj-10.pos
+mpirun -np 28 ./train-latentCrfModel example/tb3-pos-wsj-1000.eng example/run$1 example/tb3-pos-wsj-1000.pos
 

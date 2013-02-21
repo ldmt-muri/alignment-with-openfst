@@ -71,25 +71,22 @@ bool LogLinearParams::AddParam(string paramId, double paramWeight) {
   return returnValue;
 }
 
-// assumptions: activeFeatures may or may not be empty
+// features for the latnet crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   std::map<string, double> &activeFeatures) {
   FastSparseVector<double> f;
   FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, f);
   for(FastSparseVector<double>::iterator fIter = f.begin(); fIter != f.end(); ++fIter) {
-    activeFeatures[GetParamId(fIter->first)] = fIter->second;
+    activeFeatures[GetParamId(fIter->first)] += fIter->second;
   }
 }
 
-// TODO: potential bug: make sure that:
-// - it's OK to overwrite values in the activeFeatures vector below
-// - when we need to collect features fired on one transition, we clear the vector before calling this method 
-// assumptions: 
-// - activeFeatures may or may not be empty
+// features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
+
   stringstream temp;
 
   const VocabDecoder &types = srcTypes;
@@ -122,7 +119,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     AddParam(temp.str());
     activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
-
+  
   // F52: yI-xIM2 pair
   if(enabledFeatureTypes.size() > 52 && enabledFeatureTypes[52]) {
     temp.str("");

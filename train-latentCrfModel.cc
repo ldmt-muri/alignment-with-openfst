@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
   // parse arguments
   if(world.rank() == 0) {
-    cerr << "parsing arguments...";
+    cerr << "master" << world.rank() << ": parsing arguments...";
   }
   string textFilename, outputFilenamePrefix, goldLabelsFilename;
   ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename);
@@ -53,13 +53,13 @@ int main(int argc, char **argv) {
   // randomize draws
   int seed = time(NULL);
   if(world.rank() == 0) {
-    cerr << "executing srand(" << seed << ")" << endl;
+    cerr << "master" << world.rank() << ": executing srand(" << seed << ")" << endl;
   }
   srand(seed);
 
   // configurations
   if(world.rank() == 0) {
-    cerr << "setting configurations...";
+    cerr << "master" << world.rank() << ": setting configurations...";
   }
   LearningInfo learningInfo;
   // general 
@@ -110,11 +110,11 @@ int main(int argc, char **argv) {
 
   // unsupervised training of the model
   if(world.rank() == 0) {
-    cerr << "master: train the model..." << endl;
+    cerr << "master" << world.rank() << ": train the model..." << endl;
   }
   model.Train();
   if(world.rank() == 0) {
-    cerr << "rank #" << world.rank() << ": training finished!" << endl;
+    cerr << "training finished!" << endl;
   }
   
   // we don't need the slaves anymore
