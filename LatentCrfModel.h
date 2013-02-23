@@ -59,8 +59,8 @@ class LatentCrfModel {
 
   // normalize soft counts with identical content to sum to one
   template <typename ContextType>
-  void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
-					 map<ContextType, double> &mleMarginals) {
+    void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
+			   map<ContextType, double> &mleMarginals) {
     // fix theta mle estimates
     for(typename map<ContextType, MultinomialParams::MultinomialParam >::const_iterator yIter = mle.params.begin(); yIter != mle.params.end(); yIter++) {
       ContextType y_ = yIter->first;

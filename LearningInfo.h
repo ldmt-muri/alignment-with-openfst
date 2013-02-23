@@ -36,7 +36,7 @@ namespace Regularizer {
 }
 
 namespace OptAlgorithm {
-  enum OptAlgorithm {GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING};
+  enum OptAlgorithm {GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION};
 }
 
 namespace DebugLevel {

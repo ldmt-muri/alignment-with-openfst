@@ -27,14 +27,18 @@ namespace MultinomialParams {
   class ConditionalMultinomialParam {
 
   public:
+
     ConditionalMultinomialParam() {
     }
+
     ConditionalMultinomialParam(ConditionalMultinomialParam &x) {
       params = x.params;
     }
+
     inline MultinomialParam& operator[](ContextType key) {
       return params[key];
     }
+
     double Hash() {
       double hash = 0.0;
       for(typename std::map<ContextType, MultinomialParam>::const_iterator cIter = params.begin(); cIter != params.end(); cIter++) {
@@ -45,6 +49,10 @@ namespace MultinomialParams {
       return hash;
     }
     
+    void UnnormalizedParamsIntoNormalizedNlogParams() {
+      assert(false);
+    }
+  
   public:
     std::map<ContextType, MultinomialParam> params;
   };
