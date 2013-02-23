@@ -53,7 +53,8 @@ class HmmModel2 {
   
   HmmModel2(const string &textFilename, 
 	    const string &outputPrefix, 
-	    LearningInfo &learningInfo);
+	    LearningInfo &learningInfo,
+	    unsigned numberOfLabels);
   
   void PrintParams();
   
@@ -74,6 +75,10 @@ class HmmModel2 {
   double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
 
  private:
+  
+  // constants
+  const int START_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
+  
   // configurations
   LearningInfo learningInfo;
   
@@ -88,6 +93,12 @@ class HmmModel2 {
 
   // model parameters theta = emission probabilities, alpha = transition prbailibities
   ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
+  
+  // output prefix
+  string outputPrefix;
+  
+  // possible values x_i and y_i may take
+  set<int> xDomain, yDomain;
   
 };
 

@@ -21,6 +21,10 @@ namespace MultinomialParams {
   // parameters for describing a multinomial distribution p(x)=y such that x is the key and y is a log probability
   typedef std::map<int, double> MultinomialParam;
 
+  // forward declarations
+  double nLog(double prob);
+  double nExp(double prob);
+  
   // parameters for describing a set of conditional multinomial distributions p(x|y)=z such that y is the first key, x is the nested key, z is a log probability. y is of type ContextType. x is integer. z is double.
   // ContextType is the type of things you want to condition on. 
   template <class ContextType>
@@ -49,8 +53,38 @@ namespace MultinomialParams {
       return hash;
     }
     
-    void UnnormalizedParamsIntoNormalizedNlogParams() {
-      assert(false);
+    void ConvertUnnormalizedParamsIntoNormalizedNlogParams() {
+      // y is the context (the thing we condition on). z is the multinomial variable whose values should sum to one. 
+      // for each context
+      for(typename map<ContextType, MultinomialParams::MultinomialParam >::iterator yIter = params.begin(); yIter != params.end(); yIter++) {
+	ContextType y_ = yIter->first;
+	double unnormalizedMarginalProbz_giveny_ = 0.0;
+	for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	  int z_ = zIter->first;
+	  double unnormalizedProbz_giveny_ = zIter->second;
+	  unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
+	}
+	if(unnormalizedMarginalProbz_giveny_ == 0 || std::isnan(unnormalizedMarginalProbz_giveny_) || std::isinf(unnormalizedMarginalProbz_giveny_)) {
+	  cerr << "Unable to normalize this multinomial distribution, with context " << y_ << ". The unnormalized marginal probability = " << unnormalizedMarginalProbz_giveny_ << endl;
+	} 
+	// normalize the params with the same context to sum to one
+	for(MultinomialParams::MultinomialParam::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+	  int z_ = zIter->first;
+	  // normalize prob(z|y)
+	  double normalizedProbz_giveny_ = zIter->second / unnormalizedMarginalProbz_giveny_;
+	  // take the nlog
+	  zIter->second =  nLog(normalizedProbz_giveny_);
+	}
+      }
+    }
+
+    void GaussianInit(double mean = 0.0, double std = 1.0) {
+      GaussianSampler sampler(mean, std);
+      for(typename std::map<ContextType, MultinomialParam>::iterator cIter = params.begin(); cIter != params.end(); cIter++) {
+	for(MultinomialParam::iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
+	  mIter->second = nExp(sampler.Draw());
+	}
+      }
     }
   
   public:

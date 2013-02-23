@@ -91,7 +91,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   for(int i = 51; i < 100; i++) {
     enabledFeatureTypes.push_back(false);
   }
-  // only enable hmm-like features -- for better comparison with HMM
   enabledFeatureTypes[51] = true; // y_i:y_{i-1}
   //  enabledFeatureTypes[52] = true;
   enabledFeatureTypes[53] = true; // y_i:x_{i-1}
@@ -133,9 +132,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
     }
     PersistTheta(thetaParamsFilename.str());
   }
-  
-  // lambdas are initialized to all zeros
-  assert(lambda->GetParamsCount() == 0);
   
   // hand-crafted weights for constrained features
   REWARD_FOR_CONSTRAINED_FEATURES = 10.0;

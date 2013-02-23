@@ -60,7 +60,8 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo);
+  unsigned NUMBER_OF_LABELS = 2;
+  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
 
   // train model parameters
   if(world.rank() == 0) {
