@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
     cerr << "master" << world.rank() << ": setting configurations..." << endl;
   }
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 100;
+  learningInfo.maxIterationsCount = 2;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.0001;
@@ -75,9 +75,13 @@ int main(int argc, char **argv) {
     return 0;
   }
 
+  // persist hmm params
+  string finalParamsPrefix = outputFilenamePrefix + ".final";
+  model.PersistParams(finalParamsPrefix);
+  
   // viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
-  model.Label2(textFilename, labelsFilename);
+  model.Label(textFilename, labelsFilename);
   cerr << "automatic labels can be found at " << labelsFilename << endl;
 
   // compare to gold standard

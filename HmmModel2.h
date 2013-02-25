@@ -62,10 +62,11 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
 
   ~HmmModel2() {}
 
-  void PrintParams();
+  void PersistParams(string &filename);
   
   void Train();
   
+  using UnsupervisedSequenceTaggingModel::Label;
   void Label(vector<int> &tokens, vector<int> &labels);
   
  private:

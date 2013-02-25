@@ -57,6 +57,21 @@ void HmmModel2::InitParams(){
   }
   nlogTheta.GaussianInit();
   nlogGamma.GaussianInit();
+  
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "nlogTheta params: " << endl;
+    nlogTheta.PrintParams();
+    cerr << "nlogGamma params: " << endl;
+    nlogGamma.PrintParams();
+  }
+}
+
+void HmmModel2::PersistParams(string &prefix) {
+  if(prefix.size() == 0) {
+    prefix = outputPrefix + ".hmm2.final";
+  }
+  MultinomialParams::PersistParams(prefix + ".nlogTheta", nlogTheta, vocabEncoder);
+  MultinomialParams::PersistParams(prefix + ".nlogGamma", nlogGamma, vocabEncoder);
 }
 
 // builds the lattice of all possible label sequences
@@ -98,6 +113,9 @@ void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst) {
 
 	// compute arc weight
 	double arcWeight = nlogGamma[yIM1][yI] + nlogTheta[yI][x[i]];
+	if(arcWeight < 0 || std::isinf(arcWeight) || std::isnan(arcWeight)) {
+	  cerr << "FATAL ERROR: arcWeight = " << arcWeight << endl << "will terminate." << endl;
+	}
 	
 	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
 	int toState;	
@@ -164,9 +182,16 @@ void HmmModel2::UpdateMle(const unsigned sentId,
 	int toState = arc.nextstate;
 
 	// compute marginal weight of passing on this arc
-	const fst::LogWeight nlogWeight(fst::Times( alphas[fromState], fst::Times(betas[toState], arcWeight)));
+	const fst::LogWeight nlogWeight(fst::Times(arcWeight , fst::Times(betas[toState], alphas[fromState])));
 	double nlogProb = fst::Divide(nlogWeight, betas[0]).Value();
-	assert(nlogProb > -0.01 && !std::isinf(nlogProb) && !std::isnan(nlogProb));
+	if(nlogProb < -1.0 || std::isinf(nlogProb) || std::isnan(nlogProb)) {
+	  cerr << "FATAL ERROR: nlogProb = " << nlogProb << " = alpha + arcWeight + beta - betas[0] = " << alphas[fromState].Value() << " + " << arcWeight.Value() << " + " << betas[toState].Value() << " - " << betas[0].Value() << endl << "will terminate." << endl;
+	  assert(false);
+	}
+	// fix precision problems
+	if(nlogProb < 0) {
+	  nlogProb = 0;
+	}
 	double prob = MultinomialParams::nExp(nlogProb);
 	assert( !std::isinf(prob) && !std::isnan(prob) );
 	thetaMle[yI][xI] += prob;
@@ -196,7 +221,16 @@ void HmmModel2::Train(){
       BuildThetaGammaFst(sentId, fst, alphas, betas);
       UpdateMle(sentId, fst, alphas, betas, thetaMle, gammaMle);
       double sentNlogProb = betas[0].Value();
-      assert(sentNlogProb > -0.01);
+      if(sentNlogProb < -0.01) {
+	cerr << "FATAL ERROR: sentNlogProb = " << sentNlogProb << " in sent #" << sentId << endl << "will terminate." << endl;
+	for(unsigned stateId = 0; stateId < betas.size(); stateId++) {
+	  cerr << "statedId = " << stateId << ", alpha = " << alphas[stateId] << ", beta = " << betas[stateId] << endl;
+	}
+	assert(false);
+      }
+      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "rank#" << learningInfo.mpiWorld->rank() << ": sent #" << sentId << ": nlogProb = " << sentNlogProb << endl;
+      }
       nloglikelihood += sentNlogProb;
     }
 

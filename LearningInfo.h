@@ -40,7 +40,7 @@ namespace OptAlgorithm {
 }
 
 namespace DebugLevel {
-  enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6};
+  enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6, TEMP = 4};
 }
 
 // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
@@ -215,18 +215,18 @@ class LearningInfo {
     
     // logging
     if(useMaxIterationsCount) {
-      cerr << "iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl << endl;
+      cerr << "iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl;
     }
     if(useMinLikelihoodDiff && 
        iterationsCount > 1) {
       cerr << "loglikelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
-					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl << endl;
+					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl;
     }
     if(useEarlyStopping &&
        iterationsCount > 1) {
       cerr << "validationLikelihood[" << iterationsCount-2 << "] = " << validationLogLikelihood[iterationsCount-2] << endl;
       cerr << "validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
-      cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl << endl;
+      cerr << "convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl;
     }
 
     double absoluteDiff = 0.0, relativeDiff = 0.0;
@@ -234,9 +234,10 @@ class LearningInfo {
        iterationsCount > 1) {
       absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
       relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
-      cerr << "loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl << endl;
+      cerr << "loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl;
     }
     
+    cerr << endl;
     // check for convergnece conditions
     if(useMaxIterationsCount && 
        maxIterationsCount <= iterationsCount) {

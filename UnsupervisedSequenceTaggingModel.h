@@ -45,7 +45,7 @@ class UnsupervisedSequenceTaggingModel {
     }
   }
 
-  void Label2(string &inputFilename, string &outputFilename) {
+  void Label(string &inputFilename, string &outputFilename) {
     std::vector<std::vector<std::string> > tokens;
     StringUtils::ReadTokens(inputFilename, tokens);
     vector<vector<int> > labels;

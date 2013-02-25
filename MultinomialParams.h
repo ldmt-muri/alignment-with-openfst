@@ -85,8 +85,35 @@ namespace MultinomialParams {
 	  mIter->second = nExp(sampler.Draw());
 	}
       }
+      ConvertUnnormalizedParamsIntoNormalizedNlogParams();
     }
   
+    // refactor variable names here (e.g. translations)
+    void PrintParams() {
+      // iterate over src tokens in the model
+      int counter = 0;
+      for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+	const MultinomialParam &translations = (*srcIter).second;
+	// iterate over tgt tokens 
+	for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+	  std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+	}
+      } 
+    }
+    
+    // refactor variable names here (e.g. translations)
+    void PrintParams(const VocabEncoder &encoder) {
+      // iterate over src tokens in the model
+      int counter = 0;
+      for(typename std::map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+	const MultinomialParam &translations = (*srcIter).second;
+	// iterate over tgt tokens 
+	for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+	  std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+	}
+      } 
+    }
+    
   public:
     std::map<ContextType, MultinomialParam> params;
   };
@@ -95,6 +122,42 @@ namespace MultinomialParams {
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
 
+
+  inline void PersistParams(const std::string &paramsFilename, 
+		      const ConditionalMultinomialParam<int> &params, 
+		      const VocabEncoder &vocabEncoder) {
+    std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+    
+    for (std::map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
+	 srcIter != params.params.end(); 
+	 srcIter++) {
+      for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+	// line format: 
+	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+	paramsFile << vocabEncoder.Decode(tgtIter->first) << " " << vocabEncoder.Decode(srcIter->first) << " " << nExp(tgtIter->second) << std::endl;
+      }
+    }
+    
+    paramsFile.close();
+  }
+  
+  inline void PersistParams2(const std::string &paramsFilename, 
+			     const ConditionalMultinomialParam< std::pair<int, int> > &params, 
+			     const VocabEncoder &vocabEncoder) {
+    std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
+    for (std::map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
+	 srcIter != params.params.end(); 
+	 srcIter++) {
+      for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+	// line format: 
+	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+	paramsFile << srcIter->first.first << "->" << srcIter->first.second << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
+      }
+    }
+    paramsFile.close();
+
+  }
+  
   template <typename ContextType>
   static std::map<ContextType, double> AccumulateMultinomials(const std::map<ContextType, double>& p1, 
 							      const std::map<ContextType, double>& p2) {
@@ -194,69 +257,6 @@ namespace MultinomialParams {
 	}
       }
     }
-  }
-  
-  // refactor variable names here (e.g. translations)
-  template <typename ContextType>
-  void PrintParams(const ConditionalMultinomialParam<ContextType>& params) {
-    // iterate over src tokens in the model
-    int counter = 0;
-    for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-      const MultinomialParam &translations = (*srcIter).second;
-      // iterate over tgt tokens 
-      for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
-      }
-    } 
-  }
-  
-  // refactor variable names here (e.g. translations)
-  template <typename ContextType>
-  void PrintParams(const ConditionalMultinomialParam<ContextType>& params, const VocabEncoder &encoder) {
-    // iterate over src tokens in the model
-    int counter = 0;
-    for(typename ConditionalMultinomialParam<ContextType>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-      const MultinomialParam &translations = (*srcIter).second;
-      // iterate over tgt tokens 
-      for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
-      }
-    } 
-  }
-
-  inline void PersistParams1(const std::string &paramsFilename, 
-			     const ConditionalMultinomialParam<int> &params, 
-			     const VocabEncoder &vocabEncoder) {
-    std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-
-    for (std::map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
-	 srcIter != params.params.end(); 
-	 srcIter++) {
-      for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// line format: 
-	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << vocabEncoder.Decode(tgtIter->first) << " " << vocabEncoder.Decode(srcIter->first) << " " << nExp(tgtIter->second) << std::endl;
-      }
-    }
-
-    paramsFile.close();
-  }
-
-  inline void PersistParams2(const std::string &paramsFilename, 
-			     const ConditionalMultinomialParam< std::pair<int, int> > &params, 
-			     const VocabEncoder &vocabEncoder) {
-    std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (std::map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
-	 srcIter != params.params.end(); 
-	 srcIter++) {
-      for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// line format: 
-	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << srcIter->first.first << "->" << srcIter->first.second << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
-      }
-    }
-    paramsFile.close();
-
   }
   
   // sample an integer from a multinomial
