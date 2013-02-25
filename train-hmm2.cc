@@ -42,15 +42,13 @@ int main(int argc, char **argv) {
 
   // configurations
   if(world.rank() == 0) {
-    cerr << "master" << world.rank() << ": setting configurations...";
+    cerr << "master" << world.rank() << ": setting configurations..." << endl;
   }
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 100;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.minLikelihoodDiff = 100.0;
-  learningInfo.useMinLikelihoodDiff = true;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.01;
+  learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
@@ -60,7 +58,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  unsigned NUMBER_OF_LABELS = 2;
+  unsigned NUMBER_OF_LABELS = 45;
   HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
 
   // train model parameters
@@ -79,7 +77,7 @@ int main(int argc, char **argv) {
 
   // viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
-  model.Label(textFilename, labelsFilename);
+  model.Label2(textFilename, labelsFilename);
   cerr << "automatic labels can be found at " << labelsFilename << endl;
 
   // compare to gold standard

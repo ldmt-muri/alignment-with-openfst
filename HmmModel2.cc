@@ -9,7 +9,7 @@ HmmModel2::HmmModel2(const string &textFilename,
 		     const string &outputPrefix, 
 		     LearningInfo &learningInfo,
 		     unsigned numberOfLabels) : 
-  vocabEncoder(textFilename),
+  UnsupervisedSequenceTaggingModel(textFilename),
   gaussianSampler(0.0, 1.0),
   START_OF_SENTENCE_Y_VALUE(2),
   FIRST_ALLOWED_LABEL_VALUE(4) {
@@ -44,28 +44,145 @@ HmmModel2::HmmModel2(const string &textFilename,
 
 // gaussian initialization of the multinomial params
 void HmmModel2::InitParams(){
+  for(set<int>::const_iterator toYIter = yDomain.begin(); toYIter != yDomain.end(); toYIter++) {
+    if(*toYIter == START_OF_SENTENCE_Y_VALUE) {
+      continue;
+    }
+    for(set<int>::const_iterator fromYIter = yDomain.begin(); fromYIter != yDomain.end(); fromYIter++) {
+      nlogGamma[*fromYIter][*toYIter] = 1;
+    }
+    for(set<int>::const_iterator xIter = xDomain.begin(); xIter != xDomain.end(); xIter++) {
+      nlogTheta[*toYIter][*xIter] = 1;
+    }
+  }
   nlogTheta.GaussianInit();
   nlogGamma.GaussianInit();
 }
 
 // builds the lattice of all possible label sequences
-void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst) {
-  assert(false);
+void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst) {
+  // arcs represent a particular choice of y_i at time step i
+  // arc weights are - log \theta_{x_i|y_i} - log \gamma_{y_i|y_{i-1}}
+  assert(fst.NumStates() == 0);
+  int startState = fst.AddState();
+  fst.SetStart(startState);
+  
+  // map values of y_{i-1} and y_i to fst states
+  map<int, int> yIM1ToState, yIToState;
+
+  yIM1ToState[START_OF_SENTENCE_Y_VALUE] = startState;
+
+  // for each timestep
+  for(int i = 0; i < x.size(); i++){
+
+    // timestep i hasn't reached any states yet
+    yIToState.clear();
+    // from each state reached in the previous timestep
+    for(map<int, int>::const_iterator prevStateIter = yIM1ToState.begin();
+	prevStateIter != yIM1ToState.end();
+	prevStateIter++) {
+      
+      int fromState = prevStateIter->second;
+      int yIM1 = prevStateIter->first;
+      // to each possible value of y_i
+      for(set<int>::const_iterator yDomainIter = yDomain.begin();
+	  yDomainIter != yDomain.end();
+	  yDomainIter++) {
+
+	int yI = *yDomainIter;
+
+	// START_OF_SENTENCE_Y_VALUE can only be used for the hypothetical y_{i-1}, so skip it.
+	if(yI == START_OF_SENTENCE_Y_VALUE) {
+	  continue;
+	}
+
+	// compute arc weight
+	double arcWeight = nlogGamma[yIM1][yI] + nlogTheta[yI][x[i]];
+	
+	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
+	int toState;	
+	if(yIToState.count(yI) == 0) {
+	  toState = fst.AddState();
+	  yIToState[yI] = toState;
+	  // is it a final state?
+	  if(i == x.size() - 1) {
+	    fst.SetFinal(toState, LogWeight::One());
+	  }
+	} else {
+	  toState = yIToState[yI];
+	}
+	// now add the arc
+	fst.AddArc(fromState, fst::LogArc(yIM1, yI, arcWeight, toState));	
+      }
+    }
+    // now, that all states reached in step i have already been created, yIM1ToState has become out-of-date. update it
+    yIM1ToState = yIToState;
+  }
 }
 
 // builds the lattice of all possible label sequences, also computes potentials
 void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
-  assert(false);
+
+  // first, build the lattice
+  BuildThetaGammaFst(observations[sentId], fst);
+
+  // then compute forward/backward state potentials
+  assert(alphas.size() == 0);
+  assert(betas.size() == 0);
+  ShortestDistance(fst, &alphas, false);
+  ShortestDistance(fst, &betas, true);
 }
 
-void HmmModel2::UpdateMle(const VectorFst<LogArc> &fst, 
-	       const vector<fst::LogWeight> &alphas, 
-	       const vector<fst::LogWeight> &betas, 
-	       ConditionalMultinomialParam<int> &thetaMle, 
-	       ConditionalMultinomialParam<int> &gammaMle){ 
-  assert(false);
+void HmmModel2::UpdateMle(const unsigned sentId,
+			  const VectorFst<LogArc> &fst, 
+			  const vector<fst::LogWeight> &alphas, 
+			  const vector<fst::LogWeight> &betas, 
+			  ConditionalMultinomialParam<int> &thetaMle, 
+			  ConditionalMultinomialParam<int> &gammaMle){
+  vector<int> &x = observations[sentId];
+ 
+  // schedule for visiting states such that we know the timestep for each arc
+  set<int> iStates, iP1States;
+  iStates.insert(fst.Start());
+
+  // for each timestep
+  for(int i = 0; i < x.size(); i++) {
+    int xI = x[i];
+    
+    // from each state at timestep i
+    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+	iStatesIter != iStates.end(); 
+	iStatesIter++) {
+      int fromState = *iStatesIter;
+
+      // for each arc leaving this state
+      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	const LogArc &arc = aiter.Value();
+	int yIM1 = arc.ilabel;
+	int yI = arc.olabel;
+	const fst::LogWeight &arcWeight = arc.weight;
+	int toState = arc.nextstate;
+
+	// compute marginal weight of passing on this arc
+	const fst::LogWeight nlogWeight(fst::Times( alphas[fromState], fst::Times(betas[toState], arcWeight)));
+	double nlogProb = fst::Divide(nlogWeight, betas[0]).Value();
+	assert(nlogProb > -0.01 && !std::isinf(nlogProb) && !std::isnan(nlogProb));
+	double prob = MultinomialParams::nExp(nlogProb);
+	assert( !std::isinf(prob) && !std::isnan(prob) );
+	thetaMle[yI][xI] += prob;
+	gammaMle[yIM1][yI] += prob;
+	
+	// prepare the schedule for visiting states in the next timestep
+	iP1States.insert(toState);
+      } 
+    }
+    
+    // prepare for next timestep
+    iStates = iP1States;
+    iP1States.clear();
+  }
 }
-  
+
 // EM training of the HMM
 void HmmModel2::Train(){
   do {
@@ -77,8 +194,10 @@ void HmmModel2::Train(){
       VectorFst<LogArc> fst;
       vector<fst::LogWeight> alphas, betas; 
       BuildThetaGammaFst(sentId, fst, alphas, betas);
-      UpdateMle(fst, alphas, betas, thetaMle, gammaMle);
-      nloglikelihood += betas[0].Value();
+      UpdateMle(sentId, fst, alphas, betas, thetaMle, gammaMle);
+      double sentNlogProb = betas[0].Value();
+      assert(sentNlogProb > -0.01);
+      nloglikelihood += sentNlogProb;
     }
 
     // maximization
@@ -89,36 +208,23 @@ void HmmModel2::Train(){
 
     // check convergence
     learningInfo.logLikelihood.push_back(nloglikelihood);
-  } while(learningInfo.IsModelConverged());
+    learningInfo.iterationsCount++;
+    
+    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "nloglikelihood of this iteration = " << nloglikelihood << endl; 
+    }
+
+  } while(!learningInfo.IsModelConverged());
 }
 
-void HmmModel2::Label(vector<int> &tokens, vector<int> &labels){
-  assert(false);
-}
+void HmmModel2::Label(vector<int> &tokens, vector<int> &labels) {
+  VectorFst<LogArc> fst;
+  BuildThetaGammaFst(tokens, fst);
 
-void HmmModel2::Label(vector<string> &tokens, vector<int> &labels){
-  assert(false);
-}
-
-void HmmModel2::Label(vector<vector<int> > &tokens, vector<vector<int> > &lables) {
-  assert(false);
-}
-
-void HmmModel2::Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
-  assert(false);
-}
-
-void HmmModel2::Label(string &inputFilename, string &outputFilename) {
-  assert(false);
-}
-
-// evaluate
-double HmmModel2::ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename) {
-  assert(false);
-  return 0;
-}
-
-double HmmModel2::ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename) {
-  assert(false);
-  return 0;
+  VectorFst<StdArc> fst2, shortestPath;
+  fst::ArcMap(fst, &fst2, LogToTropicalMapper());
+  fst::ShortestPath(fst2, &shortestPath);
+  std::vector<int> dummy;
+  FstUtils::LinearFstToVector(shortestPath, dummy, labels);
+  assert(labels.size() == tokens.size());
 }

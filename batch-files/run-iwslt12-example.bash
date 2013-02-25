@@ -8,7 +8,6 @@
 
 #python utils/encode-corpus.py example/iwslt12.eng example/iwslt12.eng.vocab example/iwslt12.eng.int
 #python utils/encode-corpus.py example/iwslt12.trk example/iwslt12.trk.vocab example/iwslt12.trk.int
-make
 
 #./train-model1 example/iwslt12.eng.int example/iwslt12.trk.int example/iwslt12.out
 
@@ -23,10 +22,10 @@ make
 #./train-latentCrfModel example/wammar-tiny-letters.eng example/iwslt12.latentCrf.out
 #./train-latentCrfModel example/tb3-pos-wsj.eng example/tb3-pos-wsj.latentCrf.out example/tb3-pos-wsj.pos
 #valgrind mpirun -np 2 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out
-echo "////////////////////////////before:\\\\\\\\\\\\\\\\\\\\\\\\"
-date &> example/run$1.log
 
-rm example/run$1.vocab
 #valgrind --tool=memcheck --leak-check=yes mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out example/tb3-pos-wsj-10.pos
-mpirun -np 28 ./train-latentCrfModel example/tb3-pos-wsj-1000.eng example/run$1 example/tb3-pos-wsj-1000.pos
+#make
+#mpirun -np 28 ./train-latentCrfModel example/tb3-pos-wsj-1000.eng example/run.latent-crf.$1 example/tb3-pos-wsj-1000.pos
 
+make -f Makefile-hmm2
+mpirun -np 1 ./train-hmm2 example/tb3-pos-wsj-1000.eng example/run.hmm.$1 example/tb3-pos-wsj-1000.pos

@@ -23,12 +23,13 @@
 #include "IAlignmentSampler.h"
 #include "Samplers.h"
 #include "MultinomialParams.h"
+#include "UnsupervisedSequenceTaggingModel.h"
 
 using namespace fst;
 using namespace std;
 using namespace MultinomialParams;
 
-class HmmModel2 {
+class HmmModel2 : public UnsupervisedSequenceTaggingModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeFractionalCounts();
@@ -37,43 +38,36 @@ class HmmModel2 {
   void ClearFractionalCounts();
 
   // builds the lattice of all possible label sequences
-  void BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst);
-
+  void BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst);
+  
   // builds the lattice of all possible label sequences, also computes potentials
   void BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas);
   
   // traverse each transition on the fst and accumulate the mle counts of theta and gamma
-  void UpdateMle(const VectorFst<LogArc> &fst, 
+  void UpdateMle(const unsigned sentId,
+		 const VectorFst<LogArc> &fst, 
 		 const vector<fst::LogWeight> &alphas, 
 		 const vector<fst::LogWeight> &betas, 
 		 ConditionalMultinomialParam<int> &thetaMle, 
 		 ConditionalMultinomialParam<int> &gammaMle);
-
+ 
+  void InitParams();
+  
  public:
   
   HmmModel2(const string &textFilename, 
 	    const string &outputPrefix, 
 	    LearningInfo &learningInfo,
 	    unsigned numberOfLabels);
-  
+
+  ~HmmModel2() {}
+
   void PrintParams();
-  
-  void PersistParams(const string& outputFilename);
-  
-  void InitParams();
   
   void Train();
   
   void Label(vector<int> &tokens, vector<int> &labels);
-  void Label(vector<string> &tokens, vector<int> &labels);
-  void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
-  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels);
-  void Label(string &inputFilename, string &outputFilename);
   
-  // evaluate
-  double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
-  double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
-
  private:
   
   // constants
@@ -82,9 +76,6 @@ class HmmModel2 {
   // configurations
   LearningInfo learningInfo;
   
-  // vocab encoders
-  VocabEncoder vocabEncoder;
-
   // training data
   vector< vector<int> > observations;
 
