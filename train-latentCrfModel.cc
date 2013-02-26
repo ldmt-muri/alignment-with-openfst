@@ -3,12 +3,13 @@
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
 #include "LatentCrfModel.h"
+#include "HmmModel2.h"
 
 using namespace fst;
 using namespace std;
 namespace mpi = boost::mpi;
 
-typedef ProductArc<LogWeight, LogWeight> ProductLogArc;
+typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
 
 void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename) {
   assert(argc >= 3);
@@ -19,6 +20,77 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   } else {
     goldLabelsFilename = "";
   }
+}
+
+void HmmInitialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, int NUMBER_OF_LABELS, LatentCrfModel &latentCrfModel) {
+
+  // hmm initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
+  assert(latentCrfModel.learningInfo.zIDependsOnYIM1 == false);
+
+  // configurations
+  if(world.rank() == 0) {
+    cerr << "master" << world.rank() << ": training the hmm model to initialize latentCrfModel parameters..." << endl;
+  } else {
+    return null;
+  }
+  LearningInfo learningInfo;
+  learningInfo.maxIterationsCount = 15;
+  learningInfo.useMaxIterationsCount = true;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
+  learningInfo.minLikelihoodRelativeDiff = 0.00001;
+  learningInfo.debugLevel = DebugLevel::CORPUS;
+  //  learningInfo.useEarlyStopping = true;
+  learningInfo.mpiWorld = &world;
+  learningInfo.persistParamsAfterEachIteration = false;
+  learningInfo.persistFinalParams = false;
+  learningInfo.smoothMultinomialParams = false;
+  learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+
+  // initialize the model
+  HmmModel2 hmmModel = new HmmModel2(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
+
+  // train model parameters
+  if(world.rank() == 0) {
+    cerr << "master" << world.rank() << ": train the model..." << endl;
+  }
+  model.Train();
+  if(world.rank() == 0) {
+    cerr << "training finished!" << endl;
+  }
+  
+  // we don't need the slaves anymore
+  if(world.rank() > 0) {
+    return 0;
+  }
+
+  // persist hmm params
+  string finalParamsPrefix = outputFilenamePrefix + ".final";
+  hmmModel.PersistParams(finalParamsPrefix);
+  
+  // viterbi
+  string labelsFilename = outputFilenamePrefix + ".labels";
+  hmmModel.Label(textFilename, labelsFilename);
+  cerr << "automatic labels can be found at " << labelsFilename << endl;
+
+  // compare to gold standard
+  if(goldLabelsFilename != "") {
+    cerr << "comparing to gold standard tagging..." << endl;
+    double vi = hmmModel.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
+    cerr << "done. \nvariation of information = " << vi << endl;
+    double manyToOne = hmmModel.ComputeManyToOne(labelsFilename, goldLabelsFilename);
+    cerr << "many-to-one = " << manyToOne;
+  }
+
+  // now initialize the relevant latent crf model parameters
+  MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
+  for(map<int, MultinomialParam>::iterator contextIter = latentCrfModel.nLogThetaGivenOneLabel.params.begin(); 
+      contextIter != latentCrfModel.nLogThetaGivenOneLabel.params.end();
+      contextIter++) {
+    assert(false); // TODO copy the corresponding parameter value from hte hmm model, but first make sure the latent classes are IDENTICAL!
+  }
+  
+  assert(false);// TODO for each transition prob in hmm, set the corresponding weight of the crf model to nlogprob of the hmm parameter
+
 }
 
 int main(int argc, char **argv) {  
@@ -49,6 +121,8 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "done." << endl;
   }
+
+  unsigned NUMBER_OF_LABELS = 45;
 
   // randomize draws
   int seed = time(NULL);
@@ -97,7 +171,10 @@ int main(int argc, char **argv) {
   }
   
   // initialize the model
-  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo);
+  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
+  
+  // hmm initialization
+  HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, model);
 
   // use gold labels to do supervised training
   if(learningInfo.supervisedTraining) {

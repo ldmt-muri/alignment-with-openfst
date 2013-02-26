@@ -141,7 +141,7 @@ namespace MultinomialParams {
     paramsFile.close();
   }
   
-  inline void PersistParams2(const std::string &paramsFilename, 
+  inline void PersistParams(const std::string &paramsFilename, 
 			     const ConditionalMultinomialParam< std::pair<int, int> > &params, 
 			     const VocabEncoder &vocabEncoder) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);

@@ -1,7 +1,6 @@
 #include "LatentCrfModel.h"
 
 using namespace std;
-using namespace fst;
 using namespace OptAlgorithm;
 
 // singlenton instance definition and trivial initialization
@@ -28,7 +27,7 @@ LatentCrfModel::~LatentCrfModel() {
 }
 
 // initialize model weights to zeros
-LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) : 
+LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo, unsigned NUMBER_OF_LABELS) : 
   vocabEncoder(textFilename),
   gaussianSampler(0.0, 10.0) {
 
@@ -56,7 +55,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->FIRST_ALLOWED_LABEL_VALUE = 4;
 
   // POS tag yDomain
-  unsigned latentClasses = 47;
+  unsigned latentClasses = NUMBER_OF_LABELS;
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
     this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
@@ -204,21 +203,21 @@ void LatentCrfModel::InitTheta() {
 // compute the partition function Z_\lambda(x)
 // assumptions:
 // - fst and betas are populated using BuildLambdaFst()
-double LatentCrfModel::ComputeNLogZ_lambda(const VectorFst<LogArc> &fst, const vector<fst::LogWeight> &betas) {
+double LatentCrfModel::ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const vector<FstUtils::LogWeight> &betas) {
   return betas[fst.Start()].Value();
 }
 
 // compute the partition function Z_\lambda(x)
 double LatentCrfModel::ComputeNLogZ_lambda(const vector<int> &x) {
-  VectorFst<LogArc> fst;
-  vector<fst::LogWeight> alphas;
-  vector<fst::LogWeight> betas;
+  fst::VectorFst<FstUtils::LogArc> fst;
+  vector<FstUtils::LogWeight> alphas;
+  vector<FstUtils::LogWeight> betas;
   BuildLambdaFst(x, fst, alphas, betas);
   return ComputeNLogZ_lambda(fst, betas);
 }
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), but doesn't not compute the potentials
-void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst) {
+void LatentCrfModel::BuildLambdaFst(const vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst) {
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -226,7 +225,7 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
   fst.SetStart(startState);
 
   // map values of y_{i-1} and y_i to fst states
-  map<int, int> yIM1ToState, yIToState;
+   map<int, int> yIM1ToState, yIToState;
   assert(yIM1ToState.size() == 0);
   assert(yIToState.size() == 0);
   yIM1ToState[START_OF_SENTENCE_Y_VALUE] = startState;
@@ -300,13 +299,13 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, LogWeight::One());
+	    fst.SetFinal(toState, FstUtils::LogWeight::One());
 	  }
 	} else {
 	  toState = yIToState[yI];
 	}
 	// now add the arc
-	fst.AddArc(fromState, fst::LogArc(yIM1, yI, nLambdaH, toState));
+	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, nLambdaH, toState));
       } 
    }
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
@@ -315,7 +314,7 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 }
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), and computes the potentials
-void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+void LatentCrfModel::BuildLambdaFst(const vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
   clock_t timestamp = clock();
 
   // first, build the fst
@@ -337,8 +336,8 @@ void LatentCrfModel::BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst
 // - fst is populated using BuildLambdaFst()
 // - FXk is cleared
 void LatentCrfModel::ComputeF(const vector<int> &x,
-			      const VectorFst<LogArc> &fst,
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+			      const fst::VectorFst<FstUtils::LogArc> &fst,
+			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas,
 			      FastSparseVector<LogVal<double> > &FXk) {
   clock_t timestamp = clock();
   
@@ -360,8 +359,8 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
+      for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
@@ -397,7 +396,7 @@ void LatentCrfModel::ComputeF(const vector<int> &x,
 }			   
 
 void LatentCrfModel::FireFeatures(const vector<int> &x,
-				  const VectorFst<LogArc> &fst,
+				  const fst::VectorFst<FstUtils::LogArc> &fst,
 				  FastSparseVector<double> &h) {
   clock_t timestamp = clock();
   
@@ -418,8 +417,8 @@ void LatentCrfModel::FireFeatures(const vector<int> &x,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
+      for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
@@ -447,8 +446,8 @@ void LatentCrfModel::FireFeatures(const vector<int> &x,
 // - fst is populated using BuildThetaLambdaFst()
 // - DXZk is cleared
 void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z, 
-			      const VectorFst<LogArc> &fst,
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+			      const fst::VectorFst<FstUtils::LogArc> &fst,
+			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas,
 			      FastSparseVector<LogVal<double> > &DXZk) {
   clock_t timestamp = clock();
 
@@ -471,8 +470,8 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
+      for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
@@ -510,8 +509,8 @@ void LatentCrfModel::ComputeD(const vector<int> &x, const vector<int> &z,
 
 // assumptions:
 // - fst, betas are populated using BuildThetaLambdaFst()
-double LatentCrfModel::ComputeNLogC(const VectorFst<LogArc> &fst,
-				    const vector<fst::LogWeight> &betas) {
+double LatentCrfModel::ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
+				    const vector<FstUtils::LogWeight> &betas) {
   double nLogC = betas[fst.Start()].Value();
   return nLogC;
 }
@@ -521,8 +520,8 @@ double LatentCrfModel::ComputeNLogC(const VectorFst<LogArc> &fst,
 // - BXZ is cleared
 // - fst, alphas, and betas are populated using BuildThetaLambdaFst
 void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
-			      const VectorFst<LogArc> &fst, 
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
+			      const fst::VectorFst<FstUtils::LogArc> &fst, 
+			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas, 
 			      map< int, map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
@@ -543,8 +542,8 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
+      for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
@@ -576,8 +575,8 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
 // - BXZ is cleared
 // - fst, alphas, and betas are populated using BuildThetaLambdaFst
 void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z, 
-			      const VectorFst<LogArc> &fst, 
-			      const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
+			      const fst::VectorFst<FstUtils::LogArc> &fst, 
+			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas, 
 			      map< std::pair<int, int>, map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
@@ -598,8 +597,8 @@ void LatentCrfModel::ComputeB(const vector<int> &x, const vector<int> &z,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	LogArc arc = aiter.Value();
+      for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
@@ -638,7 +637,7 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi) {
 
 // build an FST which path sums to 
 // -log \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ]
-void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
   clock_t timestamp = clock();
 
   // arcs represent a particular choice of y_i at time step i
@@ -698,13 +697,13 @@ void LatentCrfModel::BuildThetaLambdaFst(const vector<int> &x, const vector<int>
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, LogWeight::One());
+	    fst.SetFinal(toState, FstUtils::LogWeight::One());
 	  }
 	} else {
 	  toState = yIToState[yI];
 	}
 	// now add the arc
-	fst.AddArc(fromState, fst::LogArc(yIM1, yI, weight, toState));	
+	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));	
       }
     }
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
@@ -791,7 +790,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
   //  denominator = \sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)
   //  arcs represent a particular choice of y_i at time step i
   //  arc weights are \lambda h(y_i, y_{i-1}, x, i) 
-  VectorFst<LogArc> fst;
+  fst::VectorFst<FstUtils::LogArc> fst;
   assert(fst.NumStates() == 0);
   int startState = fst.AddState();
   fst.SetStart(startState);
@@ -844,13 +843,13 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, LogWeight::One());
+	    fst.SetFinal(toState, FstUtils::LogWeight::One());
 	  }
 	} else {
 	  toState = yIToState[yI];
 	}
 	// now add the arc
-	fst.AddArc(fromState, fst::LogArc(yIM1, yI, weight, toState));	
+	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));	
       }
     }
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
@@ -858,7 +857,7 @@ double LatentCrfModel::ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vec
   }
 
   //  now compute the path sum, i.e. -\log [ \sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i) ]
-  vector<fst::LogWeight> distancesToFinal;
+  vector<FstUtils::LogWeight> distancesToFinal;
   ShortestDistance(fst, &distancesToFinal, true);
 
   //  finally, divide by the denominator
@@ -1014,8 +1013,8 @@ double LatentCrfModel::EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *us
     vector<int> &y = model.labels[sentId];
 
     // build the FSTs
-    VectorFst<LogArc> lambdaFst;
-    vector<fst::LogWeight> lambdaAlphas, lambdaBetas;
+    fst::VectorFst<FstUtils::LogArc> lambdaFst;
+    vector<FstUtils::LogWeight> lambdaAlphas, lambdaBetas;
     model.BuildLambdaFst(x, lambdaFst, lambdaAlphas, lambdaBetas);
 
     // compute the Z value for this sentence
@@ -1167,14 +1166,14 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // - we also need to modify computeNLogC() and computeNLogZ()
     assert(false);
     // build one FST that encodes both ThetaLambdaFst and LambdaFst using LogPair weights
-    VectorFst<LogPairArc> thetaLambdaAndLambdaFst;
+    fst::VectorFst<LogPairArc> thetaLambdaAndLambdaFst;
     vector<LogPairWeight> thetaLambdaAndLambdaAlphas, thetaLambdaAndLambdaBetas;
     model.BuildThetaLambdaAndLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaAndLambdaFst, 
 				       thetaLambdaAndLambdaAlphas, thetaLambdaAndLambdaBetas);
     */
     // build the FSTs
-    VectorFst<LogArc> thetaLambdaFst, lambdaFst;
-    vector<fst::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+    fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
+    vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
     model.BuildThetaLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     model.BuildLambdaFst(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas);
 
@@ -1504,7 +1503,7 @@ void LatentCrfModel::WarmUp() {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now processing sent# " << sentId << endl;
     }
     // build the FST
-    VectorFst<LogArc> lambdaFst;
+    fst::VectorFst<FstUtils::LogArc> lambdaFst;
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() <<", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
     }
@@ -1640,9 +1639,9 @@ void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultino
 
 void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
   if(learningInfo.zIDependsOnYIM1) {
-    MultinomialParams::PersistParams2(thetaParamsFilename, nLogThetaGivenTwoLabels, vocabEncoder);
+    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenTwoLabels, vocabEncoder);
   } else {
-    MultinomialParams::PersistParams1(thetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder);
+    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder);
   }
 }
 
@@ -1851,11 +1850,11 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
 void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
-  VectorFst<LogArc> fst;
-  vector<fst::LogWeight> alphas, betas;
+  fst::VectorFst<FstUtils::LogArc> fst;
+  vector<FstUtils::LogWeight> alphas, betas;
   BuildThetaLambdaFst(tokens, tokens, fst, alphas, betas);
-  VectorFst<StdArc> fst2, shortestPath;
-  fst::ArcMap(fst, &fst2, LogToTropicalMapper());
+  fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
+  fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(fst2, &shortestPath);
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);

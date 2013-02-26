@@ -8,18 +8,6 @@
 
 #include "Samplers.h"
 
-// pair typedef
-typedef fst::ProductWeight<fst::LogWeight, fst::LogWeight> LogPairWeight;
-typedef fst::ProductArc<fst::LogWeight, fst::LogWeight> LogPairArc;
-
-// triple typedef
-typedef fst::ProductWeight<LogPairWeight, fst::LogWeight> LogTripleWeight;
-typedef fst::ProductArc<LogPairWeight, fst::LogWeight> LogTripleArc;
-
-// quadruple typedef
-typedef fst::ProductWeight<LogTripleWeight, fst::LogWeight> LogQuadWeight;
-typedef fst::ProductArc<LogTripleWeight, fst::LogWeight> LogQuadArc;
-
 class FstUtils {
  public:
   static const int LOG_ZERO = 30;
@@ -34,17 +22,68 @@ class FstUtils {
     return exp(-1.0 * exponent);
   }
   
-  static void LinearFstToVector(const fst::VectorFst<fst::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olables, bool keepEpsilons = false);
+  // high precision LogWeight
+  typedef fst::LogWeightTpl<double> LogWeight;
+  typedef fst::TropicalWeightTpl<double> TropicalWeight;
   
-  static void SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize);
+  // high precision StdArc
+  struct StdArc {
+    typedef TropicalWeight Weight;
+    typedef int Label;
+    typedef int StateId;
+    
+    static const std::string &Type() {return type;}
+  StdArc(Label ilabel, Label olabel, Weight weight, StateId nextstate) : ilabel(ilabel), olabel(olabel), weight(weight), nextstate(nextstate) { }
+    StdArc() { ilabel = olabel = nextstate = 0; weight = Weight::Zero(); }
+    
+    const static std::string type;
+    Label ilabel;
+    Label olabel;
+    Weight weight;
+    StateId nextstate;
+  };
   
-  static bool AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<fst::LogArc>& fst2);
+  // high precision LogArc
+  struct LogArc {
+    typedef LogWeight Weight;
+    typedef int Label;
+    typedef int StateId;
+    
+    static const std::string &Type() {return LogArc::type;}
+  LogArc(Label ilabel, Label olabel, Weight weight, StateId nextstate) : ilabel(ilabel), olabel(olabel), weight(weight), nextstate(nextstate) { }
+    LogArc() { ilabel = olabel = nextstate = 0; weight = Weight::Zero(); }
+    ~LogArc() { }
 
-  static int FindFinalState(const fst::VectorFst<LogQuadArc>& fst);
-  static int FindFinalState(const fst::VectorFst<fst::LogArc>& fst);
+    const static std::string type;
+    Label ilabel;
+    Label olabel;
+    Weight weight;
+    StateId nextstate;
+  };
+  
+  // pair typedef
+  typedef fst::ProductWeight<LogWeight, LogWeight> LogPairWeight;
+  typedef fst::ProductArc<LogWeight, LogWeight> LogPairArc;
+  
+  // triple typedef
+  typedef fst::ProductWeight<LogPairWeight, LogWeight> LogTripleWeight;
+  typedef fst::ProductArc<LogPairWeight, LogWeight> LogTripleArc;
+  
+  // quadruple typedef
+  typedef fst::ProductWeight<LogTripleWeight, LogWeight> LogQuadWeight;
+  typedef fst::ProductArc<LogTripleWeight, LogWeight> LogQuadArc;
+  
+  static void LinearFstToVector(const fst::VectorFst<FstUtils::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olables, bool keepEpsilons = false);
+  
+  static void SampleFst(const fst::VectorFst<FstUtils::LogQuadArc>& fst, fst::VectorFst<FstUtils::LogQuadArc>& sampledFst, int sampleSize);
+  
+  static bool AreShadowFsts(const fst::VectorFst<FstUtils::LogQuadArc>& fst1, const fst::VectorFst<FstUtils::LogArc>& fst2);
 
-  static void MakeOneFinalState(fst::VectorFst<fst::LogArc>& fst);
-  static void MakeOneFinalState(fst::VectorFst<LogQuadArc>& fst);
+  static int FindFinalState(const fst::VectorFst<FstUtils::LogQuadArc>& fst);
+  static int FindFinalState(const fst::VectorFst<FstUtils::LogArc>& fst);
+
+  static void MakeOneFinalState(fst::VectorFst<FstUtils::LogArc>& fst);
+  static void MakeOneFinalState(fst::VectorFst<FstUtils::LogQuadArc>& fst);
   
   static LogPairWeight EncodePair(float val1, float val2); 
   static LogTripleWeight EncodeTriple(float val1, float val2, float val3);
@@ -58,10 +97,10 @@ class FstUtils {
   static void DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3);
   static void DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4);
 
-  static string PrintAlignment(const fst::VectorFst< fst::StdArc > &bestAlignment);
+  static string PrintAlignment(const fst::VectorFst< FstUtils::StdArc > &bestAlignment);
 
-  static string PrintWeight(const fst::TropicalWeightTpl<float>& w);
-  static string PrintWeight(const fst::LogWeight& w);
+  static string PrintWeight(const TropicalWeight& w);
+  static string PrintWeight(const LogWeight& w);
   static string PrintWeight(const LogPairWeight& w);
   static string PrintWeight(const LogTripleWeight& w);
   static string PrintWeight(const LogQuadWeight& w);
@@ -136,29 +175,28 @@ class FstUtils {
     //    cerr << "===============TotalProbFst===================" << endl;
     //    cerr << FstUtils::PrintFstSummary(totalProbs) << endl << endl;
   }
-};
 
-// an arc mapper that doesn't change anything in the FST layout, but replaces each LogTripleWeight 
-// with a LogWeight equal to the third component in LogTripleWeight
-struct LogTripleToLogMapper {
-  fst::LogArc operator()(const LogTripleArc &arc) const {
-    float v1, v2, v3;
-    FstUtils::DecodeTriple(arc.weight, v1, v2, v3);
-    return fst::LogArc(arc.ilabel, arc.olabel, v3, arc.nextstate);
-  }
-  fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
-  fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
-  fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
-  uint64 Properties(uint64 props) const { return props; }
-};
+  // an arc mapper that doesn't change anything in the FST layout, but replaces each LogTripleWeight 
+  // with a LogWeight equal to the third component in LogTripleWeight
+  struct LogTripleToLogMapper {
+    FstUtils::LogArc operator()(const FstUtils::LogTripleArc &arc) const {
+      float v1, v2, v3;
+      FstUtils::DecodeTriple(arc.weight, v1, v2, v3);
+      return FstUtils::LogArc(arc.ilabel, arc.olabel, v3, arc.nextstate);
+    }
+    fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
+    fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+    fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
+    uint64 Properties(uint64 props) const { return props; }
+  };
 
-// an arc mapper that doesn't change anything in the FST layout, but replaces each LogTripleWeight 
-// with a LogWeight equal to the third component in LogTripleWeight
+  // an arc mapper that doesn't change anything in the FST layout, but replaces each LogTripleWeight 
+  // with a LogWeight equal to the third component in LogTripleWeight
 struct LogTripleToLogPositionMapper {
-  fst::LogArc operator()(const LogTripleArc &arc) const {
+  FstUtils::LogArc operator()(const FstUtils::LogTripleArc &arc) const {
     float v1, v2, v3;
     FstUtils::DecodeTriple(arc.weight, v1, v2, v3);
-    return fst::LogArc(arc.ilabel, arc.olabel, v3, arc.nextstate);
+    return FstUtils::LogArc(arc.ilabel, arc.olabel, v3, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
@@ -169,10 +207,10 @@ struct LogTripleToLogPositionMapper {
 // an arc mapper that doesn't change anything in the FST layout, but replaces each LogQuadWeight 
 // with a LogWeight equal to the last component in LogQuadWeight
 struct LogQuadToLogMapper {
-  fst::LogArc operator()(const LogQuadArc &arc) const {
+  FstUtils::LogArc operator()(const FstUtils::LogQuadArc &arc) const {
     float v1, v2, v3, v4;
     FstUtils::DecodeQuad(arc.weight, v1, v2, v3, v4);
-    return fst::LogArc(arc.ilabel, arc.olabel, v4, arc.nextstate);
+    return FstUtils::LogArc(arc.ilabel, arc.olabel, v4, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
@@ -184,15 +222,15 @@ struct LogQuadToLogMapper {
 // with a LogWeight equal to the last component in LogQuadWeight, and also changes the input/output
 // labels on each arc from tgtToken/srcToken to tgtPos/srcPos
 struct LogQuadToLogPositionMapper {
-  fst::LogArc operator()(const LogQuadArc &arc) const {
+  FstUtils::LogArc operator()(const FstUtils::LogQuadArc &arc) const {
     float tgtPos, srcPos, v3, logprob;
     FstUtils::DecodeQuad(arc.weight, tgtPos, srcPos, v3, logprob);
     if(arc.ilabel == FstUtils::EPSILON && arc.olabel == FstUtils::EPSILON) {
-      return fst::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, logprob, arc.nextstate);
+      return FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, logprob, arc.nextstate);
     }
     //    cerr << " arc was " << arc.ilabel << ":" << arc.olabel << " (" << tgtPos << ", " << srcPos << ", " << v3 << ", " << logprob << ") =>" << arc.nextstate << endl;
     //    cerr << " arc became " << (int)tgtPos << ":" << (int)srcPos << " (" << logprob << ") =>" << arc.nextstate << endl;
-    return fst::LogArc((int)tgtPos, (int)srcPos, logprob, arc.nextstate);
+    return FstUtils::LogArc((int)tgtPos, (int)srcPos, logprob, arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
@@ -203,8 +241,8 @@ struct LogQuadToLogPositionMapper {
 // an arc mapper that doesn't change anything in the FST layout, but replaces each LogWeight
 // with a TropicalWeight (which has the path property)
 struct LogToTropicalMapper {
-  fst::StdArc operator()(const fst::LogArc &arc) const {
-    return fst::StdArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
+  FstUtils::StdArc operator()(const FstUtils::LogArc &arc) const {
+    return FstUtils::StdArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
@@ -215,13 +253,15 @@ struct LogToTropicalMapper {
 // an arc mapper that doesn't change anything in the FST layout, but replaces each TropicalWeight
 // with a LogWeight (which can be used to run forward backward)
 struct TropicalToLogMapper {
-  fst::LogArc operator()(const fst::StdArc &arc) const {
-    return fst::LogArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
+  FstUtils::LogArc operator()(const FstUtils::StdArc &arc) const {
+    return FstUtils::LogArc(arc.ilabel, arc.olabel, arc.weight.Value(), arc.nextstate);
   }
   fst::MapFinalAction FinalAction() const { return fst::MAP_NO_SUPERFINAL; }
   fst::MapSymbolsAction InputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
   fst::MapSymbolsAction OutputSymbolsAction() const { return fst::MAP_COPY_SYMBOLS; }
   uint64 Properties(uint64 props) const { return props; }
 };
+};
+
 
 #endif

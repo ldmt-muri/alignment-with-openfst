@@ -75,7 +75,7 @@ void HmmModel2::PersistParams(string &prefix) {
 }
 
 // builds the lattice of all possible label sequences
-void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst) {
+void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &fst) {
   // arcs represent a particular choice of y_i at time step i
   // arc weights are - log \theta_{x_i|y_i} - log \gamma_{y_i|y_{i-1}}
   assert(fst.NumStates() == 0);
@@ -124,13 +124,13 @@ void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst) {
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, LogWeight::One());
+	    fst.SetFinal(toState, FstUtils::LogWeight::One());
 	  }
 	} else {
 	  toState = yIToState[yI];
 	}
 	// now add the arc
-	fst.AddArc(fromState, fst::LogArc(yIM1, yI, arcWeight, toState));	
+	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, arcWeight, toState));	
       }
     }
     // now, that all states reached in step i have already been created, yIM1ToState has become out-of-date. update it
@@ -139,7 +139,7 @@ void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst) {
 }
 
 // builds the lattice of all possible label sequences, also computes potentials
-void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas) {
+void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
   // first, build the lattice
   BuildThetaGammaFst(observations[sentId], fst);
@@ -152,9 +152,9 @@ void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst, vect
 }
 
 void HmmModel2::UpdateMle(const unsigned sentId,
-			  const VectorFst<LogArc> &fst, 
-			  const vector<fst::LogWeight> &alphas, 
-			  const vector<fst::LogWeight> &betas, 
+			  const VectorFst<FstUtils::LogArc> &fst, 
+			  const vector<FstUtils::LogWeight> &alphas, 
+			  const vector<FstUtils::LogWeight> &betas, 
 			  ConditionalMultinomialParam<int> &thetaMle, 
 			  ConditionalMultinomialParam<int> &gammaMle){
   vector<int> &x = observations[sentId];
@@ -174,15 +174,15 @@ void HmmModel2::UpdateMle(const unsigned sentId,
       int fromState = *iStatesIter;
 
       // for each arc leaving this state
-      for(ArcIterator< VectorFst<LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	const LogArc &arc = aiter.Value();
+      for(ArcIterator< VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+	const FstUtils::LogArc &arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
-	const fst::LogWeight &arcWeight = arc.weight;
+	const FstUtils::LogWeight &arcWeight = arc.weight;
 	int toState = arc.nextstate;
 
 	// compute marginal weight of passing on this arc
-	const fst::LogWeight nlogWeight(fst::Times(arcWeight , fst::Times(betas[toState], alphas[fromState])));
+	const FstUtils::LogWeight nlogWeight(fst::Times(arcWeight , fst::Times(betas[toState], alphas[fromState])));
 	double nlogProb = fst::Divide(nlogWeight, betas[0]).Value();
 	if(nlogProb < -1.0 || std::isinf(nlogProb) || std::isnan(nlogProb)) {
 	  cerr << "FATAL ERROR: nlogProb = " << nlogProb << " = alpha + arcWeight + beta - betas[0] = " << alphas[fromState].Value() << " + " << arcWeight.Value() << " + " << betas[toState].Value() << " - " << betas[0].Value() << endl << "will terminate." << endl;
@@ -216,8 +216,8 @@ void HmmModel2::Train(){
     double nloglikelihood = 0;
     ConditionalMultinomialParam<int> thetaMle, gammaMle;
     for(unsigned sentId = 0; sentId < observations.size(); sentId++) {
-      VectorFst<LogArc> fst;
-      vector<fst::LogWeight> alphas, betas; 
+      VectorFst<FstUtils::LogArc> fst;
+      vector<FstUtils::LogWeight> alphas, betas; 
       BuildThetaGammaFst(sentId, fst, alphas, betas);
       UpdateMle(sentId, fst, alphas, betas, thetaMle, gammaMle);
       double sentNlogProb = betas[0].Value();
@@ -252,11 +252,11 @@ void HmmModel2::Train(){
 }
 
 void HmmModel2::Label(vector<int> &tokens, vector<int> &labels) {
-  VectorFst<LogArc> fst;
+  VectorFst<FstUtils::LogArc> fst;
   BuildThetaGammaFst(tokens, fst);
 
-  VectorFst<StdArc> fst2, shortestPath;
-  fst::ArcMap(fst, &fst2, LogToTropicalMapper());
+  VectorFst<FstUtils::StdArc> fst2, shortestPath;
+  fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(fst2, &shortestPath);
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);

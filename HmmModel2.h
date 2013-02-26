@@ -25,10 +25,6 @@
 #include "MultinomialParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
 
-using namespace fst;
-using namespace std;
-using namespace MultinomialParams;
-
 class HmmModel2 : public UnsupervisedSequenceTaggingModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
@@ -38,18 +34,18 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   void ClearFractionalCounts();
 
   // builds the lattice of all possible label sequences
-  void BuildThetaGammaFst(vector<int> &x, VectorFst<LogArc> &fst);
+  void BuildThetaGammaFst(vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst);
   
   // builds the lattice of all possible label sequences, also computes potentials
-  void BuildThetaGammaFst(unsigned sentId, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas);
+  void BuildThetaGammaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas);
   
   // traverse each transition on the fst and accumulate the mle counts of theta and gamma
   void UpdateMle(const unsigned sentId,
-		 const VectorFst<LogArc> &fst, 
-		 const vector<fst::LogWeight> &alphas, 
-		 const vector<fst::LogWeight> &betas, 
-		 ConditionalMultinomialParam<int> &thetaMle, 
-		 ConditionalMultinomialParam<int> &gammaMle);
+		 const fst::VectorFst<FstUtils::LogArc> &fst, 
+		 const vector<FstUtils::LogWeight> &alphas, 
+		 const vector<FstUtils::LogWeight> &betas, 
+		 MultinomialParams::ConditionalMultinomialParam<int> &thetaMle, 
+		 MultinomialParams::ConditionalMultinomialParam<int> &gammaMle);
  
   void InitParams();
   
@@ -84,7 +80,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   GaussianSampler gaussianSampler;
 
   // model parameters theta = emission probabilities, alpha = transition prbailibities
-  ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
+  MultinomialParams::ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
   
   // output prefix
   string outputPrefix;

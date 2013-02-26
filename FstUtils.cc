@@ -3,60 +3,62 @@
 using namespace fst;
 
 const float FstUtils::LOG_PROBS_MUST_BE_GREATER_THAN_ME = -0.1;
+const string FstUtils::LogArc::type = "FstUtils::LogArc";
+const string FstUtils::StdArc::type = "FstUtils::StdArc";
 
-LogPairWeight FstUtils::EncodePairInfinity() {
-  return EncodePair(numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
+FstUtils::LogPairWeight FstUtils::FstUtils::EncodePairInfinity() {
+  return FstUtils::EncodePair(numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
 }
 
-LogTripleWeight FstUtils::EncodeTripleInfinity() {
-  return EncodeTriple(numeric_limits<float>::infinity(), numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
+FstUtils::LogTripleWeight FstUtils::FstUtils::EncodeTripleInfinity() {
+  return FstUtils::EncodeTriple(numeric_limits<float>::infinity(), numeric_limits<float>::infinity(), numeric_limits<float>::infinity());
 }
 
-LogQuadWeight FstUtils::EncodeQuadInfinity() {
-  return EncodeQuad(numeric_limits<float>::infinity(), 
+FstUtils::LogQuadWeight FstUtils::FstUtils::EncodeQuadInfinity() {
+  return FstUtils::EncodeQuad(numeric_limits<float>::infinity(), 
 		    numeric_limits<float>::infinity(), 
 		    numeric_limits<float>::infinity(), 
 		    numeric_limits<float>::infinity());
 }
 
-LogPairWeight FstUtils::EncodePair(float val1, float val2) {
-  LogWeight v1, v2;
+FstUtils::LogPairWeight FstUtils::FstUtils::EncodePair(float val1, float val2) {
+  FstUtils::LogWeight v1, v2;
   v1 = val1;
   v2 = val2;
-  return ProductWeight<LogWeight, LogWeight>(v1, v2);
+  return ProductWeight<FstUtils::LogWeight, FstUtils::LogWeight>(v1, v2);
 }
 
-LogTripleWeight FstUtils::EncodeTriple(float val1, float val2, float val3) {
-  LogWeight v3;
+FstUtils::LogTripleWeight FstUtils::FstUtils::EncodeTriple(float val1, float val2, float val3) {
+  FstUtils::LogWeight v3;
   v3 = val3;
-  return LogTripleWeight(EncodePair(val1, val2), v3);
+  return FstUtils::LogTripleWeight(FstUtils::EncodePair(val1, val2), v3);
 }
 
-LogQuadWeight FstUtils::EncodeQuad(float val1, float val2, float val3, float val4) {
-  LogWeight v4;
+FstUtils::LogQuadWeight FstUtils::FstUtils::EncodeQuad(float val1, float val2, float val3, float val4) {
+  FstUtils::LogWeight v4;
   v4 = val4;
-  return LogQuadWeight(EncodeTriple(val1, val2, val3), v4);
+  return FstUtils::LogQuadWeight(FstUtils::EncodeTriple(val1, val2, val3), v4);
 }
 
-string FstUtils::PrintWeight(const TropicalWeightTpl<float>& w) {
+string FstUtils::PrintWeight(const FstUtils::TropicalWeight& w) {
   stringstream ss;
   ss << w.Value();
   return ss.str();
 }
 
-string FstUtils::PrintWeight(const LogWeight& w) {
+string FstUtils::PrintWeight(const FstUtils::LogWeight& w) {
   stringstream ss;
   ss << w.Value();
   return ss.str();
 }
 
-string FstUtils::PrintWeight(const ProductWeight<LogWeight, LogWeight>& w) {
+string FstUtils::PrintWeight(const ProductWeight<FstUtils::LogWeight, FstUtils::LogWeight>& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value() << "," << w.Value2().Value() << ")";
   return ss.str();
 }
 
-string FstUtils::PrintWeight(const LogTripleWeight& w) {
+string FstUtils::PrintWeight(const FstUtils::LogTripleWeight& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value1().Value() 
      << "," << w.Value1().Value2().Value() 
@@ -65,7 +67,7 @@ string FstUtils::PrintWeight(const LogTripleWeight& w) {
   return ss.str();
 }
 
-string FstUtils::PrintWeight(const LogQuadWeight& w) {
+string FstUtils::PrintWeight(const FstUtils::LogQuadWeight& w) {
   stringstream ss;
   ss << "(" << w.Value1().Value1().Value1().Value() 
      << "," << w.Value1().Value1().Value2().Value()
@@ -75,17 +77,17 @@ string FstUtils::PrintWeight(const LogQuadWeight& w) {
   return ss.str();
 }
 
-void FstUtils::DecodePair(const LogPairWeight& w, float& v1, float& v2) {
+void FstUtils::DecodePair(const FstUtils::LogPairWeight& w, float& v1, float& v2) {
   v1 = w.Value1().Value();
   v2 = w.Value2().Value();
 }
 
-void FstUtils::DecodeTriple(const LogTripleWeight& w, float& v1, float& v2, float& v3) {
+void FstUtils::DecodeTriple(const FstUtils::LogTripleWeight& w, float& v1, float& v2, float& v3) {
   DecodePair(w.Value1(), v1, v2);
   v3 = w.Value2().Value();
 }
 
-void FstUtils::DecodeQuad(const LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4) {
+void FstUtils::DecodeQuad(const FstUtils::LogQuadWeight& w, float& v1, float& v2, float& v3, float& v4) {
   DecodeTriple(w.Value1(), v1, v2, v3);
   v4 = w.Value2().Value();
 }
@@ -96,37 +98,37 @@ void FstUtils::MakeOneFinalState(fst::VectorFst<LogQuadArc>& fst) {
   int finalStateId = fst.AddState();
 
   for(StateIterator< VectorFst<LogQuadArc> > siter(fst); !siter.Done(); siter.Next()) {
-    LogQuadWeight stoppingWeight = fst.Final(siter.Value());
-    if(stoppingWeight != LogQuadWeight::Zero()) {
-      fst.SetFinal(siter.Value(), LogQuadWeight::Zero());
+    FstUtils::LogQuadWeight stoppingWeight = fst.Final(siter.Value());
+    if(stoppingWeight != FstUtils::LogQuadWeight::Zero()) {
+      fst.SetFinal(siter.Value(), FstUtils::LogQuadWeight::Zero());
       fst.AddArc(siter.Value(), LogQuadArc(FstUtils::EPSILON, FstUtils::EPSILON, stoppingWeight, finalStateId));
     }
   }
 
-  fst.SetFinal(finalStateId, LogQuadWeight::One());
+  fst.SetFinal(finalStateId, FstUtils::LogQuadWeight::One());
 }
 
 // assumption: the fst has one or more final state
 // output: all states which used to be final in the original fst, are not final now, but they go to a new final state with epsion input/output labels and the transition's weight = the original stopping weight of the corresponding state.
-void FstUtils::MakeOneFinalState(fst::VectorFst<LogArc>& fst) {
+void FstUtils::MakeOneFinalState(fst::VectorFst<FstUtils::LogArc>& fst) {
   int finalStateId = fst.AddState();
 
-  for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
-    LogWeight stoppingWeight = fst.Final(siter.Value());
-    if(stoppingWeight != LogWeight::Zero()) {
-      fst.SetFinal(siter.Value(), LogWeight::Zero());
-      fst.AddArc(siter.Value(), LogArc(FstUtils::EPSILON, FstUtils::EPSILON, stoppingWeight, finalStateId));
+  for(StateIterator< VectorFst<FstUtils::LogArc> > siter(fst); !siter.Done(); siter.Next()) {
+    FstUtils::LogWeight stoppingWeight = fst.Final(siter.Value());
+    if(stoppingWeight != FstUtils::LogWeight::Zero()) {
+      fst.SetFinal(siter.Value(), FstUtils::LogWeight::Zero());
+      fst.AddArc(siter.Value(), FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, stoppingWeight, finalStateId));
     }
   }
 
-  fst.SetFinal(finalStateId, LogWeight::One());
+  fst.SetFinal(finalStateId, FstUtils::LogWeight::One());
 }
 
 // return the id of a final states in this fst. if no final state found, returns -1.
 int FstUtils::FindFinalState(const fst::VectorFst<LogQuadArc>& fst) {
   for(StateIterator< VectorFst<LogQuadArc> > siter(fst); !siter.Done(); siter.Next()) {
     const LogQuadArc::StateId &stateId = siter.Value();
-    if(fst.Final(stateId) != LogQuadWeight::Zero()) {
+    if(fst.Final(stateId) != FstUtils::LogQuadWeight::Zero()) {
       return (int) stateId;
     }
   }
@@ -134,10 +136,10 @@ int FstUtils::FindFinalState(const fst::VectorFst<LogQuadArc>& fst) {
 }
 
 // return the id of a final states in this fst. if no final state found, returns -1.
-int FstUtils::FindFinalState(const fst::VectorFst<LogArc>& fst) {
-  for(StateIterator< VectorFst<LogArc> > siter(fst); !siter.Done(); siter.Next()) {
-    const LogArc::StateId &stateId = siter.Value();
-    if(fst.Final(stateId) != LogWeight::Zero()) {
+int FstUtils::FindFinalState(const fst::VectorFst<FstUtils::LogArc>& fst) {
+  for(StateIterator< VectorFst<FstUtils::LogArc> > siter(fst); !siter.Done(); siter.Next()) {
+    const FstUtils::LogArc::StateId &stateId = siter.Value();
+    if(fst.Final(stateId) != FstUtils::LogWeight::Zero()) {
       return (int) stateId;
     }
   }
@@ -145,7 +147,7 @@ int FstUtils::FindFinalState(const fst::VectorFst<LogArc>& fst) {
 }
 
 // make sure that these two fsts have the same structure, including state ids, input/output labels, and nextstates, but not the weights.
-bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<LogArc>& fst2) {
+bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::VectorFst<FstUtils::LogArc>& fst2) {
   // verify number of states
   if(fst1.NumStates() != fst2.NumStates()) {
     cerr << "different state count" << endl;
@@ -153,7 +155,7 @@ bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::
   }
 
   StateIterator< VectorFst<LogQuadArc> > siter1(fst1);
-  StateIterator< VectorFst<LogArc> > siter2(fst2);
+  StateIterator< VectorFst<FstUtils::LogArc> > siter2(fst2);
   while(!siter1.Done() || !siter2.Done()) {
     // verify state ids
     int from1 = siter1.Value(), from2 = siter2.Value();
@@ -163,7 +165,7 @@ bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::
     }
     
     ArcIterator< VectorFst<LogQuadArc> > aiter1(fst1, from1);
-    ArcIterator< VectorFst<LogArc> > aiter2(fst2, from2);
+    ArcIterator< VectorFst<FstUtils::LogArc> > aiter2(fst2, from2);
     while(!aiter1.Done() || !aiter2.Done()) {
       // verify number of arcs leaving this state
       if(aiter1.Done() || aiter2.Done()) {
@@ -201,7 +203,7 @@ bool FstUtils::AreShadowFsts(const fst::VectorFst<LogQuadArc>& fst1, const fst::
 
 // assumption: 
 // - acyclic fst
-// - the last element in a LogQuadWeight represent the logprob of using this arc, not conditioned on anything.
+// - the last element in a FstUtils::LogQuadWeight represent the logprob of using this arc, not conditioned on anything.
 void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<LogQuadArc>& sampledFst, int sampleSize) {
   assert(sampledFst.NumStates() == 0 && fst.NumStates() > 0);
   
@@ -215,23 +217,23 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
   sampledFst.SetStart(sampledFstStartState);
   int sampledFstFinalState = sampledFst.AddState();
 
-  // create a LogArc shadow fst of 'fst' which can be later used to compute potentials (LogQuadArc is too complex to compute potentials with)
+  // create a FstUtils::LogArc shadow fst of 'fst' which can be later used to compute potentials (LogQuadArc is too complex to compute potentials with)
   clock_t timestamp = clock();
-  fst::VectorFst<fst::LogArc> probFst;
+  fst::VectorFst<FstUtils::LogArc> probFst;
   fst::ArcMap(fst, &probFst, LogQuadToLogMapper());
   assert(AreShadowFsts(fst, probFst));
   cerr << "ArcMap took " << 1.0 * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 
   // compute the potential of each state in fst towards the final state (i.e. unnormalized p(state->final))
   timestamp = clock();
-  std::vector<fst::LogWeight> betas;
+  std::vector<FstUtils::LogWeight> betas;
   fst::ShortestDistance(probFst, &betas, true);
   cerr << "ShortestDistance took " << 1.0  * (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
 
   // set the stopping weight of the sampledFst's final state to the inverse of beta[0] = \sum_{path \in fst} weight(path), 
   // effectively making each complete path in the sampledFst has a proper probability according to the path distribution defined
   // as weights on the fst
-  sampledFst.SetFinal(sampledFstFinalState, EncodeQuad(0.0, 0.0, 0.0, 0.0 - betas[probFst.Start()].Value()));
+  sampledFst.SetFinal(sampledFstFinalState, FstUtils::EncodeQuad(0.0, 0.0, 0.0, 0.0 - betas[probFst.Start()].Value()));
 
   // storage for the alias samplers
   std::map<int,AliasSampler> stateToSampler;
@@ -251,7 +253,7 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
     //cerr << endl << "sample #" << samplesCounter << endl;
 
     // keep adding arcs until we hit a final fst state
-    while(fst.Final(currentFstState) == LogQuadWeight::Zero()) {
+    while(fst.Final(currentFstState) == FstUtils::LogQuadWeight::Zero()) {
 
       // for debugging only
       //cerr << "currentFstState = " << currentFstState << endl;
@@ -299,7 +301,7 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
       currentFstState = chosenArc.nextstate;
       
       // are we done with this sample?
-      if(fst.Final(chosenArc.nextstate) == LogQuadWeight::Zero()) {
+      if(fst.Final(chosenArc.nextstate) == FstUtils::LogQuadWeight::Zero()) {
 	// not yet
 	chosenArc.nextstate = sampledFst.AddState();
       } else {
@@ -322,20 +324,20 @@ void FstUtils::SampleFst(const fst::VectorFst<LogQuadArc>& fst, fst::VectorFst<L
 // - bestAlignment is a linear chain transducer. 
 // - the input labels are tgt positions
 // - the output labels are the corresponding src positions according to the alignment
-string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
+string FstUtils::PrintAlignment(const VectorFst< FstUtils::StdArc > &bestAlignment) {
   stringstream output;
   
   //  cerr << "best alignment FST summary: " << endl;
-  //  cerr << PrintFstSummary<StdArc>(bestAlignment) << endl;
+  //  cerr << PrintFstSummary<FstUtils::StdArc>(bestAlignment) << endl;
 
   // traverse the transducer beginning with the start state
   int startState = bestAlignment.Start();
   int currentState = startState;
   int tgtPos = 0;
-  while(bestAlignment.Final(currentState) == LogWeight::Zero()) {
+  while(bestAlignment.Final(currentState) == FstUtils::LogWeight::Zero()) {
     
     // get hold of the arc
-    ArcIterator< VectorFst< StdArc > > aiter(bestAlignment, currentState);
+    ArcIterator< VectorFst< FstUtils::StdArc > > aiter(bestAlignment, currentState);
 
     // identify the next state
     int nextState = aiter.Value().nextstate;
@@ -378,12 +380,12 @@ string FstUtils::PrintAlignment(const VectorFst< StdArc > &bestAlignment) {
 
 // assumptions:
 // - this fst is linear. no state has more than one outgoing/incoming arc
-void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olabels, bool keepEpsilons) {
+void FstUtils::LinearFstToVector(const fst::VectorFst<FstUtils::StdArc> &fst, std::vector<int> &ilabels, std::vector<int> &olabels, bool keepEpsilons) {
   assert(olabels.size() == 0);
   assert(ilabels.size() == 0);
   int currentState = fst.Start();
   do {
-    ArcIterator< VectorFst<StdArc> > aiter(fst, currentState);
+    ArcIterator< VectorFst<FstUtils::StdArc> > aiter(fst, currentState);
     if(keepEpsilons || aiter.Value().ilabel != EPSILON) {
       ilabels.push_back(aiter.Value().ilabel);
     }
@@ -394,5 +396,5 @@ void FstUtils::LinearFstToVector(const fst::VectorFst<StdArc> &fst, std::vector<
     // assert it's a linear FST
     aiter.Next();
     assert(aiter.Done()); 
-  } while(fst.Final(currentState) == fst::TropicalWeight::Zero());
+  } while(fst.Final(currentState) == FstUtils::TropicalWeight::Zero());
 }

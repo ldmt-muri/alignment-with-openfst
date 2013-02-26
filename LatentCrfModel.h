@@ -37,15 +37,13 @@
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
 
-using namespace fst;
-using namespace std;
 namespace mpi = boost::mpi;
 
 // implements the model described at doc/LatentCrfModel.tex
 class LatentCrfModel {
 
-  LatentCrfModel(const string &textFilename, 
-		 const string &outputPrefix, 
+  LatentCrfModel(const std::string &textFilename, 
+		 const std::string &outputPrefix, 
 		 LearningInfo &learningInfo);
   
   ~LatentCrfModel();
@@ -60,9 +58,9 @@ class LatentCrfModel {
   // normalize soft counts with identical content to sum to one
   template <typename ContextType>
     void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
-			   map<ContextType, double> &mleMarginals) {
+			   std::map<ContextType, double> &mleMarginals) {
     // fix theta mle estimates
-    for(typename map<ContextType, MultinomialParams::MultinomialParam >::const_iterator yIter = mle.params.begin(); yIter != mle.params.end(); yIter++) {
+    for(typename std::map<ContextType, MultinomialParams::MultinomialParam >::const_iterator yIter = mle.params.begin(); yIter != mle.params.end(); yIter++) {
       ContextType y_ = yIter->first;
       double unnormalizedMarginalProbz_giveny_ = 0.0;
       // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
@@ -117,69 +115,69 @@ class LatentCrfModel {
   static FastSparseVector<double> AccumulateDerivatives(const FastSparseVector<double> &v1, const FastSparseVector<double> &v2);
 
   // builds an FST to computes B(x,z)
-  void BuildThetaLambdaFst(const vector<int> &x, const vector<int> &z, 
-			   VectorFst<LogArc> &fst, vector<fst::LogWeight>& alphas, vector<fst::LogWeight>& betas);
+  void BuildThetaLambdaFst(const std::vector<int> &x, const std::vector<int> &z, 
+			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, std::vector<FstUtils::LogWeight>& betas);
 
   // build an FST to compute Z(x)
-  void BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst);
+  void BuildLambdaFst(const std::vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst);
 
   // build an FST to compute Z(x). also computes potentials
-  void BuildLambdaFst(const vector<int> &x, VectorFst<LogArc> &fst, vector<fst::LogWeight> &alphas, vector<fst::LogWeight> &betas);
+  void BuildLambdaFst(const std::vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
 
   // compute the partition function Z_\lambda(x)
-  double ComputeNLogZ_lambda(const vector<int> &x); // much slower
-  double ComputeNLogZ_lambda(const VectorFst<LogArc> &fst, const vector<fst::LogWeight> &betas); // much faster
+  double ComputeNLogZ_lambda(const std::vector<int> &x); // much slower
+  double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
 
   // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
   // assumptions: BXZ is cleared
-  void ComputeB(const vector<int> &x, const vector<int> &z, 
-		const VectorFst<LogArc> &fst, 
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-		map< int, map< int, LogVal<double> > > &BXZ);
+  void ComputeB(const std::vector<int> &x, const std::vector<int> &z, 
+		const fst::VectorFst<FstUtils::LogArc> &fst, 
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
+		std::map< int, std::map< int, LogVal<double> > > &BXZ);
 
   // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
   // assumptions: BXZ is cleared
-  void ComputeB(const vector<int> &x, const vector<int> &z, 
-		const VectorFst<LogArc> &fst, 
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas, 
-		map< std::pair<int, int>, map< int, LogVal<double> > > &BXZ);
+  void ComputeB(const std::vector<int> &x, const std::vector<int> &z, 
+		const fst::VectorFst<FstUtils::LogArc> &fst, 
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
+		std::map< std::pair<int, int>, std::map< int, LogVal<double> > > &BXZ);
 
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
   // - FXZk is cleared
-  void ComputeF(const vector<int> &x, 
-		const VectorFst<LogArc> &fst,
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+  void ComputeF(const std::vector<int> &x, 
+		const fst::VectorFst<FstUtils::LogArc> &fst,
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		FastSparseVector<LogVal<double> > &FXZk);
 
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(const vector<int> &x, const vector<int> &z,
-		const VectorFst<LogArc> &fst,
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
-		map<string, double> &DXZk);
+  void ComputeD(const std::vector<int> &x, const std::vector<int> &z,
+		const fst::VectorFst<FstUtils::LogArc> &fst,
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
+		std::map<std::string, double> &DXZk);
 
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(const vector<int> &x, const vector<int> &z, 
-		const VectorFst<LogArc> &fst,
-		const vector<fst::LogWeight> &alphas, const vector<fst::LogWeight> &betas,
+  void ComputeD(const std::vector<int> &x, const std::vector<int> &z, 
+		const fst::VectorFst<FstUtils::LogArc> &fst,
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		FastSparseVector<LogVal<double> > &DXZk);
     
   // assumptions:
   // - fst, betas are populated using BuildThetaLambdaFst()
-  double ComputeNLogC(const VectorFst<LogArc> &fst,
-		      const vector<fst::LogWeight> &betas);
+  double ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
+		      const std::vector<FstUtils::LogWeight> &betas);
     
   // compute p(y, z | x) = \frac{\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)}{Z_\lambda(x)}
-  double ComputeNLogPrYZGivenX(vector<int>& x, vector<int>& y, vector<int>& z);
+  double ComputeNLogPrYZGivenX(std::vector<int>& x, std::vector<int>& y, std::vector<int>& z);
 
   // copute p(y | x, z) = \frac  {\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)} 
   //                             -------------------------------------------
   //                             {\sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)}
-  double ComputeNLogPrYGivenXZ(vector<int> &x, vector<int> &y, vector<int> &z);
+  double ComputeNLogPrYGivenXZ(std::vector<int> &x, std::vector<int> &y, std::vector<int> &z);
     
   double ComputeCorpusNloglikelihood();
 
@@ -190,8 +188,8 @@ class LatentCrfModel {
   void BroadcastLambdas();
     
   // fire features in this sentence
-  void FireFeatures(const vector<int> &x,
-		    const VectorFst<LogArc> &fst,
+  void FireFeatures(const std::vector<int> &x,
+		    const fst::VectorFst<FstUtils::LogArc> &fst,
 		    FastSparseVector<double> &h);
 
   // add constrained features with hand-crafted weights
@@ -200,17 +198,17 @@ class LatentCrfModel {
   void BroadcastTheta();
 
   void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
-			     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels,
-			     map<int, double> mleMarginalsGivenOneLabel,
-			     map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
+			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > mleGivenTwoLabels,
+			     std::map<int, double> mleMarginalsGivenOneLabel,
+			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
     
 
  public:
 
   static LatentCrfModel& GetInstance();
 
-  static LatentCrfModel& GetInstance(const string &textFilename, 
-				     const string &outputPrefix, 
+  static LatentCrfModel& GetInstance(const std::string &textFilename, 
+				     const std::string &outputPrefix, 
 				     LearningInfo &learningInfo);
 
   // aggregates sets for the mpi reduce operation
@@ -230,14 +228,14 @@ class LatentCrfModel {
   void Train();
 
   // given an observation sequence x (i.e. tokens), find the most likely label sequence y (i.e. labels)
-  void Label(vector<int> &tokens, vector<int> &labels);
-  void Label(vector<string> &tokens, vector<int> &labels);
-  void Label(vector<vector<int> > &tokens, vector<vector<int> > &lables);
-  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels);
-  void Label(string &inputFilename, string &outputFilename);
+  void Label(std::vector<int> &tokens, std::vector<int> &labels);
+  void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
+  void Label(std::vector<std::vector<int> > &tokens, std::vector<std::vector<int> > &lables);
+  void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
+  void Label(std::string &inputFilename, std::string &outputFilename);
 
   // analyze
-  void Analyze(string &inputFilename, string &outputFilename);
+  void Analyze(std::string &inputFilename, std::string &outputFilename);
 
   // evaluate
   double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
@@ -251,27 +249,27 @@ class LatentCrfModel {
   
   template <typename ContextType>
   void UpdateThetaMleForSent(const unsigned sentId, 
-					     MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
-					     map<ContextType, double> &mleMarginals) {
+			     MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
+			     std::map<ContextType, double> &mleMarginals) {
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "sentId = " << sentId << endl;
+      std::cerr << "sentId = " << sentId << endl;
     }
     assert(sentId < data.size());
     // build the FST
-    VectorFst<LogArc> thetaLambdaFst;
-    vector<fst::LogWeight> alphas, betas;
+    fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
+    std::vector<FstUtils::LogWeight> alphas, betas;
     BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
     // compute the B matrix for this sentence
-    map< ContextType, map< int, LogVal<double> > > B;
+    std::map< ContextType, std::map< int, LogVal<double> > > B;
     B.clear();
     ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
     // compute the C value for this sentence
     double nLogC = ComputeNLogC(thetaLambdaFst, betas);
     //cerr << "nloglikelihood += " << nLogC << endl;
     // update mle for each z^*|y^* fired
-    for(typename map< ContextType, map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    for(typename std::map< ContextType, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
       const ContextType &y_ = yIter->first;
-      for(map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
 	int z_ = zIter->first;
 	double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
 	double bOverC = MultinomialParams::nExp(nLogb - nLogC);
@@ -282,17 +280,17 @@ class LatentCrfModel {
   }
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-			     map<int, double> &mleMarginalsGivenOneLabel,
-			     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
-			     map< pair<int, int>, double> &mleMarginalsGivenTwoLabels);
+			     std::map<int, double> &mleMarginalsGivenOneLabel,
+			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
+			     std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
 
   void InitTheta();
 
   double GetNLogTheta(int yim1, int yi, int zi);
 
-  void PersistTheta(string thetaParamsFilename);
+  void PersistTheta(std::string thetaParamsFilename);
 
-  void SupervisedTrain(string goldLabelsFilename);
+  void SupervisedTrain(std::string goldLabelsFilename);
 
   static double EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *uselessPtr,
 								 const double *lambdasArray,
@@ -301,7 +299,7 @@ class LatentCrfModel {
 								 const double step);
 
  public:
-  vector<vector<int> > data, labels;
+  std::vector<std::vector<int> > data, labels;
   LearningInfo learningInfo;
   LogLinearParams *lambda;
 
@@ -310,8 +308,8 @@ class LatentCrfModel {
   MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
-  string textFilename, outputPrefix;
-  set<int> xDomain, yDomain;
+  std::string textFilename, outputPrefix;
+  std::set<int> xDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;
   unsigned countOfConstrainedLambdaParameters;

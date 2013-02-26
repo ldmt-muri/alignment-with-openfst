@@ -28,4 +28,5 @@
 #mpirun -np 28 ./train-latentCrfModel example/tb3-pos-wsj-1000.eng example/run.latent-crf.$1 example/tb3-pos-wsj-1000.pos
 
 make -f Makefile-hmm2
-mpirun -np 1 ./train-hmm2 example/tb3-pos-wsj-1000.eng example/run.hmm.$1 example/tb3-pos-wsj-1000.pos
+mpirun -np 1 ./train-hmm2 example/tb3-pos-wsj-1000.eng example/run.hmm.$1 example/tb3-pos-wsj-1000.pos &> example/run.hmm.$1.log
+
