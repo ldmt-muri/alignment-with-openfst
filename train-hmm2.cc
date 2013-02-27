@@ -45,10 +45,10 @@ int main(int argc, char **argv) {
     cerr << "master" << world.rank() << ": setting configurations..." << endl;
   }
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 100;
+  learningInfo.maxIterationsCount = 300;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.0002;
+  learningInfo.minLikelihoodRelativeDiff = 0.00001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
   // initialize the model
   unsigned NUMBER_OF_LABELS = 45;
-  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
+  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, 4);
 
   // train model parameters
   if(world.rank() == 0) {

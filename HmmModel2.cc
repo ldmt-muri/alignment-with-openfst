@@ -8,16 +8,18 @@ using namespace boost;
 HmmModel2::HmmModel2(const string &textFilename, 
 		     const string &outputPrefix, 
 		     LearningInfo &learningInfo,
-		     unsigned numberOfLabels) : 
+		     unsigned numberOfLabels,
+		     unsigned firstLabelId) : 
   UnsupervisedSequenceTaggingModel(textFilename),
   gaussianSampler(0.0, 1.0),
-  START_OF_SENTENCE_Y_VALUE(2),
-  FIRST_ALLOWED_LABEL_VALUE(4) {
-  
+  START_OF_SENTENCE_Y_VALUE(firstLabelId-1),
+  FIRST_ALLOWED_LABEL_VALUE(firstLabelId) {
+    
   this->outputPrefix = outputPrefix;
   this->learningInfo = learningInfo;
   
   assert(numberOfLabels > 1);
+  assert(firstLabelId > 1);
   yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned labelId = START_OF_SENTENCE_Y_VALUE + 1; labelId < START_OF_SENTENCE_Y_VALUE + numberOfLabels + 1 ; labelId++) {
     yDomain.insert(labelId);

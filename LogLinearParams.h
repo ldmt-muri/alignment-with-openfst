@@ -153,6 +153,11 @@ class LogLinearParams {
     }
   }  
 
+  // checks whether a parameter exists
+  inline bool ParamExists(const std::string paramId) {
+    return paramIndexes.count(paramId) == 1;
+  }
+
   // returns the int index of the parameter in the underlying array
   inline unsigned GetParamIndex(const std::string paramId) {
     AddParam(paramId);

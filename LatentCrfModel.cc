@@ -7,9 +7,13 @@ using namespace OptAlgorithm;
 LatentCrfModel* LatentCrfModel::instance = 0;
 
 // singleton
-LatentCrfModel& LatentCrfModel::GetInstance(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo) {
+LatentCrfModel& LatentCrfModel::GetInstance(const string &textFilename, 
+					    const string &outputPrefix, 
+					    LearningInfo &learningInfo, 
+					    unsigned NUMBER_OF_LABELS, 
+					    unsigned FIRST_LABEL_ID) {
   if(!LatentCrfModel::instance) {
-    LatentCrfModel::instance = new LatentCrfModel(textFilename, outputPrefix, learningInfo);
+    LatentCrfModel::instance = new LatentCrfModel(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
   }
   return *LatentCrfModel::instance;
 }
@@ -27,7 +31,11 @@ LatentCrfModel::~LatentCrfModel() {
 }
 
 // initialize model weights to zeros
-LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputPrefix, LearningInfo &learningInfo, unsigned NUMBER_OF_LABELS) : 
+LatentCrfModel::LatentCrfModel(const string &textFilename, 
+			       const string &outputPrefix, 
+			       LearningInfo &learningInfo, 
+			       unsigned NUMBER_OF_LABELS, 
+			       unsigned FIRST_LABEL_ID) : 
   vocabEncoder(textFilename),
   gaussianSampler(0.0, 10.0) {
 
@@ -50,12 +58,13 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   this->lambda->SetLearningInfo(learningInfo);
   
   // set constants
-  this->START_OF_SENTENCE_Y_VALUE = 2;
-  this->END_OF_SENTENCE_Y_VALUE = 3;
-  this->FIRST_ALLOWED_LABEL_VALUE = 4;
+  this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
+  this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
+  assert(START_OF_SENTENCE_Y_VALUE > 0);
 
   // POS tag yDomain
   unsigned latentClasses = NUMBER_OF_LABELS;
+  assert(latentClasses > 1);
   this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
     this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
@@ -92,11 +101,11 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   }
   enabledFeatureTypes[51] = true; // y_i:y_{i-1}
   //  enabledFeatureTypes[52] = true;
-  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
+  //  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
   enabledFeatureTypes[54] = true; // y_i:x_i
-  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
+  //  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
   //enabledFeatureTypes[56] = true;
-  enabledFeatureTypes[57] = true; // y_i:i
+  //  enabledFeatureTypes[57] = true; // y_i:i
   //  enabledFeatureTypes[58] = true;
   //  enabledFeatureTypes[59] = true;
   //  enabledFeatureTypes[60] = true;
@@ -105,10 +114,10 @@ LatentCrfModel::LatentCrfModel(const string &textFilename, const string &outputP
   //  enabledFeatureTypes[63] = true;
   //  enabledFeatureTypes[64] = true;
   //  enabledFeatureTypes[65] = true;
-  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
-  enabledFeatureTypes[67] = true; // capital and i != 0
+  //  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
+  //  enabledFeatureTypes[67] = true; // capital and i != 0
   //enabledFeatureTypes[68] = true;
-  enabledFeatureTypes[69] = true; // coarse hash functions
+  //  enabledFeatureTypes[69] = true; // coarse hash functions
   //enabledFeatureTypes[70] = true;
   //enabledFeatureTypes[71] = true; // y_i:x_{i-1} where x_{i-1} is closed vocab
   //enabledFeatureTypes[72] = true;
@@ -166,8 +175,8 @@ void LatentCrfModel::AddEnglishClosedVocab() {
 }
 
 void LatentCrfModel::InitTheta() {
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "initializing thetas...";
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= ESSENTIAL) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
   }
 
   // first initialize nlogthetas to unnormalized gaussians
@@ -886,8 +895,10 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   int allSents = -1;
   int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedNLoglikelihoodYGivenX, 
 			  EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda, LbfgsProgressReport, &allSents, &lbfgsParams);
+  if(leanringInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+  }
   if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": loglikelihood_{p(y|x)}(\\lambda) = " << -optimizedNLoglikelihoodYGivenX << endl;
   }
   
@@ -1300,7 +1311,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
   }
   // debug
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH && model.learningInfo.mpiWorld->rank() == 0) {
-    cerr << "master" << model.learningInfo.mpiWorld->rank() << ": -eval(nloglikelihood=" << nlogLikelihood << ",totalMoveAwayPenalty=" << totalMoveAwayPenalty << ")\n";
+    cerr << endl << "master" << model.learningInfo.mpiWorld->rank() << ": -eval(nloglikelihood=" << nlogLikelihood << ",totalMoveAwayPenalty=" << totalMoveAwayPenalty << ")\n";
   }
 
   if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
@@ -1353,7 +1364,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   
   // show progress
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH && model.learningInfo.mpiWorld->rank() == 0) {
-    cerr << "-report sents:" << from << "-" << to;
+    cerr << "master" << model.learningInfo.mpiWorld->rank() << ": -report sents:" << from << "-" << to;
     cerr << "\tlbfgs Iteration " << k;
     cerr << ":\tobjective = " << fx;
   }
@@ -1545,7 +1556,7 @@ void LatentCrfModel::WarmUp() {
   }
   
   // master broadcasts the full set of features to all slaves
-  lambda->Broadcast(*learningInfo.mpiWorld, 0);
+  BroadcastLambdas();
   if(learningInfo.debugLevel == DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": sent/received the lambda parameters that includes everything" << endl;
   }
@@ -1648,7 +1659,7 @@ void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
 void LatentCrfModel::BlockCoordinateDescent() {  
   
   BroadcastTheta();
-  lambda->Broadcast(*learningInfo.mpiWorld, 0);
+  BroadcastLambdas();
 
   // TRAINING ITERATIONS
   bool converged = false;
@@ -1695,7 +1706,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
-      cerr << "master sends the normalized thetas to all slaves";
+      cerr << "master sends the normalized thetas to all slaves...";
     }
 
     // update nLogTheta on slaves
@@ -1813,7 +1824,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
-      cerr << "finished coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
+      cerr << endl << "master" << learningInfo.mpiWorld->rank() << ": finished coordinate descent iteration #" << learningInfo.iterationsCount << " nloglikelihood=" << nlogLikelihood << endl;
     }
     
     // update learningInfo

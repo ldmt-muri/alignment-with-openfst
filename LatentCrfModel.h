@@ -44,7 +44,9 @@ class LatentCrfModel {
 
   LatentCrfModel(const std::string &textFilename, 
 		 const std::string &outputPrefix, 
-		 LearningInfo &learningInfo);
+		 LearningInfo &learningInfo,
+		 unsigned numberOfLabels,
+		 unsigned firstLabelId);
   
   ~LatentCrfModel();
 
@@ -184,9 +186,6 @@ class LatentCrfModel {
   // configure lbfgs parameters according to the LearningInfo member of the model
   lbfgs_parameter_t SetLbfgsConfig();
 
-  // broadcasts the essential member variables in LogLinearParam
-  void BroadcastLambdas();
-    
   // fire features in this sentence
   void FireFeatures(const std::vector<int> &x,
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
@@ -194,8 +193,6 @@ class LatentCrfModel {
 
   // add constrained features with hand-crafted weights
   void AddConstrainedFeatures();
-
-  void BroadcastTheta();
 
   void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
 			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > mleGivenTwoLabels,
@@ -209,7 +206,9 @@ class LatentCrfModel {
 
   static LatentCrfModel& GetInstance(const std::string &textFilename, 
 				     const std::string &outputPrefix, 
-				     LearningInfo &learningInfo);
+				     LearningInfo &learningInfo, 
+				     unsigned NUMBER_OF_LABELS, 
+				     unsigned FIRST_LABEL_ID);
 
   // aggregates sets for the mpi reduce operation
   static std::set<std::string> AggregateSets(const std::set<std::string> &v1, const std::set<std::string> &v2);
@@ -247,6 +246,13 @@ class LatentCrfModel {
 				       MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
 				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
+  // broadcasts the essential member variables in LogLinearParam
+  void BroadcastLambdas() {
+    lambda->Broadcast(*learningInfo.mpiWorld, 0);
+  }
+    
+  void BroadcastTheta();
+
   template <typename ContextType>
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
@@ -302,10 +308,10 @@ class LatentCrfModel {
   std::vector<std::vector<int> > data, labels;
   LearningInfo learningInfo;
   LogLinearParams *lambda;
-
- private:
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
   MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
+
+ private:
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   std::string textFilename, outputPrefix;

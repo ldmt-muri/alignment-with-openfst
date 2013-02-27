@@ -54,9 +54,8 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   HmmModel2(const string &textFilename, 
 	    const string &outputPrefix, 
 	    LearningInfo &learningInfo,
-	    unsigned numberOfLabels);
-
-  ~HmmModel2() {}
+	    unsigned numberOfLabels,
+	    unsigned firstLabelId);
 
   void PersistParams(string &filename);
   
@@ -79,15 +78,16 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   // gaussian sampler
   GaussianSampler gaussianSampler;
 
-  // model parameters theta = emission probabilities, alpha = transition prbailibities
-  MultinomialParams::ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
-  
   // output prefix
   string outputPrefix;
   
   // possible values x_i and y_i may take
   set<int> xDomain, yDomain;
-  
+
+ public:
+  // model parameters theta = emission probabilities, alpha = transition prbailibities
+  MultinomialParams::ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
+    
 };
 
 #endif

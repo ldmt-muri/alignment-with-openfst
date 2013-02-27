@@ -22,7 +22,7 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   }
 }
 
-void HmmInitialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, int NUMBER_OF_LABELS, LatentCrfModel &latentCrfModel) {
+void HmmInitialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, int NUMBER_OF_LABELS, LatentCrfModel &latentCrfModel, int FIRST_LABEL_ID, string goldLabelsFilename) {
 
   // hmm initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
   assert(latentCrfModel.learningInfo.zIDependsOnYIM1 == false);
@@ -31,8 +31,9 @@ void HmmInitialize(mpi::communicator world, string textFilename, string outputFi
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": training the hmm model to initialize latentCrfModel parameters..." << endl;
   } else {
-    return null;
+    return;
   }
+
   LearningInfo learningInfo;
   learningInfo.maxIterationsCount = 15;
   learningInfo.useMaxIterationsCount = true;
@@ -47,22 +48,17 @@ void HmmInitialize(mpi::communicator world, string textFilename, string outputFi
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  HmmModel2 hmmModel = new HmmModel2(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
+  HmmModel2 hmmModel(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
 
   // train model parameters
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": train the model..." << endl;
   }
-  model.Train();
+  hmmModel.Train();
   if(world.rank() == 0) {
     cerr << "training finished!" << endl;
   }
   
-  // we don't need the slaves anymore
-  if(world.rank() > 0) {
-    return 0;
-  }
-
   // persist hmm params
   string finalParamsPrefix = outputFilenamePrefix + ".final";
   hmmModel.PersistParams(finalParamsPrefix);
@@ -81,16 +77,39 @@ void HmmInitialize(mpi::communicator world, string textFilename, string outputFi
     cerr << "many-to-one = " << manyToOne;
   }
 
-  // now initialize the relevant latent crf model parameters
+  // now initialize the latentCrfModel's theta parameters
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
-  for(map<int, MultinomialParam>::iterator contextIter = latentCrfModel.nLogThetaGivenOneLabel.params.begin(); 
+  for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfModel.nLogThetaGivenOneLabel.params.begin(); 
       contextIter != latentCrfModel.nLogThetaGivenOneLabel.params.end();
       contextIter++) {
-    assert(false); // TODO copy the corresponding parameter value from hte hmm model, but first make sure the latent classes are IDENTICAL!
+    for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+      probIter->second = hmmModel.nlogTheta[contextIter->first][probIter->second];
+    }
   }
   
-  assert(false);// TODO for each transition prob in hmm, set the corresponding weight of the crf model to nlogprob of the hmm parameter
-
+  // then initialize the "transition" latentCrfModel's lambda parameters
+  for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = hmmModel.nlogGamma.params.begin();
+      contextIter != hmmModel.nlogGamma.params.end();
+      contextIter++) {
+    const int yIM1 = contextIter->first;
+    for(map<int, double>::const_iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+      int yI = probIter->first;
+      const double hmmNlogProb = probIter->second;
+      stringstream temp;
+      temp << "F51:" << yIM1 << ":" << yI;
+      if(!latentCrfModel.lambda->ParamExists(temp.str())) {
+	cerr << "parameter " << temp.str() << " exists as a transition feature in the hmm model, but was not found in the latentCrfModel." << endl;
+	cerr << "============================================" << endl;
+	cerr << "hmm params: " << endl;
+	hmmModel.nlogGamma.PrintParams();
+	cerr << "============================================" << endl;
+	cerr << "latentCrfModel params: " << endl;
+	latentCrfModel.lambda->PrintParams();
+	assert(false);
+      }
+      latentCrfModel.lambda->UpdateParam(temp.str(), hmmNlogProb);
+    }
+  }
 }
 
 int main(int argc, char **argv) {  
@@ -123,6 +142,7 @@ int main(int argc, char **argv) {
   }
 
   unsigned NUMBER_OF_LABELS = 45;
+  unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
   int seed = time(NULL);
@@ -163,6 +183,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
+  learningInfo.supervisedTraining = false;
 
   // add constraints
   learningInfo.constraints.clear();
@@ -171,10 +192,12 @@ int main(int argc, char **argv) {
   }
   
   // initialize the model
-  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS);
+  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
   
   // hmm initialization
-  HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, model);
+  HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, model, FIRST_LABEL_ID, goldLabelsFilename);
+  model.BroadcastTheta();
+  model.BroadcastLambdas();
 
   // use gold labels to do supervised training
   if(learningInfo.supervisedTraining) {
