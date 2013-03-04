@@ -6,7 +6,7 @@
 #include <sstream>
 #include <set>
 
-#include "liblbfgs/include/lbfgs.h"
+#include "lbfgs.h"
 
 typedef std::string string;
 typedef std::stringstream stringstream;
