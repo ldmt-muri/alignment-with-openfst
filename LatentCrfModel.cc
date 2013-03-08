@@ -37,7 +37,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       unsigned NUMBER_OF_LABELS, 
 			       unsigned FIRST_LABEL_ID) : 
   vocabEncoder(textFilename),
-  gaussianSampler(0.0, 10.0) {
+  gaussianSampler(0.0, 10.0),
+  UnsupervisedSequenceTaggingModel(textFilename) {
 
   countOfConstrainedLambdaParameters = 0;
 
@@ -175,7 +176,7 @@ void LatentCrfModel::AddEnglishClosedVocab() {
 }
 
 void LatentCrfModel::InitTheta() {
-  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= ESSENTIAL) {
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
   }
 
@@ -895,7 +896,7 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   int allSents = -1;
   int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedNLoglikelihoodYGivenX, 
 			  EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda, LbfgsProgressReport, &allSents, &lbfgsParams);
-  if(leanringInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
   }
   if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
