@@ -70,7 +70,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   const int START_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   
   // configurations
-  LearningInfo learningInfo;
+  LearningInfo *learningInfo;
   
   // training data
   vector< vector<int> > observations;

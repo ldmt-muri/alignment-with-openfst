@@ -252,11 +252,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
   // broadcasts the essential member variables in LogLinearParam
-  void BroadcastLambdas() {
-    lambda->Broadcast(*learningInfo.mpiWorld, 0);
+  void BroadcastLambdas(unsigned rankId = 0) {
+    lambda->Broadcast(*learningInfo.mpiWorld, rankId);
   }
     
-  void BroadcastTheta();
+  void BroadcastTheta(unsigned rankId = 0);
 
   template <typename ContextType>
   void UpdateThetaMleForSent(const unsigned sentId, 
