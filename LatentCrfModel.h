@@ -43,40 +43,12 @@ namespace mpi = boost::mpi;
 // implements the model described at doc/LatentCrfModel.tex
 class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
+  // template and inline member functions
+#include "LatentCrfModel-inl.h"
+
   // optimize the likelihood with block coordinate descent
   void BlockCoordinateDescent();
 
-  // normalize soft counts with identical content to sum to one
-  template <typename ContextType>
-    void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
-			   std::map<ContextType, double> &mleMarginals) {
-    // fix theta mle estimates
-    for(typename std::map<ContextType, MultinomialParams::MultinomialParam >::const_iterator yIter = mle.params.begin(); yIter != mle.params.end(); yIter++) {
-      ContextType y_ = yIter->first;
-      double unnormalizedMarginalProbz_giveny_ = 0.0;
-      // verify that \sum_z* mle[y*][z*] = mleMarginals[y*]
-      for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	int z_ = zIter->first;
-	double unnormalizedProbz_giveny_ = zIter->second;
-	unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
-      }
-      if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
-	cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
-	cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
-	cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
-	cerr << " --error ignored, but try to figure out what's wrong!" << endl;
-      }
-      // normalize the mle estimates to sum to one for each context
-      for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	int z_ = zIter->first;
-	double normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
-	mle[y_][z_] = normalizedProbz_giveny_;
-	// take the nlog
-	mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
-      }
-    }
-  }
-  
   // call back function for simulated annealing
   static float EvaluateNLogLikelihood(float *lambdasArray);
 
@@ -84,19 +56,19 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   static FastSparseVector<double> AccumulateDerivatives(const FastSparseVector<double> &v1, const FastSparseVector<double> &v2);
 
   // compute the partition function Z_\lambda(x)
-  double ComputeNLogZ_lambda(const std::vector<int> &x); // much slower
+  double ComputeNLogZ_lambda(unsigned sentId); // much slower
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
 
   // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
   // assumptions: BXZ is cleared
-  void ComputeB(const std::vector<int> &x, const std::vector<int> &z, 
+  void ComputeB(unsigned sentId, const std::vector<int> &z, 
 		const fst::VectorFst<FstUtils::LogArc> &fst, 
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
 		std::map< int, std::map< int, LogVal<double> > > &BXZ);
 
   // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
   // assumptions: BXZ is cleared
-  void ComputeB(const std::vector<int> &x, const std::vector<int> &z, 
+  void ComputeB(unsigned sentId, const std::vector<int> &z, 
 		const fst::VectorFst<FstUtils::LogArc> &fst, 
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
 		std::map< std::pair<int, int>, std::map< int, LogVal<double> > > &BXZ);
@@ -107,12 +79,12 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		      const std::vector<FstUtils::LogWeight> &betas);
     
   // compute p(y, z | x) = \frac{\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)}{Z_\lambda(x)}
-  double ComputeNLogPrYZGivenX(std::vector<int>& x, std::vector<int>& y, std::vector<int>& z);
+  double ComputeNLogPrYZGivenX(unsigned sentId, const std::vector<int>& y, const std::vector<int>& z);
 
   // copute p(y | x, z) = \frac  {\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)} 
   //                             -------------------------------------------
   //                             {\sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)}
-  double ComputeNLogPrYGivenXZ(std::vector<int> &x, std::vector<int> &y, std::vector<int> &z);
+  double ComputeNLogPrYGivenXZ(unsigned sentId, const std::vector<int> &y, const std::vector<int> &z);
     
   double ComputeCorpusNloglikelihood();
 
@@ -149,19 +121,19 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				 int ls);
 
   // builds an FST to computes B(x,z)
-  void BuildThetaLambdaFst(const std::vector<int> &x, const std::vector<int> &z, 
+  void BuildThetaLambdaFst(unsigned sentId, const std::vector<int> &z, 
 			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, std::vector<FstUtils::LogWeight>& betas);
 
   // build an FST to compute Z(x)
-  void BuildLambdaFst(const std::vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
 
   // build an FST to compute Z(x). also computes potentials
-  void BuildLambdaFst(const std::vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
 
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
   // - FXZk is cleared
-  void ComputeF(const std::vector<int> &x, 
+  void ComputeF(unsigned sentId, 
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		FastSparseVector<LogVal<double> > &FXZk);
@@ -169,7 +141,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(const std::vector<int> &x, const std::vector<int> &z,
+  void ComputeD(unsigned sentId, const std::vector<int> &z,
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		std::map<std::string, double> &DXZk);
@@ -177,7 +149,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(const std::vector<int> &x, const std::vector<int> &z, 
+  void ComputeD(unsigned sentId, const std::vector<int> &z, 
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		FastSparseVector<LogVal<double> > &DXZk);
@@ -199,7 +171,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void WarmUp();
 
   // fire features in this sentence
-  void FireFeatures(const std::vector<int> &x,
+  void FireFeatures(unsigned sentId,
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
 		    FastSparseVector<double> &h);
 
@@ -258,38 +230,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
     
   void BroadcastTheta();
 
-  template <typename ContextType>
-  void UpdateThetaMleForSent(const unsigned sentId, 
-			     MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
-			     std::map<ContextType, double> &mleMarginals) {
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      std::cerr << "sentId = " << sentId << endl;
-    }
-    assert(sentId < data.size());
-    // build the FST
-    fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
-    std::vector<FstUtils::LogWeight> alphas, betas;
-    BuildThetaLambdaFst(data[sentId], data[sentId], thetaLambdaFst, alphas, betas);
-    // compute the B matrix for this sentence
-    std::map< ContextType, std::map< int, LogVal<double> > > B;
-    B.clear();
-    ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
-    // compute the C value for this sentence
-    double nLogC = ComputeNLogC(thetaLambdaFst, betas);
-    //cerr << "nloglikelihood += " << nLogC << endl;
-    // update mle for each z^*|y^* fired
-    for(typename std::map< ContextType, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
-      const ContextType &y_ = yIter->first;
-      for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	int z_ = zIter->first;
-	double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
-	double bOverC = MultinomialParams::nExp(nLogb - nLogC);
-	mle[y_][z_] += bOverC;
-	mleMarginals[y_] += bOverC;
-      }
-    }
-  }
-
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
 			     std::map<int, double> &mleMarginalsGivenOneLabel,
@@ -329,6 +269,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   SimAnneal simulatedAnnealer;
 };
 
+/*
 class LatentCrfPosTagger : public LatentCrfModel {
 
  private:
@@ -361,5 +302,6 @@ class LatentCrfPosTagger : public LatentCrfModel {
 				     unsigned FIRST_LABEL_ID);
 
 };
+*/
 
 #endif

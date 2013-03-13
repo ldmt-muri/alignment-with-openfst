@@ -488,7 +488,9 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     boost::mpi::broadcast< map<int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, aParams.params, 0);    
 
     // persist parameters, if need be
-    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
+    if( learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && 
+	learningInfo.iterationsCount != 0 &&
+	learningInfo.mpiWorld->rank() == 0) {
       cerr << "persisting params:" << endl;
       stringstream filename;
       filename << outputPrefix << ".param." << learningInfo.iterationsCount;

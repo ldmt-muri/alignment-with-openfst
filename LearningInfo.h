@@ -202,7 +202,7 @@ class LearningInfo {
     neighborhoodMinCoocc = 3;
     debugLevel = 1;
     useSparseVectors = true;
-    persistParamsAfterEachIteration = false;
+    persistParamsAfterNIteration = 100;
     persistFinalParams = true;
     retryLbfgsOnRoundingErrors = true;
     zIDependsOnYIM1 = false;
@@ -335,7 +335,7 @@ class LearningInfo {
   bool useSparseVectors;
   
   // frequency of persisting the params
-  bool persistParamsAfterEachIteration;
+  unsigned persistParamsAfterNIteration;
 
   // persist the parameters after training?
   bool persistFinalParams;
@@ -349,8 +349,6 @@ class LearningInfo {
   // in the latent crf model, does the output observations z_i depend on y_{i-1}, or only y_i?
   bool zIDependsOnYIM1;
 
-  bool smoothMultinomialParams;
-  
   bool supervisedTraining;
 };
 

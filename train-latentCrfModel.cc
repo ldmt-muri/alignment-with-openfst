@@ -42,8 +42,8 @@ void HmmInitialize(mpi::communicator world, string textFilename, string outputFi
   learningInfo.debugLevel = DebugLevel::CORPUS;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterEachIteration = false;
-  learningInfo.persistFinalParams = false;
+  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistFinalParams = final;
   learningInfo.smoothMultinomialParams = false;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 

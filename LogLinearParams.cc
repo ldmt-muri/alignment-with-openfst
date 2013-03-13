@@ -709,3 +709,80 @@ void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFea
     params[featuresIter->first] = currentFeatureWeight;
     }*/
 }
+
+// converts a map into an array. 
+// when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
+// we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
+void LogLinearParams::ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount) { 
+  // init to 0 
+  for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
+    valuesArray[i-constrainedFeaturesCount] = 0; 
+  } 
+  // set the active features 
+  for(map<string, double>::const_iterator valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) { 
+    // skip constrained features 
+    if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) { 
+      continue; 
+    } 
+    // set the modified index in valuesArray 
+    valuesArray[ paramIndexes[valuesMapIter->first]-constrainedFeaturesCount ] = valuesMapIter->second; 
+  } 
+} 
+
+// 1/2 * sum of the squares 
+double LogLinearParams::ComputeL2Norm() { 
+  double l2 = 0; 
+  for(int i = 0; i < paramWeights.size(); i++) { 
+    l2 += paramWeights[i] * paramWeights[i]; 
+  } 
+  return l2/2; 
+} 
+
+// call boost::mpi::broadcast for the essential member variables of this object 
+void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) { 
+  boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root); 
+  boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
+  boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
+  boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root); 
+}   
+
+// checks whether the "otherParams" have the same parameters and values as this object 
+// disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors 
+bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherParams) { 
+  if(paramIndexes.size() != otherParams.paramIndexes.size()) 
+    return false; 
+  if(paramWeights.size() != otherParams.paramWeights.size()) 
+    return false; 
+  if(paramIds.size() != otherParams.paramIds.size())  
+    return false; 
+  for(std::map<std::string, int>::const_iterator paramIndexesIter = paramIndexes.begin();  
+      paramIndexesIter != paramIndexes.end(); 
+      ++paramIndexesIter) { 
+    std::map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+    if(paramIndexesIter->second != otherIter->second)  
+      return false; 
+  } 
+  for(unsigned i = 0; i < paramWeights.size(); i++){ 
+    if(paramWeights[i] != otherParams.paramWeights[i]) 
+      return false; 
+  } 
+  for(unsigned i = 0; i < paramIds.size(); i++) { 
+    if(paramIds[i] != otherParams.paramIds[i])  
+      return false; 
+  } 
+  return true; 
+} 
+
+// side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
+double LogLinearParams::DotProduct(const std::map<std::string, double>& values) {
+  double dotProduct = 0;
+  // for each active feature
+  for(std::map<std::string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
+    // make sure there's a corresponding feature in paramIndexes and paramWeights
+    AddParam(valuesIter->first);
+    // then update the dot product
+    dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
+  }
+  return dotProduct;
+}
+
