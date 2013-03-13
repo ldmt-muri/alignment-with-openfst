@@ -52,13 +52,8 @@ void HmmModel::Train() {
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": train!" << endl;
   }
+  
   LearnParameters(tgtFsts);
-
-  // persist parameters (master only)
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": persist" << endl;
-    PersistParams(outputPrefix + ".param.final");
-  }
 }
 
 // src fsts are 1st order markov models

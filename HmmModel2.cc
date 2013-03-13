@@ -16,7 +16,7 @@ HmmModel2::HmmModel2(const string &textFilename,
   FIRST_ALLOWED_LABEL_VALUE(firstLabelId) {
     
   this->outputPrefix = outputPrefix;
-  this->learningInfo = learningInfo;
+  this->learningInfo = &learningInfo;
   
   assert(numberOfLabels > 1);
   assert(firstLabelId > 1);
@@ -60,7 +60,7 @@ void HmmModel2::InitParams(){
   nlogTheta.GaussianInit();
   nlogGamma.GaussianInit();
   
-  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "nlogTheta params: " << endl;
     nlogTheta.PrintParams();
     cerr << "nlogGamma params: " << endl;
@@ -230,8 +230,8 @@ void HmmModel2::Train(){
 	}
 	assert(false);
       }
-      if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-	cerr << "rank#" << learningInfo.mpiWorld->rank() << ": sent #" << sentId << ": nlogProb = " << sentNlogProb << endl;
+      if(learningInfo->debugLevel >= DebugLevel::SENTENCE) {
+	cerr << "rank#" << learningInfo->mpiWorld->rank() << ": sent #" << sentId << ": nlogProb = " << sentNlogProb << endl;
       }
       nloglikelihood += sentNlogProb;
     }
@@ -243,14 +243,15 @@ void HmmModel2::Train(){
     nlogGamma = gammaMle;
 
     // check convergence
-    learningInfo.logLikelihood.push_back(nloglikelihood);
-    learningInfo.iterationsCount++;
+    learningInfo->logLikelihood.push_back(-1 * nloglikelihood);
+    learningInfo->iterationsCount++;
     
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "nloglikelihood of this iteration = " << nloglikelihood << endl; 
+    if(learningInfo->debugLevel >= DebugLevel::CORPUS) {
       cerr << "nloglikelihood of this iteration = " << nloglikelihood << endl; 
     }
 
-  } while(!learningInfo.IsModelConverged());
+  } while(!learningInfo->IsModelConverged());
 }
 
 void HmmModel2::Label(vector<int> &tokens, vector<int> &labels) {
