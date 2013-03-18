@@ -1563,10 +1563,6 @@ void LatentCrfModel::WarmUp() {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
   }
 
-  stringstream removemefilename;
-  removemefilename << "khaled." << learningInfo.mpiWorld->rank();
-  lambda->PersistParams(removemefilename.str());
-
   // master collects all feature ids fired on any sentence
   set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
   mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, LatentCrfModel::AggregateSets, 0);

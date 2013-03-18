@@ -246,9 +246,8 @@ void HmmModel2::Train(){
     learningInfo->logLikelihood.push_back(-1 * nloglikelihood);
     learningInfo->iterationsCount++;
     
-    cerr << "nloglikelihood of this iteration = " << nloglikelihood << endl; 
     if(learningInfo->debugLevel >= DebugLevel::CORPUS) {
-      cerr << "nloglikelihood of this iteration = " << nloglikelihood << endl; 
+      cerr << "rank #" << learningInfo->mpiWorld->rank() << ": nloglikelihood of this iteration = " << nloglikelihood << endl; 
     }
 
   } while(!learningInfo->IsModelConverged());
