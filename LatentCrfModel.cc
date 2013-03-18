@@ -133,7 +133,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   BroadcastTheta();
 
   // persist initial parameters
-  if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
+  assert(learningInfo.iterationsCount == 0);
+  if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
     stringstream thetaParamsFilename;
     thetaParamsFilename << outputPrefix << ".initial.theta";
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
@@ -758,7 +759,7 @@ double LatentCrfModel::ComputeNLogPrYZGivenX(unsigned sentId, const vector<int>&
   double result = 0;
 
   // divide by Z_\lambda(x)
-  result -= ComputeNLogZ_lambda(x);
+  result -= ComputeNLogZ_lambda(sentId);
 
   for(int i = 0; i < x.size(); i++) {
 
@@ -1065,7 +1066,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *us
 
     // compute the F map fro this sentence
     FastSparseVector<LogVal<double> > FSparseVector;
-    model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
+    model.ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
     if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": F.size = " << FSparseVector.size();
     }
@@ -1207,12 +1208,12 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-    model.BuildThetaLambdaFst(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    model.BuildThetaLambdaFst(sentId, model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     model.BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
 
     // compute the D map for this sentence
     FastSparseVector<LogVal<double> > DSparseVector;
-    model.ComputeD(model.data[sentId], model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
+    model.ComputeD(sentId, model.data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
     // compute the C value for this sentence
     double nLogC = model.ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
     if(std::isnan(nLogC) || std::isinf(nLogC)) {
@@ -1239,7 +1240,7 @@ double LatentCrfModel::EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSe
     }
     // compute the F map fro this sentence
     FastSparseVector<LogVal<double> > FSparseVector;
-    model.ComputeF(model.data[sentId], lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
+    model.ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
     // compute the Z value for this sentence
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     // update the log likelihood
@@ -1547,7 +1548,7 @@ void LatentCrfModel::WarmUp() {
     // compute the F map from this sentence (implicitly adds the fired features to lambda parameters)
     FastSparseVector<double> activeFeatures;
     activeFeatures.clear();
-    FireFeatures(data[sentId], lambdaFst, activeFeatures);
+    FireFeatures(sentId, lambdaFst, activeFeatures);
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": extracted " << activeFeatures.size() << " features from sent Id " << sentId;
@@ -1740,7 +1741,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
 
     // debug info
-    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
       stringstream thetaParamsFilename;
       thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
       thetaParamsFilename << ".theta";
@@ -1836,7 +1837,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // persist updated lambda params
     stringstream lambdaParamsFilename;
-    if(learningInfo.persistParamsAfterEachIteration && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
       lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
       if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
 	cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
@@ -1883,9 +1884,11 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
 void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
+  data.push_back(tokens);
+  unsigned sentId = data.size() - 1;
   fst::VectorFst<FstUtils::LogArc> fst;
   vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(tokens, tokens, fst, alphas, betas);
+  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
   fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
   fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(fst2, &shortestPath);

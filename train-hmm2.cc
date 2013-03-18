@@ -45,21 +45,21 @@ int main(int argc, char **argv) {
     cerr << "master" << world.rank() << ": setting configurations..." << endl;
   }
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 300;
   learningInfo.useMaxIterationsCount = true;
+  learningInfo.maxIterationsCount = 1000;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.00001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
-  //  learningInfo.useEarlyStopping = true;
+  learningInfo.useEarlyStopping = false;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterEachIteration = false;
-  learningInfo.persistFinalParams = false;
-  learningInfo.smoothMultinomialParams = false;
+  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistFinalParams = true;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  unsigned NUMBER_OF_LABELS = 45;
-  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, 4);
+  unsigned NUMBER_OF_LABELS = 10;
+  unsigned FIRST_LABEL_ID = 4;
+  HmmModel2 model(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
 
   // train model parameters
   if(world.rank() == 0) {

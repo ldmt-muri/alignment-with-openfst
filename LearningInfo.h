@@ -206,7 +206,6 @@ class LearningInfo {
     persistFinalParams = true;
     retryLbfgsOnRoundingErrors = true;
     zIDependsOnYIM1 = false;
-    smoothMultinomialParams = false;
     supervisedTraining = false;
   }
 

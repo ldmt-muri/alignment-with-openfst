@@ -40,11 +40,8 @@ void HmmInitialize(mpi::communicator world, string textFilename, string outputFi
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.00001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
-  //  learningInfo.useEarlyStopping = true;
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterNIteration = 10;
-  learningInfo.persistFinalParams = final;
-  learningInfo.smoothMultinomialParams = false;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
@@ -167,7 +164,7 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = false;
-  learningInfo.persistParamsAfterEachIteration = false;
+  learningInfo.persistParamsAfterNIteration = 10;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs

@@ -47,7 +47,7 @@ void UpdateThetaMleForSent(const unsigned sentId,
   // compute the B matrix for this sentence
   std::map< ContextType, std::map< int, LogVal<double> > > B;
   B.clear();
-  ComputeB(this->data[sentId], this->data[sentId], thetaLambdaFst, alphas, betas, B);
+  ComputeB(sentId, this->data[sentId], thetaLambdaFst, alphas, betas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, betas);
   //cerr << "nloglikelihood += " << nLogC << endl;

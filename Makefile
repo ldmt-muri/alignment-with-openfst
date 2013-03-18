@@ -1,20 +1,58 @@
-all:
+CC=mpiCC
+SINGLE=-c
+BEFORE=-x c++ -std=c++11
+LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system
+OPT=-O3
+INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
+DEBUG=-g -ggdb
 
-	#echo # compile ibm model 1
-	#clang++ -x c++ LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc IbmModel1.h IbmModel1.cc train-model1.cc -lfst -ldl -O0 -o train-model1
+all: train-latentCrfModel
 
-#	echo # compile the log linear model
-#	clang++ -x c++ alias_sampler.h AlignmentErrorRate.h IAlignmentSampler.h LearningInfo.h StringUtils.h VocabEncoder.h FstUtils.h FstUtils.cc IbmModel1.h IbmModel1.cc LogLinearParams.h LogLinearParams.cc HmmModel.h LogLinearModel.h HmmModel.cc LogLinearModel.cc train-loglinear.cc -lfst -ldl -O0 -o train-loglinear
+#train-latentCrfModel:
+#	$(CC) $(BEFORE) anneal/Cpp/erstream.cxx anneal/Cpp/rndlcg.cxx anneal/Cpp/registrar.cxx anneal/Cpp/randgen.cxx anneal/Cpp/r250.cxx anneal/Cpp/random.hpp anneal/Cpp/random.cxx anneal/Cpp/simann.cxx cdec-utils/fdict.cc FstUtils.cc LogLinearParams.cc HmmModel2.cc LatentCrfModel.cc train-latentCrfModel.cc $(LIBS) $(OPT) $(INC) $(DEBUG) -o train-latentCrfModel
+#	$(CC) $(BEFORE)        $(LIBS) $(OPT) $(INC) $(DEBUG) -o train-latentCrfModel
 
-#	echo #compile the hmm model
-#	clang++ -x c++ alias_sampler.h MultinomialParams.h  MultinomialParams.cc LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc HmmModel.h HmmModel.cc train-hmm.cc -lfst -ldl -O0 -o train-hmm
+train-latentCrfModel: train-latentCrfModel.o
+	$(CC) train-latentCrfModel.o HmmModel2.o FstUtils.o LatentCrfModel.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfModel
 
-#	echo #autoencoders
+train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o 
+	$(CC) $(BEFORE) $(SINGLE) train-latentCrfModel.cc $(OPT)
 
-#	clang++ -x c++ anneal/Cpp/erstream.hpp anneal/Cpp/erstream.cxx anneal/Cpp/randgen.hpp anneal/Cpp/rndlcg.hpp anneal/Cpp/rndlcg.cxx anneal/Cpp/registrar.hpp anneal/Cpp/registrar.cxx anneal/Cpp/randgen.cxx anneal/Cpp/r250.hpp anneal/Cpp/r250.cxx anneal/Cpp/random.hpp anneal/Cpp/random.cxx anneal/Cpp/simann.hpp anneal/Cpp/simann.cxx cdec-utils/fast_sparse_vector.h Samplers.h StringUtils.h VocabEncoder.h MultinomialParams.h MultinomialParams.cc LearningInfo.h FstUtils.h FstUtils.cc LogLinearParams.h LogLinearParams.cc LatentCrfModel.h LatentCrfModel.cc train-latentCrfModel.cc -llbfgs -lfst -ldl -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -g -ggdb -o train-latentCrfModel
+LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o
+	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
 
-# USING mpi + boost
-#	mpiCC -x c++ -std=c++0x anneal/Cpp/erstream.hpp anneal/Cpp/erstream.cxx anneal/Cpp/randgen.hpp anneal/Cpp/rndlcg.hpp anneal/Cpp/rndlcg.cxx anneal/Cpp/registrar.hpp anneal/Cpp/registrar.cxx anneal/Cpp/randgen.cxx anneal/Cpp/r250.hpp anneal/Cpp/r250.cxx anneal/Cpp/random.hpp anneal/Cpp/random.cxx anneal/Cpp/simann.hpp anneal/Cpp/simann.cxx cdec-utils/fast_sparse_vector.h cdec-utils/fdict.h cdec-utils/fdict.cc Samplers.h StringUtils.h VocabEncoder.h MultinomialParams.h LearningInfo.h FstUtils.h FstUtils.cc LogLinearParams.h LogLinearParams.cc HmmModel2.h HmmModel2.cc LatentCrfModel.h LatentCrfModel.cc train-latentCrfModel.cc -llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -g -ggdb -o train-latentCrfModel
+LogLinearParams.o: fdict.o
+	$(CC) $(BEFORE) $(SINGLE) LogLinearParams.cc $(OPT)
 
-	mpiCC -x c++ -std=c++0x anneal/Cpp/erstream.hpp anneal/Cpp/erstream.cxx anneal/Cpp/randgen.hpp anneal/Cpp/rndlcg.hpp anneal/Cpp/rndlcg.cxx anneal/Cpp/registrar.hpp anneal/Cpp/registrar.cxx anneal/Cpp/randgen.cxx anneal/Cpp/r250.hpp anneal/Cpp/r250.cxx anneal/Cpp/random.hpp anneal/Cpp/random.cxx anneal/Cpp/simann.hpp anneal/Cpp/simann.cxx cdec-utils/fast_sparse_vector.h cdec-utils/fdict.h cdec-utils/fdict.cc Samplers.h StringUtils.h VocabEncoder.h MultinomialParams.h LearningInfo.h FstUtils.h FstUtils.cc LogLinearParams.h LogLinearParams.cc HmmModel2.h HmmModel2.cc LatentCrfModel.h LatentCrfModel.cc train-latentCrfModel.cc -llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -O3 -I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/ -g -ggdb -o train-latentCrfModel
+fdict.o:
+	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
 
+simann.o: 
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/simann.cxx $(OPT)
+
+random.o:
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/random.cxx $(OPT)
+
+r250.o:
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/r250.cxx $(OPT)
+
+randgen.o:
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/randgen.cxx $(OPT)
+
+registrar.o:
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/registrar.cxx $(OPT)
+
+rndlcg.o:
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/rndlcg.cxx $(OPT)
+
+erstream.o: 
+	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/erstream.cxx $(OPT)
+
+HmmModel2.o: FstUtils.o
+	$(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
+
+FstUtils.o: 
+	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
+
+clean:
+	rm -rf train-latentCrfModel FstUtils.o HmmModel2.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfModel.o train-latentCrfModel
