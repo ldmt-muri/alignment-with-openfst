@@ -9,13 +9,13 @@ all: train-hmm2
 train-hmm2: FstUtils.o HmmModel2.o train-hmm2.o
 	     $(CC) FstUtils.o HmmModel2.o train-hmm2.o  $(LIBS) -o train-hmm2
 
-train-hmm2.o: FstUtils.o HmmModel2.o
+train-hmm2.o: FstUtils.o HmmModel2.o train-hmm2.cc ClustersComparer.h StringUtils.h
 	    $(CC) $(BEFORE) $(SINGLE) train-hmm2.cc $(OPT)
 
-HmmModel2.o: FstUtils.o
+HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
 	     $(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
 
-FstUtils.o: 
+FstUtils.o: FstUtils.cc FstUtils.h
 	   $(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
 
 clean:

@@ -15,14 +15,20 @@ all: train-latentCrfModel
 train-latentCrfModel: train-latentCrfModel.o
 	$(CC) train-latentCrfModel.o HmmModel2.o FstUtils.o LatentCrfModel.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfModel
 
-train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o 
+train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o train-latentCrfModel.cc ClustersComparer.h StringUtils.h
 	$(CC) $(BEFORE) $(SINGLE) train-latentCrfModel.cc $(OPT)
 
-LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o
+LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
 
-LogLinearParams.o: fdict.o
+LogLinearParams.o: fdict.o LogLinearParams.cc LogLinearParams.h LogLinearParams-inl.h
 	$(CC) $(BEFORE) $(SINGLE) LogLinearParams.cc $(OPT)
+
+HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h
+	$(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
+
+FstUtils.o: FstUtils.cc FstUtils.h
+	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
 
 fdict.o:
 	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
@@ -47,12 +53,6 @@ rndlcg.o:
 
 erstream.o: 
 	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/erstream.cxx $(OPT)
-
-HmmModel2.o: FstUtils.o
-	$(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
-
-FstUtils.o: 
-	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
 
 clean:
 	rm -rf train-latentCrfModel FstUtils.o HmmModel2.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfModel.o train-latentCrfModel

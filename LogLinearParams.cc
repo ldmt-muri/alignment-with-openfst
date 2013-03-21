@@ -30,7 +30,7 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 }
 
 // initializes the parameter weight by drawing from a gaussian
-bool LogLinearParams::AddParam(string paramId) {
+bool LogLinearParams::AddParam(const string &paramId) {
   // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
   double paramWeight = gaussianSampler->Draw();
   
@@ -39,7 +39,7 @@ bool LogLinearParams::AddParam(string paramId) {
 }
 
 // if there's another parameter with the same ID already, do nothing
-bool LogLinearParams::AddParam(string paramId, double paramWeight) {
+bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo->mpiWorld->rank() << ": executing AddParam(" << paramId << "," << paramWeight << "); where |paramIndexes| = " << paramIndexes.size() << ", |paramWeights| = " << paramWeights.size() << endl;
   }
@@ -771,7 +771,7 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
       return false; 
   } 
   return true; 
-} 
+}
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
 double LogLinearParams::DotProduct(const std::map<std::string, double>& values) {
@@ -779,10 +779,16 @@ double LogLinearParams::DotProduct(const std::map<std::string, double>& values) 
   // for each active feature
   for(std::map<std::string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
     // make sure there's a corresponding feature in paramIndexes and paramWeights
-    AddParam(valuesIter->first);
+    bool newParam = AddParam(valuesIter->first);
     // then update the dot product
     dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
+    if(std::isnan(dotProduct) || std::isinf(dotProduct)){
+      cerr << "problematic param: " << valuesIter->first << " with index " << paramIndexes[valuesIter->first] << endl;
+      cerr << "value = " << valuesIter->second << endl;
+      cerr << "weight = " << paramWeights[paramIndexes[valuesIter->first]] << endl;
+      if(newParam) { cerr << "newParam." << endl; } else { cerr << "old param." << endl;}
+      assert(false);
+    }
   }
   return dotProduct;
 }
-

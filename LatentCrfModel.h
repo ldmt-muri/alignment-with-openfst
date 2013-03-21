@@ -8,6 +8,8 @@
 #include <set>
 #include <algorithm>
 
+#include "mpi.h"
+
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/mpi/nonblocking.hpp>
@@ -21,6 +23,8 @@
 #include <boost/exception/all.hpp>
 #include <boost/exception/diagnostic_information.hpp> 
 #include <boost/exception_ptr.hpp> 
+#include <boost/function.hpp>
+#include <boost/bind/protect.hpp>
 
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
@@ -33,6 +37,7 @@
 #include "StringUtils.h"
 #include "FstUtils.h"
 #include "LbfgsUtils.h"
+#include "Functors.h"
 
 #include "LogLinearParams.h"
 #include "MultinomialParams.h"
@@ -99,7 +104,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			     std::map<int, double> mleMarginalsGivenOneLabel,
 			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
     
-
+  double ComputeLoglikelihoodZGivenXAndGradient(FastSparseVector<double> gradient);
 
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
@@ -194,19 +199,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   static LatentCrfModel& GetInstance();
 
-  // aggregates sets for the mpi reduce operation
-  static std::set<std::string> AggregateSets(const std::set<std::string> &v1, const std::set<std::string> &v2);
-  
-  // aggregates vectors for the mpi reduce operation
-  static std::vector<double> AggregateVectors(const std::vector<double> &v1, const std::vector<double> &v2) {
-    assert(v1.size() == v2.size());
-    std::vector<double> vTotal(v1.size());
-    for(unsigned i = 0; i < v1.size(); i++) {
-      vTotal[i] = v1[i] + v2[i];
-    }
-    return vTotal;
-  }  
-  
+  static FastSparseVector<double> AggregateSparseVectors(const FastSparseVector<double> &v1, 
+							 const FastSparseVector<double> &v2);
+
+  static set<string> AggregateSets(const set<string> &v1, const set<string> &v2);
+
   // train the model
   void Train();
 
@@ -224,11 +221,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
   // broadcasts the essential member variables in LogLinearParam
-  void BroadcastLambdas(unsigned rankId = 0) {
-    lambda->Broadcast(*learningInfo.mpiWorld, rankId);
-  }
+  void BroadcastLambdas(unsigned rankId);
     
-  void BroadcastTheta(unsigned rankId = 0);
+  void BroadcastTheta(unsigned rankId);
 
   void UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 

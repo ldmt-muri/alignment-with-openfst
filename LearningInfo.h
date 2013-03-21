@@ -207,6 +207,7 @@ class LearningInfo {
     retryLbfgsOnRoundingErrors = true;
     zIDependsOnYIM1 = false;
     supervisedTraining = false;
+    unspecified = 0;
   }
 
   bool IsModelConverged() {
@@ -349,6 +350,8 @@ class LearningInfo {
   bool zIDependsOnYIM1;
 
   bool supervisedTraining;
+
+  int unspecified;
 };
 
 

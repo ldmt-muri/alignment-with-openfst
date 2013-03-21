@@ -59,10 +59,10 @@ class LogLinearParams {
 		    FastSparseVector<double> &activeFeatures);
   
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
-  bool AddParam(std::string paramId);
+  bool AddParam(const std::string &paramId);
   
   // if the paramId does not exist, add it. otherwise, do nothing. 
-  bool AddParam(std::string paramId, double paramWeight);
+  bool AddParam(const std::string &paramId, double paramWeight);
 
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
   double DotProduct(const std::map<std::string, double>& values);

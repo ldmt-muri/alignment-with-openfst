@@ -45,7 +45,7 @@ public:
   }
   
   // update a single parameter's value (adds the parameter if necessary)
-  inline void UpdateParam(const std::string paramId, const double newValue) {
+  inline void UpdateParam(const std::string &paramId, const double newValue) {
     if(!AddParam(paramId, newValue)) {
       paramWeights[paramIndexes[paramId]] = newValue;
     }
@@ -62,7 +62,7 @@ public:
   }
 
   // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
-  inline void UpdateOldParamWeight(const std::string paramId) {
+  inline void UpdateOldParamWeight(const std::string &paramId) {
     if(!AddParam(paramId)) {
       oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
     }
@@ -77,12 +77,12 @@ public:
   }  
 
   // checks whether a parameter exists
-  inline bool ParamExists(const std::string paramId) {
+  inline bool ParamExists(const std::string &paramId) {
     return paramIndexes.count(paramId) == 1;
   }
 
   // returns the int index of the parameter in the underlying array
-  inline unsigned GetParamIndex(const std::string paramId) {
+  inline unsigned GetParamIndex(const std::string &paramId) {
     AddParam(paramId);
     return paramIndexes[paramId];
   }
@@ -94,7 +94,7 @@ public:
   }
 
   // returns the current weight of this param (adds the parameter if necessary)
-  inline double GetParamWeight(const std::string paramId) {
+  inline double GetParamWeight(const std::string &paramId) {
     AddParam(paramId);
     return paramWeights[paramIndexes[paramId]];
   }
@@ -102,7 +102,7 @@ public:
   // returns the difference between new and old weights of a parameter, given its string ID. 
   // assumptions:
   // - paramId already exists
-  inline double GetParamNewMinusOldWeight(const std::string paramId) {
+  inline double GetParamNewMinusOldWeight(const std::string &paramId) {
     return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
   }
 

@@ -36,7 +36,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
   bool persistHmmParams = false;
 
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 100;
+  learningInfo.maxIterationsCount = 2;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.001;
@@ -89,11 +89,12 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
     // compare to gold standard
     if(goldLabelsFilename != "") {
-      cerr << "comparing to gold standard tagging..." << endl;
+      cerr << "======================================" << endl;
+      cerr << "HMM model vs. gold standard tagging..." << endl;
       double vi = hmmModel.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
       cerr << "done. \nvariation of information = " << vi << endl;
       double manyToOne = hmmModel.ComputeManyToOne(labelsFilename, goldLabelsFilename);
-      cerr << "many-to-one = " << manyToOne;
+      cerr << "many-to-one = " << manyToOne << endl;
     }
 
     // now initialize the latentCrfModel's theta parameters
