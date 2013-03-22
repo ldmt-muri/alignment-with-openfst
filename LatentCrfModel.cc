@@ -1710,17 +1710,17 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
       // debug info
       double optimizedMiniBatchNLogLikelihood = 0;
-      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
 	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
-	cerr << "rank" << learningInfo.mpiWorld->rank() << ": optimizing lambda weights to max likelihood(z|x) for sents " \
+	cerr << "master" << learningInfo.mpiWorld->rank() << ": optimizing lambda weights to max likelihood(z|x) for sents " \
 	     << sentId << "-" << to << endl;
       }
 
       // use LBFGS to update lambdas
       if(learningInfo.optimizationMethod.subOptMethod->algorithm == LBFGS) {
 
-	if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-	  cerr << "rank" << learningInfo.mpiWorld->rank() << ": we'll use LBFGS to update the lambda parameters" << endl;
+	if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
+	  cerr << "master" << learningInfo.mpiWorld->rank() << ": we'll use LBFGS to update the lambda parameters" << endl;
 	}
 	
 	// parallelizing the lbfgs callback function is complicated
@@ -1778,7 +1778,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	      cerr << "rank" << learningInfo.mpiWorld->rank() << ": i'm trapped in this loop, repeatedly helping master evaluate likelihood and gradient for lbfgs." << endl;
 	    }
 	  }
-	  cerr << "rank" << learningInfo.mpiWorld->rank() << ": master has set me free. this means lbfgs has converged." << endl;
 	} // end if master => run lbfgs() else help master
 	
       } else if(learningInfo.optimizationMethod.subOptMethod->algorithm == SIMULATED_ANNEALING) {
@@ -1823,7 +1822,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
       } else {
 	nlogLikelihood += optimizedMiniBatchNLogLikelihood;
       }
-    }
+
+    } // for each minibatch
 
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
@@ -1846,6 +1846,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
     
     // update learningInfo
+    mpi::broadcast<double>(*learningInfo.mpiWorld, nlogLikelihood, 0);
     learningInfo.logLikelihood.push_back(nlogLikelihood);
     learningInfo.iterationsCount++;
 
@@ -1854,7 +1855,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       converged = learningInfo.IsModelConverged();
     }
     
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank" << learningInfo.mpiWorld->rank() << ": coord descent converged = " << converged << endl;
     }
     

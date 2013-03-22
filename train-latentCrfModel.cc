@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
     cerr << "done." << endl;
   }
 
-  unsigned NUMBER_OF_LABELS = 10;
+  unsigned NUMBER_OF_LABELS = 45;
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
