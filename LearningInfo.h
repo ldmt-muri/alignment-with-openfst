@@ -232,6 +232,7 @@ class LearningInfo {
     if(useMinLikelihoodRelativeDiff &&
        iterationsCount > 1) {
       absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
+      assert(logLikelihood[iterationsCount-2] != 0);
       relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
       cerr << "rank #" << mpiWorld->rank() << ": loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl;
     }

@@ -200,11 +200,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   static LatentCrfModel& GetInstance();
 
-  static FastSparseVector<double> AggregateSparseVectors(const FastSparseVector<double> &v1, 
-							 const FastSparseVector<double> &v2);
-
-  static set<string> AggregateSets(const set<string> &v1, const set<string> &v2);
-
   // train the model
   void Train();
 

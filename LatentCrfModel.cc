@@ -1174,18 +1174,16 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   mpi::reduce< vector<double> >(*model.learningInfo.mpiWorld, gradientPiece, reducedGradient, AggregateVectors2(), 0);
   mpi::reduce<double>(*model.learningInfo.mpiWorld, nLoglikelihoodPiece, reducedNLoglikelihood, std::plus<double>(), 0);
 
-  cerr << "NOOOOOOOOOOOOOOOOOOOOOOOOTE: I'M ZEROING ALL DERIVATIVES AND ALSO THE OBJECTIVE FOR TESTING L2 REG." << endl;
-  reducedNLoglikelihood = 0.0;
   // fill in the gradient array allocated by lbfgs
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
     // this is where the L2 term is added to both the gradient and objective function
     for(unsigned i = 0; i < model.lambda->GetParamsCount(); i++) {
-      reducedGradient[i] = 0;
       gradient[i] = reducedGradient[i] + 2.0 * model.learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambdasArray[i];
       reducedNLoglikelihood += model.learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambdasArray[i] * lambdasArray[i];
       assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
     } 
   } else {
+    assert(gradientPiece.size() == reducedGradient.size() && gradientPiece.size() == model.lambda->GetParamsCount());
     for(unsigned i = 0; i < model.lambda->GetParamsCount(); i++) {
       gradient[i] = reducedGradient[i];
       assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
@@ -1193,7 +1191,13 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   }
 
   if(model.learningInfo.debugLevel == DebugLevel::MINI_BATCH) {
-    cerr <<  " unregularized objective = " << reducedNLoglikelihood << endl;
+    if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+      cerr << " objective = " << reducedNLoglikelihood << endl;
+    } else if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1) {
+      cerr << " unregularized objective = " << reducedNLoglikelihood << endl;	
+    } else {
+      cerr << " objective = " << reducedNLoglikelihood << endl;
+    }
   }
   
   // fill in the gradient array with respective values
@@ -1436,25 +1440,6 @@ void LatentCrfModel::AddConstrainedFeatures() {
   }
 }
 
-// reduces two sparse vectors into one
-FastSparseVector<double> LatentCrfModel::AggregateSparseVectors(const FastSparseVector<double> &v1, 
-								const FastSparseVector<double> &v2) {
-  FastSparseVector<double> vTotal(v2);
-  for(FastSparseVector<double>::const_iterator v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
-    vTotal[v1Iter->first] += v1Iter->second;
-  }
-  return vTotal;
-}
-
-// reduces two sets into one
-set<string> LatentCrfModel::AggregateSets(const set<string> &v1, const set<string> &v2) {
-  set<string> vTotal(v2);
-  for(set<string>::const_iterator v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
-    vTotal.insert(*v1Iter);
-  }
-  return vTotal;
-}
-
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::InitLambda() {
   if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
@@ -1567,8 +1552,6 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   cerr << "rank #" << learningInfo.mpiWorld->rank() << ": max_linesearch = " << lbfgsParams.max_linesearch  << endl;
   switch(learningInfo.optimizationMethod.subOptMethod->regularizer) {
   case Regularizer::L1:
-    // when l1 is enabled, lbfgs (sometimes) gives nan values of the variaables it's trying to optimize
-    assert(false);
     lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": orthantwise_c = " << lbfgsParams.orthantwise_c  << endl;
     // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
@@ -1827,8 +1810,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
       // debug info
-      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-	cerr << "rank #" << learningInfo.mpiWorld->rank() << ": optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
+      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
+	cerr << "master" << learningInfo.mpiWorld->rank() << ": optimized nloglikelihood is " << optimizedMiniBatchNLogLikelihood << endl;
       }
       
       // update iteration's nloglikelihood
