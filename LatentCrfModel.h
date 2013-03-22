@@ -26,9 +26,10 @@
 #include <boost/function.hpp>
 #include <boost/bind/protect.hpp>
 
+#define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
+//#define HAVE_CMPH 1
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
-#define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
 #include "cdec-utils/fast_sparse_vector.h"
 
 #include "anneal/Cpp/simann.hpp"
@@ -104,15 +105,15 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			     std::map<int, double> mleMarginalsGivenOneLabel,
 			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
     
-  double ComputeLoglikelihoodZGivenXAndGradient(FastSparseVector<double> gradient);
+  double ComputeNLoglikelihoodZGivenXAndGradient(vector<double> &gradient);
 
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
-  static double EvaluateNLogLikelihoodDerivativeWRTLambda(void *ptrFromSentId,
-							  const double *lambdasArray,
-							  double *gradient,
-							  const int lambdasCount,
-							  const double step);
-
+  static double LbfgsCallbackEvalYGivenXLambdaGradient(void *ptrFromSentId,
+						       const double *lambdasArray,
+						       double *gradient,
+						       const int lambdasCount,
+						       const double step);
+  
   // lbfgs call back functiont to report optimizaton progress 
   static int LbfgsProgressReport(void *instance,
 				 const lbfgsfloatval_t *x, 
@@ -173,7 +174,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void AddEnglishClosedVocab();
 
   // make sure all lambda features which may fire on this training data are added to lambda.params
-  void WarmUp();
+  void InitLambda();
 
   // fire features in this sentence
   void FireFeatures(unsigned sentId,
@@ -239,11 +240,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   void SupervisedTrain(std::string goldLabelsFilename);
 
-  static double EvaluateNLogLikelihoodYGivenXDerivativeWRTLambda(void *uselessPtr,
-								 const double *lambdasArray,
-								 double *gradient,
-								 const int lambdasCount,
-								 const double step);
+  static double LbfgsCallbackEvalZGivenXLambdaGradient (void *uselessPtr,
+							const double *lambdasArray,
+							double *gradient,
+							const int lambdasCount,
+							const double step);
  public:
   std::vector<std::vector<int> > data, labels;
   LearningInfo learningInfo;

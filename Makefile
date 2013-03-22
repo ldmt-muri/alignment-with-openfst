@@ -1,30 +1,26 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system
+LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lcmph
 OPT=-O3
 INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
 DEBUG=-g -ggdb
 
 all: train-latentCrfModel
 
-#train-latentCrfModel:
-#	$(CC) $(BEFORE) anneal/Cpp/erstream.cxx anneal/Cpp/rndlcg.cxx anneal/Cpp/registrar.cxx anneal/Cpp/randgen.cxx anneal/Cpp/r250.cxx anneal/Cpp/random.hpp anneal/Cpp/random.cxx anneal/Cpp/simann.cxx cdec-utils/fdict.cc FstUtils.cc LogLinearParams.cc HmmModel2.cc LatentCrfModel.cc train-latentCrfModel.cc $(LIBS) $(OPT) $(INC) $(DEBUG) -o train-latentCrfModel
-#	$(CC) $(BEFORE)        $(LIBS) $(OPT) $(INC) $(DEBUG) -o train-latentCrfModel
-
 train-latentCrfModel: train-latentCrfModel.o
 	$(CC) train-latentCrfModel.o HmmModel2.o FstUtils.o LatentCrfModel.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfModel
 
-train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o train-latentCrfModel.cc ClustersComparer.h StringUtils.h
+train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o train-latentCrfModel.cc ClustersComparer.h StringUtils.h LearningInfo.h
 	$(CC) $(BEFORE) $(SINGLE) train-latentCrfModel.cc $(OPT)
 
-LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
+LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
 
 LogLinearParams.o: fdict.o LogLinearParams.cc LogLinearParams.h LogLinearParams-inl.h
 	$(CC) $(BEFORE) $(SINGLE) LogLinearParams.cc $(OPT)
 
-HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h
+HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h LearningInfo.h
 	$(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
 
 FstUtils.o: FstUtils.cc FstUtils.h

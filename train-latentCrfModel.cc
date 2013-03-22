@@ -163,7 +163,7 @@ int main(int argc, char **argv) {
     cerr << "done." << endl;
   }
 
-  unsigned NUMBER_OF_LABELS = 45;
+  unsigned NUMBER_OF_LABELS = 2;
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -195,14 +195,13 @@ int main(int argc, char **argv) {
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 3;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 20;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 5;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1 = (learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1);
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.supervisedTraining = false;

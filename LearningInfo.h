@@ -49,13 +49,11 @@ struct LbfgsParams {
   int maxEvalsPerIteration;
   int memoryBuffer;
   double precision;
-  bool l1;
   
   LbfgsParams() {
     maxIterations = 10;
     memoryBuffer = 6;
     precision = 0.000000000000001;
-    l1 = false;
     maxEvalsPerIteration = 20;
   }
 };
@@ -208,6 +206,7 @@ class LearningInfo {
     zIDependsOnYIM1 = false;
     supervisedTraining = false;
     unspecified = 0;
+    unspecified2 = 0;
   }
 
   bool IsModelConverged() {
@@ -351,7 +350,7 @@ class LearningInfo {
 
   bool supervisedTraining;
 
-  int unspecified;
+  int unspecified, unspecified2;
 };
 
 
