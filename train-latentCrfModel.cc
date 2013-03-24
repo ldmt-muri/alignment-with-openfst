@@ -213,7 +213,7 @@ int main(int argc, char **argv) {
   }
   
   // initialize the model
-  LatentCrfModel& model = LatentCrfModel::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
+  LatentCrfModel& model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
   
   // hmm initialization
   unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, model, FIRST_LABEL_ID, goldLabelsFilename);

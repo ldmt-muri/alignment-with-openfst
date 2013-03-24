@@ -52,60 +52,15 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // template and inline member functions
 #include "LatentCrfModel-inl.h"
 
-  // optimize the likelihood with block coordinate descent
-  void BlockCoordinateDescent();
+ public: 
+  
+  // STATIC METHODS
+  /////////////////
+
+  static LatentCrfModel& GetInstance();
 
   // call back function for simulated annealing
-  static float EvaluateNLogLikelihood(float *lambdasArray);
-
-  // adds up the values in v1 and v2 and returns the summation vector
-  static FastSparseVector<double> AccumulateDerivatives(const FastSparseVector<double> &v1, const FastSparseVector<double> &v2);
-
-  // compute the partition function Z_\lambda(x)
-  double ComputeNLogZ_lambda(unsigned sentId); // much slower
-  double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
-
-  // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
-  // assumptions: BXZ is cleared
-  void ComputeB(unsigned sentId, const std::vector<int> &z, 
-		const fst::VectorFst<FstUtils::LogArc> &fst, 
-		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
-		std::map< int, std::map< int, LogVal<double> > > &BXZ);
-
-  // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
-  // assumptions: BXZ is cleared
-  void ComputeB(unsigned sentId, const std::vector<int> &z, 
-		const fst::VectorFst<FstUtils::LogArc> &fst, 
-		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
-		std::map< std::pair<int, int>, std::map< int, LogVal<double> > > &BXZ);
-
-  // assumptions:
-  // - fst, betas are populated using BuildThetaLambdaFst()
-  double ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
-		      const std::vector<FstUtils::LogWeight> &betas);
-    
-  // compute p(y, z | x) = \frac{\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)}{Z_\lambda(x)}
-  double ComputeNLogPrYZGivenX(unsigned sentId, const std::vector<int>& y, const std::vector<int>& z);
-
-  // copute p(y | x, z) = \frac  {\prod_i \theta_{z_i|y_i} \exp \lambda h(y_i, y_{i-1}, x, i)} 
-  //                             -------------------------------------------
-  //                             {\sum_y' \prod_i \theta_{z_i|y'_i} \exp \lambda h(y'_i, y'_{i-1}, x, i)}
-  double ComputeNLogPrYGivenXZ(unsigned sentId, const std::vector<int> &y, const std::vector<int> &z);
-    
-  double ComputeCorpusNloglikelihood();
-
-  // configure lbfgs parameters according to the LearningInfo member of the model
-  lbfgs_parameter_t SetLbfgsConfig();
-
-  // add constrained features with hand-crafted weights
-  void AddConstrainedFeatures();
-
-  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
-			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > mleGivenTwoLabels,
-			     std::map<int, double> mleMarginalsGivenOneLabel,
-			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
-    
-  double ComputeNLoglikelihoodZGivenXAndGradient(vector<double> &gradient);
+  static float EvaluateNll(float *lambdasArray);
 
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double LbfgsCallbackEvalYGivenXLambdaGradient(void *ptrFromSentId,
@@ -126,6 +81,99 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				 int k,
 				 int ls);
 
+  static double LbfgsCallbackEvalZGivenXLambdaGradient (void *uselessPtr,
+							const double *lambdasArray,
+							double *gradient,
+							const int lambdasCount,
+							const double step);
+
+  // HIGHLEVEL TRULY PUBLIC OPERATION
+  ////////////////////////////////////
+
+  // train the model
+  void Train();
+
+  void SupervisedTrain(std::string goldLabelsFilename);
+
+  void BlockCoordinateDescent();
+
+  // analyze
+  void Analyze(std::string &inputFilename, std::string &outputFilename);
+
+  // evaluate
+  double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
+  double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
+
+  void PersistTheta(std::string thetaParamsFilename);
+
+  // LABEL new examples
+  ///////////////
+
+  // given an observation sequence x (i.e. tokens), find the most likely label sequence y (i.e. labels)
+  void Label(std::vector<int> &tokens, std::vector<int> &labels);
+  void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
+  void Label(std::vector<std::vector<int> > &tokens, std::vector<std::vector<int> > &lables);
+  void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
+  void Label(std::string &inputFilename, std::string &outputFilename);
+
+
+  // CONVENIENCE MPI OPERATIONS
+  /////////////////////////////
+
+  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
+			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > mleGivenTwoLabels,
+			     std::map<int, double> mleMarginalsGivenOneLabel,
+			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
+  
+  // broadcasts the essential member variables in LogLinearParam
+  void BroadcastLambdas(unsigned rankId);
+    
+  void BroadcastTheta(unsigned rankId);
+
+  // SETUP
+  ////////
+  
+  // creates a list of vocab IDs of closed vocab words
+  void AddEnglishClosedVocab();
+
+  // configure lbfgs parameters according to the LearningInfo member of the model
+  lbfgs_parameter_t SetLbfgsConfig();
+
+  // add constrained features with hand-crafted weights
+  void AddConstrainedFeatures();
+
+  // make sure all lambda features which may fire on this training data are added to lambda.params
+  void InitLambda();
+
+  void InitTheta();
+
+  // (MINI)BATCH LEVEL
+
+  void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+				       std::map<int, double> &mleMarginalsGivenOneLabel,
+				       MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
+				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
+  
+  // SUBSENT LEVEL
+  ////////////////
+
+  // fire features in this sentence
+  void FireFeatures(unsigned sentId,
+		    const fst::VectorFst<FstUtils::LogArc> &fst,
+		    FastSparseVector<double> &h);
+
+  double GetNLogTheta(int yim1, int yi, int zi);
+
+  // SENT LEVEL
+  ///////////
+
+  // collect soft counts from this sentence
+  void UpdateThetaMleForSent(const unsigned sentId, 
+			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+			     std::map<int, double> &mleMarginalsGivenOneLabel,
+			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
+			     std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
+
   // builds an FST to computes B(x,z)
   void BuildThetaLambdaFst(unsigned sentId, const std::vector<int> &z, 
 			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, std::vector<FstUtils::LogWeight>& betas);
@@ -135,6 +183,31 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   // build an FST to compute Z(x). also computes potentials
   void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
+
+  // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
+  double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient);
+
+  // compute the partition function Z_\lambda(x)
+  double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
+
+  // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
+  // assumptions: BXZ is cleared
+  void ComputeB(unsigned sentId, const std::vector<int> &z, 
+		const fst::VectorFst<FstUtils::LogArc> &fst, 
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
+		std::map< int, std::map< int, LogVal<double> > > &BXZ);
+
+  // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
+  // assumptions: BXZ is cleared
+  void ComputeB(unsigned sentId, const std::vector<int> &z, 
+		const fst::VectorFst<FstUtils::LogArc> &fst, 
+		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
+		std::map< std::pair<int, int>, std::map< int, LogVal<double> > > &BXZ);
+
+  // assumptions:
+  // - fst, betas are populated using BuildThetaLambdaFst()
+  double ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
+		      const std::vector<FstUtils::LogWeight> &betas);
 
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
@@ -147,99 +220,20 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(unsigned sentId, const std::vector<int> &z,
-		const fst::VectorFst<FstUtils::LogArc> &fst,
-		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
-		std::map<std::string, double> &DXZk);
-
-  // assumptions: 
-  // - fst is populated using BuildThetaLambdaFst()
-  // - DXZk is cleared
   void ComputeD(unsigned sentId, const std::vector<int> &z, 
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
 		FastSparseVector<LogVal<double> > &DXZk);
-    
- private:
+
+ protected:
   LatentCrfModel(const std::string &textFilename, 
-		 const std::string &outputPrefix, 
-		 LearningInfo &learningInfo,
-		 unsigned numberOfLabels,
-		 unsigned firstLabelId);
+		     const std::string &outputPrefix, 
+		     LearningInfo &learningInfo,
+		     unsigned numberOfLabels,
+		     unsigned firstLabelId);
   
   ~LatentCrfModel();
 
-  static LatentCrfModel *instance;
-
-  void AddEnglishClosedVocab();
-
-  // make sure all lambda features which may fire on this training data are added to lambda.params
-  void InitLambda();
-
-  // fire features in this sentence
-  void FireFeatures(unsigned sentId,
-		    const fst::VectorFst<FstUtils::LogArc> &fst,
-		    FastSparseVector<double> &h);
-
- public:
-
-  // given an observation sequence x (i.e. tokens), find the most likely label sequence y (i.e. labels)
-  void Label(std::vector<int> &tokens, std::vector<int> &labels);
-  void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
-  void Label(std::vector<std::vector<int> > &tokens, std::vector<std::vector<int> > &lables);
-  void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
-  void Label(std::string &inputFilename, std::string &outputFilename);
-
-  static LatentCrfModel& GetInstance(const std::string &textFilename, 
-				     const std::string &outputPrefix, 
-				     LearningInfo &learningInfo, 
-				     unsigned NUMBER_OF_LABELS, 
-				     unsigned FIRST_LABEL_ID);
-
- public:
-
-  static LatentCrfModel& GetInstance();
-
-  // train the model
-  void Train();
-
-  // analyze
-  void Analyze(std::string &inputFilename, std::string &outputFilename);
-
-  // evaluate
-  double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
-  double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
-
-  // collect soft counts from this sentence
-  void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-				       std::map<int, double> &mleMarginalsGivenOneLabel,
-				       MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
-				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
-  
-  // broadcasts the essential member variables in LogLinearParam
-  void BroadcastLambdas(unsigned rankId);
-    
-  void BroadcastTheta(unsigned rankId);
-
-  void UpdateThetaMleForSent(const unsigned sentId, 
-			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-			     std::map<int, double> &mleMarginalsGivenOneLabel,
-			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
-			     std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
-
-  void InitTheta();
-
-  double GetNLogTheta(int yim1, int yi, int zi);
-
-  void PersistTheta(std::string thetaParamsFilename);
-
-  void SupervisedTrain(std::string goldLabelsFilename);
-
-  static double LbfgsCallbackEvalZGivenXLambdaGradient (void *uselessPtr,
-							const double *lambdasArray,
-							double *gradient,
-							const int lambdasCount,
-							const double step);
  public:
   std::vector<std::vector<int> > data, labels;
   LearningInfo learningInfo;
@@ -247,7 +241,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
   MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
 
- private:
+ protected:
+  static LatentCrfModel *instance;
   VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   std::string textFilename, outputPrefix;
@@ -260,10 +255,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   SimAnneal simulatedAnnealer;
 };
 
-/*
 class LatentCrfPosTagger : public LatentCrfModel {
 
- private:
+ protected:
   LatentCrfPosTagger(const std::string &textFilename, 
 		     const std::string &outputPrefix, 
 		     LearningInfo &learningInfo,
@@ -272,19 +266,9 @@ class LatentCrfPosTagger : public LatentCrfModel {
   
   ~LatentCrfPosTagger();
 
-  static LatentCrfPosTagger *instance;
-
-  void AddEnglishClosedVocab();
-
-  // make sure all lambda features which may fire on this training data are added to lambda.params
-  void WarmUp();
-
-  // fire features in this sentence
-  void FireFeatures(const std::vector<int> &x,
-		    const fst::VectorFst<FstUtils::LogArc> &fst,
-		    FastSparseVector<double> &h);
-
  public:
+
+  static LatentCrfModel& GetInstance();
 
   static LatentCrfModel& GetInstance(const std::string &textFilename, 
 				     const std::string &outputPrefix, 
@@ -293,6 +277,6 @@ class LatentCrfPosTagger : public LatentCrfModel {
 				     unsigned FIRST_LABEL_ID);
 
 };
-*/
+
 
 #endif
