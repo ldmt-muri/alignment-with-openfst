@@ -5,6 +5,8 @@ using namespace OptAlgorithm;
 
 // singlenton instance definition and trivial initialization
 LatentCrfModel* LatentCrfModel::instance = 0;
+int LatentCrfModel::START_OF_SENTENCE_Y_VALUE = -100;
+unsigned LatentCrfModel::NULL_POSITION = -100;
 
 LatentCrfModel& LatentCrfModel::GetInstance() {
   if(!instance) {
@@ -89,6 +91,9 @@ double LatentCrfModel::ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), but doesn't not compute the potentials
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst) {
+
+  PrepareExample(sentId);
+
   const vector<int> &x = GetObservableSequence(sentId);
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
@@ -100,7 +105,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
    map<int, int> yIM1ToState, yIToState;
   assert(yIM1ToState.size() == 0);
   assert(yIToState.size() == 0);
-  yIM1ToState[START_OF_SENTENCE_Y_VALUE] = startState;
+  yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
   // for each timestep
   for(int i = 0; i < x.size(); i++){
@@ -122,13 +127,13 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 	int yI = *yDomainIter;
 	
 	// skip special classes
-	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == LatentCrfModel::END_OF_SENTENCE_Y_VALUE) {
 	  continue;
 	}
 
 	// compute h(y_i, y_{i-1}, x, i)
-	map<string, double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
+	FastSparseVector<double> h;
+	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 	// compute the weight of this transition:
 	// \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
 	double nLambdaH = -1.0 * lambda->DotProduct(h);
@@ -215,7 +220,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 
 	// for each feature that fires on this arc
 	FastSparseVector<double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 	for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
 	  if(FXk.find(h_k->first) == FXk.end()) {
@@ -238,6 +243,19 @@ void LatentCrfModel::ComputeF(unsigned sentId,
     cerr << "ComputeF() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
   }
 }			   
+
+void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  const std::vector<bool> &enabledFeatureTypes, 
+				  FastSparseVector<double> &activeFeatures) { 
+  vector<int> &observedContext = GetObservableContext(sentId);
+  if(observedContext.size() == 0) {
+    // fire the pos tagger features
+    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
+  } else {
+    // fire the word aligner features
+    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), observedContext, i, LatentCrfModel::START_OF_SENTENCE_Y_VALUE, NULL_POSITION, enabledFeatureTypes, activeFeatures);
+  }
+}
 
 void LatentCrfModel::FireFeatures(unsigned sentId,
 				  const fst::VectorFst<FstUtils::LogArc> &fst,
@@ -271,7 +289,7 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
 	int toState = arc.nextstate;
 
 	// for each feature that fires on this arc
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 
 	// prepare the schedule for visiting states in the next timestep
 	iP1States.insert(toState);
@@ -329,7 +347,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
 
 	// for each feature that fires on this arc
 	FastSparseVector<double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 	for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
 
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
@@ -494,6 +512,8 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 
   clock_t timestamp = clock();
 
+  PrepareExample(sentId);
+
   const vector<int> &x = GetObservableSequence(sentId);
 
   // arcs represent a particular choice of y_i at time step i
@@ -507,7 +527,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   assert(yIM1ToState.size() == 0);
   assert(yIToState.size() == 0);
 
-  yIM1ToState[START_OF_SENTENCE_Y_VALUE] = startState;
+  yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
   // for each timestep
   for(int i = 0; i < x.size(); i++){
@@ -529,13 +549,13 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 	int yI = *yDomainIter;
 
 	// skip special classes
-	if(yI == START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+	if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
 	  continue;
 	}
 
 	// compute h(y_i, y_{i-1}, x, i)
-	map<string, double> h;
-	lambda->FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, h);
+	FastSparseVector<double> h;
+	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 
 	// prepare -log \theta_{z_i|y_i}
 	int zI = z[i];
@@ -744,7 +764,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     // compute feature aggregate values on the gold labels of this sentence
     FastSparseVector<double> goldFeatures;
     for(unsigned i = 0; i < x.size(); i++) {
-      model.lambda->FireFeatures(y[i], i==0?model.START_OF_SENTENCE_Y_VALUE:y[i-1], x, i, model.enabledFeatureTypes, goldFeatures);
+      model.FireFeatures(y[i], i==0? LatentCrfModel::START_OF_SENTENCE_Y_VALUE:y[i-1], sentId, i, model.enabledFeatureTypes, goldFeatures);
     }
     if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": size of gold features = " << goldFeatures.size() << endl; 
@@ -1057,7 +1077,7 @@ void LatentCrfModel::AddConstrainedFeatures() {
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "adding constrained lambda features..." << endl;
   }
-  std::map<string, double> activeFeatures;
+  FastSparseVector<double> activeFeatures;
   int yI, xI;
   int yIM1_dummy, index; // we don't really care
   vector<int> x;
@@ -1080,9 +1100,14 @@ void LatentCrfModel::AddConstrainedFeatures() {
       yIM1_dummy = yI; // we don't really care
       index = 0; // we don't really care
       activeFeatures.clear();
-      lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+      // start hack 
+      SetTestExample(x);
+      testingMode = true;
+      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+      testingMode = false;
+      // end hack
       // set appropriate weights to favor those parameters
-      for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
 	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
       }
       // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
@@ -1092,9 +1117,14 @@ void LatentCrfModel::AddConstrainedFeatures() {
 	}
 	// fire the negatively constrained features
 	activeFeatures.clear();
-	lambda->FireFeatures(*yDomainIter, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+	// start hack 
+	SetTestExample(x);
+	testingMode = true;
+	FireFeatures(*yDomainIter, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+	testingMode = false;
+	// end hack
 	// set appropriate weights to penalize those parameters
-	for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+	for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
 	  lambda->UpdateParam(featureIter->first, PENALTY_FOR_CONSTRAINED_FEATURES);
 	}   
       }
@@ -1113,9 +1143,14 @@ void LatentCrfModel::AddConstrainedFeatures() {
       yIM1_dummy = yI; // we don't really care
       index = 0; // we don't really care
       activeFeatures.clear();
-      lambda->FireFeatures(yI, yIM1_dummy, x, index, constrainedFeatureTypes, activeFeatures);
+      // start hack
+      SetTestExample(x);
+      testingMode = true;
+      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+      testingMode = false;
+      // end hack
       // set appropriate weights to favor those parameters
-      for(map<string, double>::const_iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); featureIter++) {
+      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
 	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
       }
       break;
@@ -1136,6 +1171,10 @@ void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 					   map<int, double> &mleMarginalsGivenOneLabel,
 					   MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
 					   map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+
+  // in the word alignment model, yDomain depends on the example
+  PrepareExample(sentId);
+  
   if(learningInfo.zIDependsOnYIM1) {
     UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
   } else {
@@ -1289,6 +1328,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
 	continue;
       }
+
       UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
     }
 
@@ -1512,7 +1552,7 @@ void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   // hack to reuse the code that manipulates the fst
   SetTestExample(tokens);
   unsigned sentId = 0;
-
+  
   fst::VectorFst<FstUtils::LogArc> fst;
   vector<FstUtils::LogWeight> alphas, betas;
   BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
@@ -1662,7 +1702,7 @@ void LatentCrfModel::InitLambda() {
   }
 
   // debug info
-  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS){ 
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before reduce()" << endl;
   }
@@ -1727,7 +1767,7 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
 										 learningInfo, 
 										 FIRST_LABEL_ID) {
   // set constants
-  this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
+  LatentCrfModel::START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
   assert(START_OF_SENTENCE_Y_VALUE > 0);
 
@@ -1735,9 +1775,9 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   // POS tag yDomain
   unsigned latentClasses = NUMBER_OF_LABELS;
   assert(latentClasses > 1);
-  this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
+  this->yDomain.insert(LatentCrfModel::START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
-    this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
+    this->yDomain.insert(LatentCrfModel::START_OF_SENTENCE_Y_VALUE + i + 1);
   }
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);

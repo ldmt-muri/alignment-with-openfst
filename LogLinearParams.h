@@ -52,12 +52,13 @@ class LogLinearParams {
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 		    const std::vector<bool> &enabledFeatureTypes, 
-		    std::map<string, double> &activeFeatures);
-  
-  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
-		    const std::vector<bool> &enabledFeatureTypes, 
 		    FastSparseVector<double> &activeFeatures);
   
+  void FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
+		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
+		    const std::vector<bool> &enabledFeatureTypes, 
+		    FastSparseVector<double> &activeFeatures);
+
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
   bool AddParam(const std::string &paramId);
   
@@ -66,6 +67,14 @@ class LogLinearParams {
 
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
   double DotProduct(const std::map<std::string, double>& values);
+
+  double DotProduct(const std::vector<double>& values);
+
+  double DotProduct(const std::vector<double>& values, const std::vector<double>& weights);
+
+  double DotProduct(const FastSparseVector<double> &values);
+
+  double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights);
  
   // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const std::map<std::string, double> &gradient, const OptMethod &optMethod);

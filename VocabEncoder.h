@@ -74,6 +74,14 @@ class VocabEncoder {
     closedVocab.insert(code);
   }
 
+  int UnkInt() {
+    return tokenToInt[UNK];
+  }
+
+  string UnkString() {
+    return UNK;
+  }
+
   int Encode(const string& token, bool explicitUseUnk) {
     if(tokenToInt.count(token) == 0) {
       if(explicitUseUnk) {
@@ -103,11 +111,55 @@ class VocabEncoder {
     assert(ids.size() == tokens.size());
   }
   
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents) {
-    // to be implemented
-    assert(false);
+  // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, string &nullToken) {
+    assert(srcSents.size() == 0 && tgtSents.size() == 0);
+    
+    // open data file
+    std::ifstream textFile(textFilename.c_str(), std::ios::in);
+    
+    // for each line
+    std::string line;
+    int lineNumber = -1;
+    while(getline(textFile, line)) {
+      
+      // skip empty lines
+      if(line.size() == 0) {
+	continue;
+      }
+      lineNumber++;
+      
+      // split tokens
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      
+      // encode tokens
+      srcSents.resize(lineNumber+1);
+      tgtSents.resize(lineNumber+1);
+      vector<int> temp;
+      Encode(splits, temp);
+      assert(splits.size() == temp.size());
+      // src sent is written before tgt sent
+      bool src = true;
+      if(nullToken.size() > 0) {
+	srcSents[lineNumber].push_back(Encode(nullToken));
+      }
+      for(unsigned i = 0; i < temp.size(); i++) {
+	if(splits[i] == "|||") {
+	  // done with src sent. 
+	  src = false;
+	  // will now read tgt sent.
+	  continue;
+	}
+	if(src) {
+	  srcSents[lineNumber].push_back(temp[i]);
+	} else {
+	  tgtSents[lineNumber].push_back(temp[i]);
+	}
+      }
+    }
   }
-
+  
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int> > &data) {

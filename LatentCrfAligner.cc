@@ -29,8 +29,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
-  this->NULL_POS = FIRST_LABEL_ID;
-  this->FIRST_SRC_POS = FIRST_LABEL_ID + 1;
+  this->NULL_POSITION = FIRST_LABEL_ID;
+  this->FIRST_SRC_POSITION = FIRST_LABEL_ID + 1;
   assert(START_OF_SENTENCE_Y_VALUE > 0);
 
   // unlike POS tagging, yDomain depends on the src sentence length. we will set it on a per-sentence basis.
@@ -69,11 +69,17 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   
   // zero is reserved for FST epsilon (I don't think this is a problem since we don't use the x_i nor the z_i as fst labels)
   assert(this->x_sDomain.count(0) == 0 && this->zDomain.count(0) == 0);
-  
+
+  // encode the null token which is conventionally added to the beginning of the src sentnece. 
+  NULL_TOKEN_STR = "__null__token__";
+  bool explicitUseUnk = false;
+  NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR, explicitUseUnk);
+  assert(NULL_TOKEN != vocabEncoder.UnkInt);
+
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
-  vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents);
+  vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN);
 
   // bool vectors indicating which feature types to use
   assert(enabledFeatureTypes.size() == 0);
@@ -90,7 +96,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     enabledFeatureTypes.push_back(false);
   }
   enabledFeatureTypes[101] = true;  // I( y_i-y_{i-1} == 0 )
-  enabledFeatureTypes[102] = true;  // I( floor( lg_2(y_i - y_{i-1}) ) == k ); k \in {0, 1, 2, 3, 4, 5}
+  enabledFeatureTypes[102] = true;  // I( floor( ln(y_i - y_{i-1}) ) )
   enabledFeatureTypes[103] = true;  // I( tgt[i] aligns_to src[y_i] )
 
   // initialize (and normalize) the log theta params to gaussians
@@ -112,12 +118,65 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   InitLambda();
 }
 
-vector<int> LatentCrfAligner::GetObservableSequence(int exampleId) {
-  assert(exampleId < tgtSents.size());
-  return tgtSents[exampleId];
+void LatentCrfAligner::InitTheta() {
+
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
+  }
+
+  // this feature of the model is not supported for the word alignment model yet
+  assert(!learningInfo.zIDependsOnYIM1);
+
+  assert(srcSents.size() == tgtSents.size());
+
+  // first initialize nlogthetas to unnormalized gaussians
+  nLogThetaGivenOneLabel.params.clear();
+  for(unsigned sentId = 0; sentId < srcSents.size(); ++sentId) {
+    vector<int> &srcSent = srcSents[sentId];
+    vector<int> &tgtSent = tgtSents[sentId];
+    for(unsigned i = 0; i < srcSent.size(); ++i) {
+      int srcToken = srcSent[i];
+      for(unsigned j = 0; j < tgtSent.size(); ++j) {
+	int tgtToken = tgtSent[j];
+	nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
+      }
+    }
+  }
+
+  // then normalize them
+  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
+  
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "done" << endl;
+  }
 }
 
-void LatentCrfAligner::InitTheta() {
-  // to be implemented
-  assert(false);
+void LatentCrfAligner::PrepareExample(unsigned exampleId) {
+  yDomain.clear();
+  // this length includes the null token that was inserted at the begging of all source sentences
+  srcSentLength = srcSents[exampleId].size();
+  // each position in the src sentence, including null, should have an entry in yDomain
+  for(unsigned i = NULL_POSITION; i < NULL_POSITION + srcSentLength; ++i) {
+    yDomain.insert(i);
+  }
+}
+
+vector<int> LatentCrfAligner::GetObservableSequence(int exampleId) {
+  if(testingMode) {
+    assert(exampleId < testTgtSents.size());
+    return testTgtSents[exampleId];
+  } else {
+    assert(exampleId < tgtSents.size());
+    return tgtSents[exampleId];
+  }
+}
+
+vector<int>& LatentCrfAligner::GetObservableContext(int exampleId) { 
+  if(testingMode) {
+    assert(exampleId < testSrcSents.size());
+    return testSrcSents[exampleId];
+  } else {
+    assert(exampleId < srcSents.size());
+    return srcSents[exampleId];
+  }   
 }

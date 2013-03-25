@@ -40,9 +40,6 @@ bool LogLinearParams::AddParam(const string &paramId) {
 
 // if there's another parameter with the same ID already, do nothing
 bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
-  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "rank #" << learningInfo->mpiWorld->rank() << ": executing AddParam(" << paramId << "," << paramWeight << "); where |paramIndexes| = " << paramIndexes.size() << ", |paramWeights| = " << paramWeights.size() << endl;
-  }
   bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
     if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
@@ -60,35 +57,71 @@ bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
     paramIds.push_back(paramId);
     returnValue = true;
   } else {
-    if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-      cerr << "paramId already exists.";
-    }
     returnValue = false;
   }  
-  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "returning " << returnValue << endl;
-  }
   return returnValue;
 }
 
-// features for the latnet crf model
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+// x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
+				   int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 				   const std::vector<bool> &enabledFeatureTypes, 
-				   std::map<string, double> &activeFeatures) {
-  FastSparseVector<double> f;
-  FireFeatures(yI, yIM1, x, i, enabledFeatureTypes, f);
-  for(FastSparseVector<double>::iterator fIter = f.begin(); fIter != f.end(); ++fIter) {
-    activeFeatures[GetParamId(fIter->first)] += fIter->second;
+				   FastSparseVector<double> &activeFeatures) {
+  stringstream temp;
+
+  // first, yI and yIM1 are not zero-based. LatentCrfAligner::NULL_POS maps to position 0 (i.e. the null token). 
+  yI -= NULL_POS;
+  yIM1 -= NULL_POS;
+  
+  // find the src token aligned according to x_t_i
+  assert( yI < x_s.size() && yIM1 < x_s.size() && yI >= 0);
+  int srcToken = x_s[yI];
+  int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
+  int tgtToken = x_t[i];
+
+  // now, fire features
+
+  // F101: I( y_i-y_{i-1} == 0 )
+  if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
+    temp.str("");
+    temp << "F101:";
+    if(yI == yIM1) {
+      temp << "true";
+    } else {
+      temp << "false";
+    }
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
+  
+  // F102: I( floor( ln(y_i - y_{i-1}) ) )
+  if(enabledFeatureTypes.size() > 102 && enabledFeatureTypes[102]) {
+    temp.str("");
+    temp << "F102:";
+    unsigned diff = log(yI - yIM1);
+    temp << diff;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
+	 
+  // F103: I( tgt[i] aligns_to src[y_i] )
+  if(enabledFeatureTypes.size() > 103 && enabledFeatureTypes[103]) {
+    temp.str("");
+    temp << "F103:" << srcToken << ":" << tgtToken;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
+	 
 }
+
 
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
-
+  
   stringstream temp;
-
+  
   const VocabDecoder &types = srcTypes;
   const int &xI = x[i];
   const std::string& xIString = types.Decode(x[i]);
@@ -792,3 +825,36 @@ double LogLinearParams::DotProduct(const std::map<std::string, double>& values) 
   }
   return dotProduct;
 }
+
+double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights) {
+  double dotProduct = 0;
+  for(FastSparseVector<double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); ++valuesIter) {
+    assert(ParamExists(valuesIter->first));
+    dotProduct += valuesIter->second * weights[valuesIter->first];
+  }
+  return dotProduct;
+}
+
+double LogLinearParams::DotProduct(const FastSparseVector<double> &values) {
+  return DotProduct(values, paramWeights);
+}
+
+// compute dot product of two vectors
+// assumptions:
+// -both vectors are of the same size
+double LogLinearParams::DotProduct(const std::vector<double>& values, const std::vector<double>& weights) {
+  assert(values.size() == weights.size());
+  double dotProduct = 0;
+  for(int i = 0; i < values.size(); i++) {
+    dotProduct += values[i] * weights[i];
+  }
+  return dotProduct;
+}
+  
+// compute the dot product between the values vector (passed) and the paramWeights vector (member)
+// assumptions:
+// - values and paramWeights are both of the same size
+double LogLinearParams::DotProduct(const std::vector<double>& values) {
+  return DotProduct(values, paramWeights);
+}
+  

@@ -164,12 +164,21 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
 		    FastSparseVector<double> &h);
 
+  void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+		    const std::vector<bool> &enabledFeatureTypes, 
+		    FastSparseVector<double> &activeFeatures);
+
   double GetNLogTheta(int yim1, int yi, int zi);
 
   virtual std::vector<int>& GetObservableSequence(int exampleId) = 0;
 
+  virtual std::vector<int>& GetObservableContext(int exampleId) = 0;
+
   // SENT LEVEL
   ///////////
+
+  // prepare the model before processing an example
+  virtual void PrepareExample(unsigned exampleId) = 0;
 
   // collect soft counts from this sentence
   void UpdateThetaMleForSent(const unsigned sentId, 
@@ -243,10 +252,12 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   LogLinearParams *lambda;
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
   MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
+  static int START_OF_SENTENCE_Y_VALUE;
+  static unsigned NULL_POSITION;
+  int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
 
  protected:
   static LatentCrfModel *instance;
-  int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   std::string textFilename, outputPrefix;
   std::set<int> zDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
@@ -275,6 +286,10 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   void SetTestExample(std::vector<int> &tokens);
 
+  void PrepareExample(unsigned exampleId) { /* do nothing */ }
+
+  std::vector<int>& GetObservableContext(int exampleId) { /* do nothing */ return empty; }
+
  public:
 
   static LatentCrfModel* GetInstance();
@@ -287,8 +302,9 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   std::vector<int>& GetObservableSequence(int exampleId);
 
- public:
   std::vector<std::vector<int> > data, testData;
+
+  std::vector<int> empty;
 };
 
 

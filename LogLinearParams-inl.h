@@ -2,37 +2,6 @@
 #define _LOG_LINEAR_PARAMS_INL_H_
 
 public:
-  inline double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights) {
-    double dotProduct = 0;
-    for(FastSparseVector<double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); ++valuesIter) {
-      dotProduct += valuesIter->second * weights[valuesIter->first];
-    }
-    return dotProduct;
-  }
-
-  inline double DotProduct(const FastSparseVector<double> &values) {
-    return DotProduct(values, paramWeights);
-  }
-
-  // compute dot product of two vectors
-  // assumptions:
-  // -both vectors are of the same size
-  inline double DotProduct(const std::vector<double>& values, const std::vector<double>& weights) {
-    assert(values.size() == weights.size());
-    double dotProduct = 0;
-    for(int i = 0; i < values.size(); i++) {
-      dotProduct += values[i] * weights[i];
-    }
-    return dotProduct;
-  }
-  
-  // compute the dot product between the values vector (passed) and the paramWeights vector (member)
-  // assumptions:
-  // - values and paramWeights are both of the same size
-  inline double DotProduct(const std::vector<double>& values) {
-    return DotProduct(values, paramWeights);
-  }
-  
   // given description of an arc in the alignment transducer, compute the local arc probability
   inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 					 int srcSentLength, int tgtSentLength, 
@@ -79,6 +48,11 @@ public:
   // checks whether a parameter exists
   inline bool ParamExists(const std::string &paramId) {
     return paramIndexes.count(paramId) == 1;
+  }
+
+  // checks whether a parameter exists
+  inline bool ParamExists(const unsigned &paramIndex) {
+    return paramIndex < paramIndexes.size();
   }
 
   // returns the int index of the parameter in the underlying array

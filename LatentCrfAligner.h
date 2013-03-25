@@ -18,6 +18,8 @@ class LatentCrfWordAligner : public LatentCrfModel {
 
   void InitTheta();
 
+  void PrepareExample(unsigned exampleId);
+
  public:
 
   static LatentCrfAligner& GetInstance();
@@ -28,14 +30,19 @@ class LatentCrfWordAligner : public LatentCrfModel {
 				       unsigned NUMBER_OF_LABELS, 
 				       unsigned FIRST_LABEL_ID);
  private:
-  // the value of y_i that indicates an alignment to the NULL source token, and to the first token in the source sentence, respectively.
-  unsigned NULL_POS, FIRST_SRC_POS;
-
   // vocabulary of src language
   std::set<int> x_sDomain;
 
   // data
-  std::vector< std::vector<int> > srcSents, tgtSents;
+  std::vector< std::vector<int> > srcSents, tgtSents, testSrcSents, testTgtSents;
+
+  // null token
+  static string NULL_TOKEN_STR;
+  static int NULL_TOKEN;
+
+ public:
+  // the value of y_i that indicates an alignment to the NULL source token, and to the first token in the source sentence, respectively.
+  static unsigned FIRST_SRC_POSITION;
 };
 
 #endif
