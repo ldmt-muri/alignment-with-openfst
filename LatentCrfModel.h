@@ -142,11 +142,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // add constrained features with hand-crafted weights
   void AddConstrainedFeatures();
 
-  // make sure all lambda features which may fire on this training data are added to lambda.params
-  void InitLambda();
-
-  void InitTheta();
-
   // (MINI)BATCH LEVEL
 
   void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
@@ -154,6 +149,13 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				       MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
 				       std::map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
+  // make sure all lambda features which may fire on this training data are added to lambda.params
+  void InitLambda();
+
+  virtual void InitTheta() = 0;
+
+  virtual void SetTestExample(std::vector<int> &tokens) = 0;
+
   // SUBSENT LEVEL
   ////////////////
 
@@ -163,6 +165,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    FastSparseVector<double> &h);
 
   double GetNLogTheta(int yim1, int yi, int zi);
+
+  virtual std::vector<int>& GetObservableSequence(int exampleId) = 0;
 
   // SENT LEVEL
   ///////////
@@ -229,13 +233,12 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   LatentCrfModel(const std::string &textFilename, 
 		     const std::string &outputPrefix, 
 		     LearningInfo &learningInfo,
-		     unsigned numberOfLabels,
 		     unsigned firstLabelId);
   
   ~LatentCrfModel();
 
  public:
-  std::vector<std::vector<int> > data, labels;
+  std::vector<std::vector<int> > labels;
   LearningInfo learningInfo;
   LogLinearParams *lambda;
   MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
@@ -243,16 +246,18 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
  protected:
   static LatentCrfModel *instance;
-  VocabEncoder vocabEncoder;
   int START_OF_SENTENCE_Y_VALUE, END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   std::string textFilename, outputPrefix;
-  std::set<int> xDomain, yDomain;
+  std::set<int> zDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;
-  unsigned countOfConstrainedLambdaParameters;
+  unsigned countOfConstrainedLambdaParameters, examplesCount;
   double REWARD_FOR_CONSTRAINED_FEATURES, PENALTY_FOR_CONSTRAINED_FEATURES;
   GaussianSampler gaussianSampler;
   SimAnneal simulatedAnnealer;
+  // during training time, and by default, this should be set to false. 
+  // When we use the trained model to predict the labels, we set it to true
+  bool testingMode;
 };
 
 class LatentCrfPosTagger : public LatentCrfModel {
@@ -266,17 +271,26 @@ class LatentCrfPosTagger : public LatentCrfModel {
   
   ~LatentCrfPosTagger();
 
+  void InitTheta();
+
+  void SetTestExample(std::vector<int> &tokens);
+
  public:
 
-  static LatentCrfModel& GetInstance();
+  static LatentCrfModel* GetInstance();
 
-  static LatentCrfModel& GetInstance(const std::string &textFilename, 
+  static LatentCrfModel* GetInstance(const std::string &textFilename, 
 				     const std::string &outputPrefix, 
 				     LearningInfo &learningInfo, 
 				     unsigned NUMBER_OF_LABELS, 
 				     unsigned FIRST_LABEL_ID);
 
+  std::vector<int>& GetObservableSequence(int exampleId);
+
+ public:
+  std::vector<std::vector<int> > data, testData;
 };
+
 
 
 #endif

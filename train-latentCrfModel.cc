@@ -23,15 +23,15 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
 }
 
 // returns the rank of the process which have found the best HMM parameters
-unsigned HmmInitialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, int NUMBER_OF_LABELS, LatentCrfModel &latentCrfModel, int FIRST_LABEL_ID, string goldLabelsFilename) {
+unsigned HmmInitialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, int NUMBER_OF_LABELS, LatentCrfPosTagger &latentCrfPosTagger, int FIRST_LABEL_ID, string goldLabelsFilename) {
 
   outputFilenamePrefix += ".hmm";
 
   // hmm initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
-  assert(latentCrfModel.learningInfo.zIDependsOnYIM1 == false);
+  assert(latentCrfPosTagger.learningInfo.zIDependsOnYIM1 == false);
 
   // configurations
-  cerr << "rank #" << world.rank() << ": training the hmm model to initialize latentCrfModel parameters..." << endl;
+  cerr << "rank #" << world.rank() << ": training the hmm model to initialize latentCrfPosTagger parameters..." << endl;
 
   bool persistHmmParams = false;
 
@@ -97,17 +97,17 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
       cerr << "many-to-one = " << manyToOne << endl;
     }
 
-    // now initialize the latentCrfModel's theta parameters
+    // now initialize the latentCrfPosTagger's theta parameters
     MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
-    for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfModel.nLogThetaGivenOneLabel.params.begin(); 
-	contextIter != latentCrfModel.nLogThetaGivenOneLabel.params.end();
+    for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
+	contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
 	contextIter++) {
       for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
 	probIter->second = hmmModel.nlogTheta[contextIter->first][probIter->second];
       }
     }
     
-    // then initialize the "transition" latentCrfModel's lambda parameters
+    // then initialize the "transition" latentCrfPosTagger's lambda parameters
     for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = hmmModel.nlogGamma.params.begin();
 	contextIter != hmmModel.nlogGamma.params.end();
 	contextIter++) {
@@ -117,17 +117,17 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 	const double hmmNlogProb = probIter->second;
 	stringstream temp;
 	temp << "F51:" << yIM1 << ":" << yI;
-	if(!latentCrfModel.lambda->ParamExists(temp.str())) {
-	  cerr << "parameter " << temp.str() << " exists as a transition feature in the hmm model, but was not found in the latentCrfModel." << endl;
+	if(!latentCrfPosTagger.lambda->ParamExists(temp.str())) {
+	  cerr << "parameter " << temp.str() << " exists as a transition feature in the hmm model, but was not found in the latentCrfPosTagger." << endl;
 	  cerr << "============================================" << endl;
 	  cerr << "hmm params: " << endl;
 	  hmmModel.nlogGamma.PrintParams();
 	  cerr << "============================================" << endl;
-	  cerr << "latentCrfModel params: " << endl;
-	  latentCrfModel.lambda->PrintParams();
+	  cerr << "latentCrfPosTagger params: " << endl;
+	  latentCrfPosTagger.lambda->PrintParams();
 	  assert(false);
 	}
-	latentCrfModel.lambda->UpdateParam(temp.str(), hmmNlogProb);
+	latentCrfPosTagger.lambda->UpdateParam(temp.str(), hmmNlogProb);
       }
     }
   }
@@ -213,19 +213,19 @@ int main(int argc, char **argv) {
   }
   
   // initialize the model
-  LatentCrfModel& model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
+  LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
   
   // hmm initialization
-  unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, model, FIRST_LABEL_ID, goldLabelsFilename);
-  model.BroadcastTheta(bestRank);
-  model.BroadcastLambdas(bestRank);
+  unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
+  model->BroadcastTheta(bestRank);
+  model->BroadcastLambdas(bestRank);
 
   // use gold labels to do supervised training
   if(learningInfo.supervisedTraining) {
-    model.SupervisedTrain(goldLabelsFilename);
+    model->SupervisedTrain(goldLabelsFilename);
     if(learningInfo.mpiWorld->rank() == 0) {
-      model.PersistTheta(outputFilenamePrefix + ".supervised.theta");
-      model.lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
+      model->PersistTheta(outputFilenamePrefix + ".supervised.theta");
+      model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
     }
   }
 
@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": train the model..." << endl;
   }
-  model.Train();
+  model->Train();
   if(world.rank() == 0) {
     cerr << "training finished!" << endl;
   }
@@ -246,20 +246,20 @@ int main(int argc, char **argv) {
   // compute some statistics on a test set
   cerr << "analyze the data using the trained model..." << endl;
   string analysisFilename = outputFilenamePrefix + ".analysis";
-  model.Analyze(textFilename, analysisFilename);
+  model->Analyze(textFilename, analysisFilename);
   cerr << "analysis can be found at " << analysisFilename << endl;
   
   // viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
-  model.Label(textFilename, labelsFilename);
+  model->Label(textFilename, labelsFilename);
   cerr << "automatic labels can be found at " << labelsFilename << endl;
 
   // compare to gold standard
   if(goldLabelsFilename != "") {
     cerr << "comparing to gold standard tagging..." << endl;
-    double vi = model.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
+    double vi = model->ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
     cerr << "done. \nvariation of information = " << vi << endl;
-    double manyToOne = model.ComputeManyToOne(labelsFilename, goldLabelsFilename);
+    double manyToOne = model->ComputeManyToOne(labelsFilename, goldLabelsFilename);
     cerr << "many-to-one = " << manyToOne << endl ;
   }
 }

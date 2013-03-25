@@ -6,25 +6,6 @@ using namespace OptAlgorithm;
 // singlenton instance definition and trivial initialization
 LatentCrfModel* LatentCrfModel::instance = 0;
 
-// singleton
-LatentCrfModel& LatentCrfPosTagger::GetInstance(const string &textFilename, 
-						    const string &outputPrefix, 
-						    LearningInfo &learningInfo, 
-						    unsigned NUMBER_OF_LABELS, 
-						    unsigned FIRST_LABEL_ID) {
-  if(!LatentCrfPosTagger::instance) {
-    LatentCrfPosTagger::instance = new LatentCrfPosTagger(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
-  }
-  return *LatentCrfPosTagger::instance;
-}
-
-LatentCrfModel& LatentCrfPosTagger::GetInstance() {
-  if(!instance) {
-    assert(false);
-  }
-  return *instance;
-}
-
 LatentCrfModel& LatentCrfModel::GetInstance() {
   if(!instance) {
     assert(false);
@@ -37,27 +18,11 @@ LatentCrfModel::~LatentCrfModel() {
   delete lambda;
 }
 
-LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename, 
-				       const string &outputPrefix, 
-				       LearningInfo &learningInfo, 
-				       unsigned NUMBER_OF_LABELS, 
-				       unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename, 
-										 outputPrefix, 
-										 learningInfo, 
-										 NUMBER_OF_LABELS, 
-										 FIRST_LABEL_ID) {
-  // do nothing here -- for now
-}
-
-LatentCrfPosTagger::~LatentCrfPosTagger() {}
-
 // initialize model weights to zeros
 LatentCrfModel::LatentCrfModel(const string &textFilename, 
 			       const string &outputPrefix, 
 			       LearningInfo &learningInfo, 
-			       unsigned NUMBER_OF_LABELS, 
 			       unsigned FIRST_LABEL_ID) : 
-  vocabEncoder(textFilename),
   gaussianSampler(0.0, 10.0),
   UnsupervisedSequenceTaggingModel(textFilename) {
 
@@ -68,8 +33,12 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   if(learningInfo.mpiWorld->rank() == 0) {
     vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
   }
+
+  // all processes will now read from the .vocab file master is writing. so, lets wait for the master before we continue.
   bool syncAllProcesses;
   mpi::broadcast<bool>(*learningInfo.mpiWorld, syncAllProcesses, 0);
+
+  // read the .vocab file master just wrote
   VocabDecoder *vocabDecoder = new VocabDecoder(outputPrefix + string(".vocab"));
   lambda = new LogLinearParams(*vocabDecoder);
   
@@ -79,98 +48,12 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   this->learningInfo = learningInfo;
   this->lambda->SetLearningInfo(learningInfo);
   
-  // set constants
-  this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
-  this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
-  assert(START_OF_SENTENCE_Y_VALUE > 0);
-
-  // POS tag yDomain
-  unsigned latentClasses = NUMBER_OF_LABELS;
-  assert(latentClasses > 1);
-  this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
-  for(unsigned i = 0; i < latentClasses; i++) {
-    this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
-  }
-  
-  // zero is reserved for FST epsilon
-  assert(this->yDomain.count(0) == 0);
-  
-  // words xDomain
-  for(map<int,string>::const_iterator vocabIter = vocabEncoder.intToToken.begin();
-      vocabIter != vocabEncoder.intToToken.end();
-      vocabIter++) {
-    if(vocabIter->second == "_unk_") {
-      continue;
-    }
-    this->xDomain.insert(vocabIter->first);
-  }
-  // zero is reserved for FST epsilon
-  assert(this->xDomain.count(0) == 0);
-  
-  // read and encode data
-  data.clear();
-  vocabEncoder.Read(textFilename, data);
-  
-  // bool vectors indicating which feature types to use
-  assert(enabledFeatureTypes.size() == 0);
-  // features 1-50 are reserved for wordalignment
-  for(int i = 0; i <= 50; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  // features 51-100 are reserved for latentCrf model
-  for(int i = 51; i < 100; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  enabledFeatureTypes[51] = true;   // y_i:y_{i-1}
-  //  enabledFeatureTypes[52] = true; // y_i:x_{i-2}
-  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
-  enabledFeatureTypes[54] = true;   // y_i:x_i
-  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
-  //enabledFeatureTypes[56] = true; // y_i:x_{i+2}
-  enabledFeatureTypes[57] = true; // y_i:i
-  //  enabledFeatureTypes[58] = true;
-  //  enabledFeatureTypes[59] = true;
-  //  enabledFeatureTypes[60] = true;
-  //  enabledFeatureTypes[61] = true;
-  //  enabledFeatureTypes[62] = true;
-  //  enabledFeatureTypes[63] = true;
-  //  enabledFeatureTypes[64] = true;
-  //  enabledFeatureTypes[65] = true;
-  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
-  enabledFeatureTypes[67] = true; // capital and i != 0
-  //enabledFeatureTypes[68] = true;
-  enabledFeatureTypes[69] = true; // coarse hash functions
-  //enabledFeatureTypes[70] = true;
-  //enabledFeatureTypes[71] = true; // y_i:x_{i-1} where x_{i-1} is closed vocab
-  //enabledFeatureTypes[72] = true;
-  //enabledFeatureTypes[73] = true; // y_i:x_{i+1} where x_{i+1} is closed vocab
-  //enabledFeatureTypes[74] = true;
-  //enabledFeatureTypes[75] = true; // y_i
-
-  // initialize (and normalize) the log theta params to gaussians
-  InitTheta();
-
-  // make sure all slaves have the same theta values
-  BroadcastTheta(0);
-
-  // persist initial parameters
-  assert(learningInfo.iterationsCount == 0);
-  if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
-    stringstream thetaParamsFilename;
-    thetaParamsFilename << outputPrefix << ".initial.theta";
-    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-      cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
-    }
-    PersistTheta(thetaParamsFilename.str());
-  }
-  
   // hand-crafted weights for constrained features
   REWARD_FOR_CONSTRAINED_FEATURES = 10.0;
   PENALTY_FOR_CONSTRAINED_FEATURES = -10.0;
 
-  // initialize the lambda parameters
-  // add all features in this data set to lambda.params
-  InitLambda();
+  // by default, we are operating in the training (not testing) mode
+  testingMode = false;
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {
@@ -197,41 +80,6 @@ void LatentCrfModel::AddEnglishClosedVocab() {
   }
 }
 
-void LatentCrfModel::InitTheta() {
-  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
-  }
-
-  // first initialize nlogthetas to unnormalized gaussians
-  if(learningInfo.zIDependsOnYIM1) {
-    nLogThetaGivenTwoLabels.params.clear();
-    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter2 != yDomain.end(); yDomainIter2++) {
-	for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
-	  nLogThetaGivenTwoLabels.params[std::pair<int, int>(*yDomainIter, *yDomainIter2)][*zDomainIter] = fabs(gaussianSampler.Draw());
-	}
-      }
-    }
-  } else {
-    nLogThetaGivenOneLabel.params.clear();
-    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-      for(set<int>::const_iterator zDomainIter = xDomain.begin(); zDomainIter != xDomain.end(); zDomainIter++) {
-	nLogThetaGivenOneLabel.params[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
-      }
-    }
-  }
-
-  // then normalize them
-  if(learningInfo.zIDependsOnYIM1) {
-    MultinomialParams::NormalizeParams(nLogThetaGivenTwoLabels);
-  } else {
-    MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
-  }
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "done" << endl;
-  }
-}
-
 // compute the partition function Z_\lambda(x)
 // assumptions:
 // - fst and betas are populated using BuildLambdaFst()
@@ -241,7 +89,7 @@ double LatentCrfModel::ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), but doesn't not compute the potentials
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst) {
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -309,7 +157,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
   clock_t timestamp = clock();
 
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   // first, build the fst
   BuildLambdaFst(sentId, fst);
@@ -335,7 +183,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 			      FastSparseVector<LogVal<double> > &FXk) {
   clock_t timestamp = clock();
   
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   assert(FXk.size() == 0);
   assert(fst.NumStates() > 0);
@@ -396,7 +244,7 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
 				  FastSparseVector<double> &h) {
   clock_t timestamp = clock();
   
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   assert(fst.NumStates() > 0);
   
@@ -449,7 +297,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
 			      FastSparseVector<LogVal<double> > &DXZk) {
   clock_t timestamp = clock();
 
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
   // enforce assumptions
   assert(DXZk.size() == 0);
 
@@ -525,7 +373,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
   set<int> iStates, iP1States;
@@ -582,7 +430,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
   set<int> iStates, iP1States;
@@ -646,7 +494,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 
   clock_t timestamp = clock();
 
-  const vector<int> &x = data[sentId];
+  const vector<int> &x = GetObservableSequence(sentId);
 
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
@@ -762,9 +610,9 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   MultinomialParams::ConditionalMultinomialParam<int> thetaMle;
   MultinomialParams::MultinomialParam thetaMleMarginals;
   // for each sentence
-  for(unsigned sentId = 0; sentId < data.size(); sentId++) {
+  for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     // collect number of times each theta parameter has been used
-    vector<int> &z = data[sentId];
+    vector<int> &z = GetObservableSequence(sentId);
     vector<int> &y = labels[sentId];
     assert(z.size() == y.size());
     for(unsigned i = 0; i < z.size(); i++) {
@@ -777,8 +625,8 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   nLogThetaGivenOneLabel = thetaMle;
   // compute likelihood of \theta for z|y
   double NllZGivenY = 0; 
-  for(unsigned sentId = 0; sentId < data.size(); sentId++) {
-    vector<int> &z = data[sentId];
+  for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
+    vector<int> &z = GetObservableSequence(sentId);
     vector<int> &y = labels[sentId];
     for(unsigned i = 0; i < z.size(); i++){ 
       NllZGivenY += nLogThetaGivenOneLabel[y[i]][z[i]];
@@ -791,6 +639,7 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
 }
 
 void LatentCrfModel::Train() {
+  testingMode = false;
   switch(learningInfo.optimizationMethod.algorithm) {
   case BLOCK_COORD_DESCENT:
   case SIMULATED_ANNEALING:
@@ -813,8 +662,7 @@ float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   unsigned lambdasCount = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
   // which sentences to work on?
   static int fromSentId = 0;
-  int sentsCount = model.data.size();
-  if(fromSentId >= sentsCount) {
+  if(fromSentId >= model.examplesCount) {
     fromSentId = 0;
   }
   double *dblLambdasArray = model.lambda->GetParamWeightsArray();
@@ -850,8 +698,8 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
 
   double Nll = 0;
   FastSparseVector<double> nDerivative;
-  unsigned from = 0, to = model.data.size();
-  assert(model.data.size() == model.labels.size());
+  unsigned from = 0, to = model.examplesCount;
+  assert(model.examplesCount == model.labels.size());
 
   // for each training example (x, y)
   for(unsigned sentId = from; sentId < to; sentId++) {
@@ -864,8 +712,8 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     }
 
     // Make |y| = |x|
-    assert(model.data[sentId].size() == model.labels[sentId].size());
-    const vector<int> &x = model.data[sentId];
+    assert(model.GetObservableSequence(sentId).size() == model.labels[sentId].size());
+    const vector<int> &x = model.GetObservableSequence(sentId);
     vector<int> &y = model.labels[sentId];
 
     // build the FSTs
@@ -1057,10 +905,10 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
 
   // mini batch is not supported
   assert(learningInfo.optimizationMethod.subOptMethod->miniBatchSize == 0 || 
-	 learningInfo.optimizationMethod.subOptMethod->miniBatchSize == data.size());
+	 learningInfo.optimizationMethod.subOptMethod->miniBatchSize == examplesCount);
 
   // for each training example
-  for(int sentId = 0; sentId < data.size(); sentId++) {
+  for(int sentId = 0; sentId < examplesCount; sentId++) {
     
     // sentId is assigned to the process with rank = sentId % world.size()
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -1070,12 +918,12 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-    BuildThetaLambdaFst(sentId, data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
     BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
 
     // compute the D map for this sentence
     FastSparseVector<LogVal<double> > DSparseVector;
-    ComputeD(sentId, data[sentId], thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
+    ComputeD(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
 
     // compute the C value for this sentence
     double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
@@ -1165,10 +1013,10 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   int index = *((int*)ptrFromSentId), from, to;
   if(index == -1) {
     from = 0;
-    to = model.data.size();
+    to = model.examplesCount;
   } else {
     from = index;
-    to = min((int)model.data.size(), from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
+    to = min((int)model.examplesCount, from + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize);
   }
   
   // show progress
@@ -1281,79 +1129,6 @@ void LatentCrfModel::AddConstrainedFeatures() {
   if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "done adding constrainted lambda features. Count:" << lambda->GetParamsCount() << endl;
   }
-}
-
-// make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
-void LatentCrfModel::InitLambda() {
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
-    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
-  }
-
-  // only the master adds constrained features with hand-crafted weights depending on the feature type
-  if(learningInfo.mpiWorld->rank() == 0) {
-    // but first, make sure no features are fired yet. we need the constrained features to be 
-    assert(lambda->GetParamsCount() == 0);
-    AddConstrainedFeatures();
-  }
-
-  // then, each process discovers the features that may show up in their sentences.
-  for(int sentId = 0; sentId < data.size(); sentId++) {
-
-    // skip sentences not assigned to this process
-    if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-      continue;
-    }
-    // debug info
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now processing sent# " << sentId << endl;
-    }
-    // build the FST
-    fst::VectorFst<FstUtils::LogArc> lambdaFst;
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() <<", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
-    }
-    BuildLambdaFst(sentId, lambdaFst);
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() << ", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
-    }
-    // compute the F map from this sentence (implicitly adds the fired features to lambda parameters)
-    FastSparseVector<double> activeFeatures;
-    activeFeatures.clear();
-    FireFeatures(sentId, lambdaFst, activeFeatures);
-    // debug info
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": extracted " << activeFeatures.size() << " features from sent Id " << sentId;
-      for(vector<int>::const_iterator tokenIter = data[sentId].begin(); tokenIter != data[sentId].end(); tokenIter++) {
-	cerr << " " << *tokenIter;
-      }
-      cerr << endl;
-    }
-  }
-
-  // debug info
-  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before reduce()" << endl;
-  }
-
-  // master collects all feature ids fired on any sentence
-  set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
-  mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
-
-  // debug info
-  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after reduce()" << endl;
-  }
-  
-  // master updates its lambda object adding all those features
-  if(learningInfo.mpiWorld->rank() == 0) {
-    for(set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
-      lambda->AddParam(*paramIdIter);
-    }
-  }
-  
-  // master broadcasts the full set of features to all slaves
-  BroadcastLambdas(0);
 }
 
 void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
@@ -1485,7 +1260,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
   
   // if you're not using mini batch, set the minibatch size to data.size()
   if(learningInfo.optimizationMethod.subOptMethod->miniBatchSize <= 0) {
-    learningInfo.optimizationMethod.subOptMethod->miniBatchSize = data.size();
+    learningInfo.optimizationMethod.subOptMethod->miniBatchSize = examplesCount;
   }
 
   // set lbfgs configurations
@@ -1509,7 +1284,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
 
     // update the mle for each sentence
-    for(unsigned sentId = 0; sentId < data.size(); sentId++) {
+    for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
       // sentId is assigned to the process # (sentId % world.size())
       if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
 	continue;
@@ -1549,12 +1324,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
     
     double Nll = 0;
     // note: batch == minibatch with size equals to data.size()
-    for(int sentId = 0; sentId < data.size(); sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
+    for(int sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
 
       // debug info
       double optimizedMiniBatchNll = 0;
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)data.size());
+	int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)examplesCount);
 	cerr << "master" << learningInfo.mpiWorld->rank() << ": optimizing lambda weights to max likelihood(z|x) for sents " \
 	     << sentId << "-" << to << endl;
       }
@@ -1724,13 +1499,20 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
   Label(tokensInt, labels);
 }
 
+void LatentCrfPosTagger::SetTestExample(vector<int> &tokens) {
+  testData.clear();
+  testData.push_back(tokens);
+}
+
 void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
+  testingMode = true;
 
-  // this line is possibly buggy
-  data.push_back(tokens);
-  unsigned sentId = data.size() - 1;
+  // hack to reuse the code that manipulates the fst
+  SetTestExample(tokens);
+  unsigned sentId = 0;
+
   fst::VectorFst<FstUtils::LogArc> fst;
   vector<FstUtils::LogWeight> alphas, betas;
   BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
@@ -1842,4 +1624,232 @@ double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabels
     }
   }
   return ClustersComparer::ComputeManyToOne(clusteringA, clusteringB);
+}
+
+// make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
+void LatentCrfModel::InitLambda() {
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
+  }
+
+  // only the master adds constrained features with hand-crafted weights depending on the feature type
+  if(learningInfo.mpiWorld->rank() == 0) {
+    // but first, make sure no features are fired yet. we need the constrained features to be 
+    assert(lambda->GetParamsCount() == 0);
+    AddConstrainedFeatures();
+  }
+
+  // then, each process discovers the features that may show up in their sentences.
+  for(int sentId = 0; sentId < examplesCount; sentId++) {
+
+    // skip sentences not assigned to this process
+    if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      continue;
+    }
+    // debug info
+    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now processing sent# " << sentId << endl;
+    }
+    // build the FST
+    fst::VectorFst<FstUtils::LogArc> lambdaFst;
+    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() <<", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
+    }
+    BuildLambdaFst(sentId, lambdaFst);
+    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() << ", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
+    }
+  }
+
+  // debug info
+  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before reduce()" << endl;
+  }
+
+  // master collects all feature ids fired on any sentence
+  set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
+  mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
+
+  // debug info
+  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after reduce()" << endl;
+  }
+  
+  // master updates its lambda object adding all those features
+  if(learningInfo.mpiWorld->rank() == 0) {
+    for(set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
+      lambda->AddParam(*paramIdIter);
+    }
+  }
+  
+  // master broadcasts the full set of features to all slaves
+  BroadcastLambdas(0);
+}
+
+vector<int>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
+  if(testingMode) {
+    assert(exampleId < testData.size());
+    return testData[exampleId];
+  } else {
+    assert(exampleId < data.size());
+    return data[exampleId];
+  }
+}
+
+// singleton
+LatentCrfModel* LatentCrfPosTagger::GetInstance(const string &textFilename, 
+						    const string &outputPrefix, 
+						    LearningInfo &learningInfo, 
+						    unsigned NUMBER_OF_LABELS, 
+						    unsigned FIRST_LABEL_ID) {
+  if(!instance) {
+    instance = new LatentCrfPosTagger(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
+  } else {
+    cerr << "A LatentCrfPosTagger object has already been initialized" << endl;
+  }
+  return instance;
+}
+
+LatentCrfModel* LatentCrfPosTagger::GetInstance() {
+  if(!instance) {
+    assert(false);
+  }
+  return instance;
+}
+
+LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename, 
+				       const string &outputPrefix, 
+				       LearningInfo &learningInfo, 
+				       unsigned NUMBER_OF_LABELS, 
+				       unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename, 
+										 outputPrefix, 
+										 learningInfo, 
+										 FIRST_LABEL_ID) {
+  // set constants
+  this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
+  this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
+  assert(START_OF_SENTENCE_Y_VALUE > 0);
+
+
+  // POS tag yDomain
+  unsigned latentClasses = NUMBER_OF_LABELS;
+  assert(latentClasses > 1);
+  this->yDomain.insert(START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
+  for(unsigned i = 0; i < latentClasses; i++) {
+    this->yDomain.insert(START_OF_SENTENCE_Y_VALUE + i + 1);
+  }
+  // zero is reserved for FST epsilon
+  assert(this->yDomain.count(0) == 0);
+
+  // words zDomain
+  for(map<int,string>::const_iterator vocabIter = vocabEncoder.intToToken.begin();
+      vocabIter != vocabEncoder.intToToken.end();
+      vocabIter++) {
+    if(vocabIter->second == "_unk_") {
+      continue;
+    }
+    this->zDomain.insert(vocabIter->first);
+  }
+  // zero is reserved for FST epsilon
+  assert(this->zDomain.count(0) == 0);
+  
+  // read and encode data
+  data.clear();
+  vocabEncoder.Read(textFilename, data);
+  examplesCount = data.size();
+  
+  // bool vectors indicating which feature types to use
+  assert(enabledFeatureTypes.size() == 0);
+  // features 1-50 are reserved for wordalignment
+  for(int i = 0; i <= 50; i++) {
+    enabledFeatureTypes.push_back(false);
+  }
+  // features 51-100 are reserved for latentCrf model
+  for(int i = 51; i < 100; i++) {
+    enabledFeatureTypes.push_back(false);
+  }
+  enabledFeatureTypes[51] = true;   // y_i:y_{i-1}
+  //  enabledFeatureTypes[52] = true; // y_i:x_{i-2}
+  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
+  enabledFeatureTypes[54] = true;   // y_i:x_i
+  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
+  //enabledFeatureTypes[56] = true; // y_i:x_{i+2}
+  enabledFeatureTypes[57] = true; // y_i:i
+  //  enabledFeatureTypes[58] = true;
+  //  enabledFeatureTypes[59] = true;
+  //  enabledFeatureTypes[60] = true;
+  //  enabledFeatureTypes[61] = true;
+  //  enabledFeatureTypes[62] = true;
+  //  enabledFeatureTypes[63] = true;
+  //  enabledFeatureTypes[64] = true;
+  //  enabledFeatureTypes[65] = true;
+  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
+  enabledFeatureTypes[67] = true; // capital and i != 0
+  //enabledFeatureTypes[68] = true;
+  enabledFeatureTypes[69] = true; // coarse hash functions
+  //enabledFeatureTypes[70] = true;
+  //enabledFeatureTypes[71] = true; // y_i:x_{i-1} where x_{i-1} is closed vocab
+  //enabledFeatureTypes[72] = true;
+  //enabledFeatureTypes[73] = true; // y_i:x_{i+1} where x_{i+1} is closed vocab
+  //enabledFeatureTypes[74] = true;
+  //enabledFeatureTypes[75] = true; // y_i
+
+  // initialize (and normalize) the log theta params to gaussians
+  InitTheta();
+
+  // make sure all slaves have the same theta values
+  BroadcastTheta(0);
+
+  // persist initial parameters
+  assert(learningInfo.iterationsCount == 0);
+  if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
+    stringstream thetaParamsFilename;
+    thetaParamsFilename << outputPrefix << ".initial.theta";
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+      cerr << "persisting theta parameters after iteration " << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
+    }
+    PersistTheta(thetaParamsFilename.str());
+  }
+  
+  // initialize the lambda parameters
+  // add all features in this data set to lambda.params
+  InitLambda();
+}
+
+LatentCrfPosTagger::~LatentCrfPosTagger() {}
+
+void LatentCrfPosTagger::InitTheta() {
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
+  }
+
+  // first initialize nlogthetas to unnormalized gaussians
+  if(learningInfo.zIDependsOnYIM1) {
+    nLogThetaGivenTwoLabels.params.clear();
+    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter2 != yDomain.end(); yDomainIter2++) {
+	for(set<int>::const_iterator zDomainIter = zDomain.begin(); zDomainIter != zDomain.end(); zDomainIter++) {
+	  nLogThetaGivenTwoLabels.params[std::pair<int, int>(*yDomainIter, *yDomainIter2)][*zDomainIter] = fabs(gaussianSampler.Draw());
+	}
+      }
+    }
+  } else {
+    nLogThetaGivenOneLabel.params.clear();
+    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+      for(set<int>::const_iterator zDomainIter = zDomain.begin(); zDomainIter != zDomain.end(); zDomainIter++) {
+	nLogThetaGivenOneLabel.params[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
+      }
+    }
+  }
+
+  // then normalize them
+  if(learningInfo.zIDependsOnYIM1) {
+    MultinomialParams::NormalizeParams(nLogThetaGivenTwoLabels);
+  } else {
+    MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
+  }
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "done" << endl;
+  }
 }

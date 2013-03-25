@@ -39,15 +39,15 @@ void UpdateThetaMleForSent(const unsigned sentId,
   if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
     std::cerr << "sentId = " << sentId << endl;
   }
-  assert(sentId < data.size());
+  assert(sentId < examplesCount);
   // build the FST
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
   std::vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(sentId, data[sentId], thetaLambdaFst, alphas, betas);
+  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, alphas, betas);
   // compute the B matrix for this sentence
   std::map< ContextType, std::map< int, LogVal<double> > > B;
   B.clear();
-  ComputeB(sentId, this->data[sentId], thetaLambdaFst, alphas, betas, B);
+  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, alphas, betas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, betas);
   //cerr << "nloglikelihood += " << nLogC << endl;

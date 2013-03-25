@@ -103,6 +103,11 @@ class VocabEncoder {
     assert(ids.size() == tokens.size());
   }
   
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents) {
+    // to be implemented
+    assert(false);
+  }
+
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int> > &data) {
