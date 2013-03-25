@@ -24,7 +24,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 				   unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename,
 									     outputPrefix,
 									     learningInfo,
-									     FIRST_LABEL_ID) {
+									     FIRST_LABEL_ID,
+									     LatentCrfAligner::Task::WORD_ALIGNMENT) {
 
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;

@@ -24,7 +24,8 @@ LatentCrfModel::~LatentCrfModel() {
 LatentCrfModel::LatentCrfModel(const string &textFilename, 
 			       const string &outputPrefix, 
 			       LearningInfo &learningInfo, 
-			       unsigned FIRST_LABEL_ID) : 
+			       unsigned FIRST_LABEL_ID,
+			       LatentCrfModel::Task task) : 
   gaussianSampler(0.0, 10.0),
   UnsupervisedSequenceTaggingModel(textFilename) {
 
@@ -56,6 +57,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 
   // by default, we are operating in the training (not testing) mode
   testingMode = false;
+
+  // what task is this core being used for? pos tagging? word alignment?
+  this->task = task;
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {
@@ -247,13 +251,17 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
 				  const std::vector<bool> &enabledFeatureTypes, 
 				  FastSparseVector<double> &activeFeatures) { 
-  vector<int> &observedContext = GetObservableContext(sentId);
-  if(observedContext.size() == 0) {
+  if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
     lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
-  } else {
+  } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
-    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), observedContext, i, LatentCrfModel::START_OF_SENTENCE_Y_VALUE, NULL_POSITION, enabledFeatureTypes, activeFeatures);
+    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), GetObservableContext(sentId), i, 
+			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, NULL_POSITION, 
+			 enabledFeatureTypes, activeFeatures);
+    assert(GetObservableSequence(sentId).size() > 0);
+  } else {
+    assert(false);
   }
 }
 
@@ -496,11 +504,23 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   //  cerr << "}\n";
 }
 
-double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi) {
-  if(learningInfo.zIDependsOnYIM1) {
-    return nLogThetaGivenTwoLabels[pair<int,int>(yim1, yi)][zi];
+double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId) {
+  if(task == Task::POS_TAGGING) {
+    if(learningInfo.zIDependsOnYIM1) {
+      return nLogThetaGivenTwoLabels[pair<int,int>(yim1, yi)][zi];
+    } else {
+      return nLogThetaGivenOneLabel[yi][zi];
+    }
+  } else if(task == Task::WORD_ALIGNMENT) {
+    assert(!learningInfo.zIDependsOnYIM1); // not implemented for the word alignment model
+    vector<int> &srcSent = GetObservableContext(exampleId);
+    vector<int> &tgtSent = GetObservableSequence(exampleId);
+    assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
+    assert(yi < srcSent.size());
+    assert(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) > 0);
+    return nLogThetaGivenOneLabel[ srcSent[yi] ] [zi];
   } else {
-    return nLogThetaGivenOneLabel[yi][zi];
+    assert(false);
   }
 }
 
@@ -560,7 +580,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 	// prepare -log \theta_{z_i|y_i}
 	int zI = z[i];
 	
-	double nLogTheta_zI_y = GetNLogTheta(yIM1, yI, zI);
+	double nLogTheta_zI_y = GetNLogTheta(yIM1, yI, zI, sentId);
 	assert(!std::isnan(nLogTheta_zI_y) && !std::isinf(nLogTheta_zI_y));
 
 	// compute the weight of this transition: \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representatio
@@ -632,24 +652,34 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   // for each sentence
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     // collect number of times each theta parameter has been used
+    vector<int> &x_s = GetObservableContext(sentId);
     vector<int> &z = GetObservableSequence(sentId);
     vector<int> &y = labels[sentId];
     assert(z.size() == y.size());
     for(unsigned i = 0; i < z.size(); i++) {
-      thetaMle[y[i]][z[i]] += 1;
-      thetaMleMarginals[y[i]] += 1;
+      if(task == Task::POS_TAGGING) {
+	thetaMle[y[i]][z[i]] += 1;
+	thetaMleMarginals[y[i]] += 1;
+      } else if(task == Task::WORD_ALIGNMENT) {
+	thetaMle[ x_s[y[i]] ][ z[i] ] += 1;
+	thetaMleMarginals[ x_s[y[i]] ] += 1;
+      } else {
+	assert(false);
+      }
     }
   }
   // normalize thetas
   NormalizeThetaMle<int>(thetaMle, thetaMleMarginals);
   nLogThetaGivenOneLabel = thetaMle;
   // compute likelihood of \theta for z|y
+  assert(!learningInfo.zIDependsOnYIM1); // supervised training does not support this configuration of the model
   double NllZGivenY = 0; 
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     vector<int> &z = GetObservableSequence(sentId);
     vector<int> &y = labels[sentId];
     for(unsigned i = 0; i < z.size(); i++){ 
-      NllZGivenY += nLogThetaGivenOneLabel[y[i]][z[i]];
+      int DONT_CARE = -100;
+      NllZGivenY += GetNLogTheta(DONT_CARE, y[i], z[i], sentId);
     }
   } 
   if(learningInfo.debugLevel == DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
@@ -1765,7 +1795,8 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
 				       unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename, 
 										 outputPrefix, 
 										 learningInfo, 
-										 FIRST_LABEL_ID) {
+										 FIRST_LABEL_ID,
+										 LatentCrfModel::Task::POS_TAGGING) {
   // set constants
   LatentCrfModel::START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;

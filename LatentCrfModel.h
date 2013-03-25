@@ -53,6 +53,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 #include "LatentCrfModel-inl.h"
 
  public: 
+
+  enum Task {POS_TAGGING, WORD_ALIGNMENT};
   
   // STATIC METHODS
   /////////////////
@@ -168,7 +170,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    const std::vector<bool> &enabledFeatureTypes, 
 		    FastSparseVector<double> &activeFeatures);
 
-  double GetNLogTheta(int yim1, int yi, int zi);
+  double GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId);
 
   virtual std::vector<int>& GetObservableSequence(int exampleId) = 0;
 
@@ -240,9 +242,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
  protected:
   LatentCrfModel(const std::string &textFilename, 
-		     const std::string &outputPrefix, 
-		     LearningInfo &learningInfo,
-		     unsigned firstLabelId);
+		 const std::string &outputPrefix, 
+		 LearningInfo &learningInfo,
+		 unsigned firstLabelId,
+		 Task modelTask);
   
   ~LatentCrfModel();
 
@@ -269,6 +272,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // during training time, and by default, this should be set to false. 
   // When we use the trained model to predict the labels, we set it to true
   bool testingMode;
+  Task task;
 };
 
 class LatentCrfPosTagger : public LatentCrfModel {
