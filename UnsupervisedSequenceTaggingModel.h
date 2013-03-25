@@ -16,7 +16,7 @@ class UnsupervisedSequenceTaggingModel {
  public:
 
   virtual void Train() = 0;
-  
+
   virtual void Label(vector<int> &tokens, vector<int> &labels) = 0;
 
   void Label(vector<string> &tokens, vector<int> &labels) {

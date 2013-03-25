@@ -29,6 +29,11 @@ class LatentCrfWordAligner : public LatentCrfModel {
 				       LearningInfo &learningInfo, 
 				       unsigned NUMBER_OF_LABELS, 
 				       unsigned FIRST_LABEL_ID);
+
+  void Label(vector<int> &tokens, vector<int> &context, vector<int> &labels);
+
+  void AddConstrainedFeatures();
+
  private:
   // vocabulary of src language
   std::set<int> x_sDomain;

@@ -1102,100 +1102,6 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   return 0;
 }
 
-// add constrained features here and set their weights by hand. those weights will not be optimized.
-void LatentCrfModel::AddConstrainedFeatures() {
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "adding constrained lambda features..." << endl;
-  }
-  FastSparseVector<double> activeFeatures;
-  int yI, xI;
-  int yIM1_dummy, index; // we don't really care
-  vector<int> x;
-  string xIString;
-  vector<bool> constrainedFeatureTypes(lambda->COUNT_OF_FEATURE_TYPES, false);
-  for(int i = 0; i < learningInfo.constraints.size(); i++) {
-    switch(learningInfo.constraints[i].type) {
-      // constrains the latent variable corresponding to certain types
-    case ConstraintType::yIExclusive_xIString:
-      // we only want to constrain one specific feature type
-      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
-      constrainedFeatureTypes[54] = true;
-      // parse the constraint
-      xIString.clear();
-      learningInfo.constraints[i].GetFieldsOfConstraintType_yIExclusive_xIString(yI, xIString);
-      xI = vocabEncoder.Encode(xIString);
-      // fire positively constrained features
-      x.clear();
-      x.push_back(xI);
-      yIM1_dummy = yI; // we don't really care
-      index = 0; // we don't really care
-      activeFeatures.clear();
-      // start hack 
-      SetTestExample(x);
-      testingMode = true;
-      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-      testingMode = false;
-      // end hack
-      // set appropriate weights to favor those parameters
-      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
-      }
-      // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
-      for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-	if(*yDomainIter == yI) {
-	  continue;
-	}
-	// fire the negatively constrained features
-	activeFeatures.clear();
-	// start hack 
-	SetTestExample(x);
-	testingMode = true;
-	FireFeatures(*yDomainIter, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-	testingMode = false;
-	// end hack
-	// set appropriate weights to penalize those parameters
-	for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	  lambda->UpdateParam(featureIter->first, PENALTY_FOR_CONSTRAINED_FEATURES);
-	}   
-      }
-      break;
-    case ConstraintType::yI_xIString:
-      // we only want to constrain one specific feature type
-      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
-      constrainedFeatureTypes[54] = true;
-      // parse the constraint
-      xIString.clear();
-      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
-      xI = vocabEncoder.Encode(xIString);
-      // fire positively constrained features
-      x.clear();
-      x.push_back(xI);
-      yIM1_dummy = yI; // we don't really care
-      index = 0; // we don't really care
-      activeFeatures.clear();
-      // start hack
-      SetTestExample(x);
-      testingMode = true;
-      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-      testingMode = false;
-      // end hack
-      // set appropriate weights to favor those parameters
-      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
-      }
-      break;
-    default:
-      assert(false);
-      break;
-    }
-  }
-  // take note of the number of constrained lambda parameters. use this to limit optimization to non-constrained params
-  countOfConstrainedLambdaParameters = lambda->GetParamsCount();
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "done adding constrainted lambda features. Count:" << lambda->GetParamsCount() << endl;
-  }
-}
-
 void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					   MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
 					   map<int, double> &mleMarginalsGivenOneLabel,
@@ -1569,31 +1475,6 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
   Label(tokensInt, labels);
 }
 
-void LatentCrfPosTagger::SetTestExample(vector<int> &tokens) {
-  testData.clear();
-  testData.push_back(tokens);
-}
-
-void LatentCrfModel::Label(vector<int> &tokens, vector<int> &labels) {
-  assert(labels.size() == 0); 
-  assert(tokens.size() > 0);
-  testingMode = true;
-
-  // hack to reuse the code that manipulates the fst
-  SetTestExample(tokens);
-  unsigned sentId = 0;
-  
-  fst::VectorFst<FstUtils::LogArc> fst;
-  vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
-  fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
-  fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
-  fst::ShortestPath(fst2, &shortestPath);
-  std::vector<int> dummy;
-  FstUtils::LinearFstToVector(shortestPath, dummy, labels);
-  assert(labels.size() == tokens.size());
-}
-
 void LatentCrfModel::Label(vector<vector<int> > &tokens, vector<vector<int> > &labels) {
   assert(labels.size() == 0);
   labels.resize(tokens.size());
@@ -1924,3 +1805,123 @@ void LatentCrfPosTagger::InitTheta() {
     cerr << "done" << endl;
   }
 }
+
+// add constrained features here and set their weights by hand. those weights will not be optimized.
+void LatentCrfPosTagger::AddConstrainedFeatures() {
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "adding constrained lambda features..." << endl;
+  }
+  FastSparseVector<double> activeFeatures;
+  int yI, xI;
+  int yIM1_dummy, index; // we don't really care
+  vector<int> x;
+  string xIString;
+  vector<bool> constrainedFeatureTypes(lambda->COUNT_OF_FEATURE_TYPES, false);
+  for(int i = 0; i < learningInfo.constraints.size(); i++) {
+    switch(learningInfo.constraints[i].type) {
+      // constrains the latent variable corresponding to certain types
+    case ConstraintType::yIExclusive_xIString:
+      // we only want to constrain one specific feature type
+      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
+      constrainedFeatureTypes[54] = true;
+      // parse the constraint
+      xIString.clear();
+      learningInfo.constraints[i].GetFieldsOfConstraintType_yIExclusive_xIString(yI, xIString);
+      xI = vocabEncoder.Encode(xIString);
+      // fire positively constrained features
+      x.clear();
+      x.push_back(xI);
+      yIM1_dummy = yI; // we don't really care
+      index = 0; // we don't really care
+      activeFeatures.clear();
+      // start hack 
+      SetTestExample(x);
+      testingMode = true;
+      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+      testingMode = false;
+      // end hack
+      // set appropriate weights to favor those parameters
+      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
+	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
+      }
+      // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
+      for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
+	if(*yDomainIter == yI) {
+	  continue;
+	}
+	// fire the negatively constrained features
+	activeFeatures.clear();
+	// start hack 
+	SetTestExample(x);
+	testingMode = true;
+	FireFeatures(*yDomainIter, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+	testingMode = false;
+	// end hack
+	// set appropriate weights to penalize those parameters
+	for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
+	  lambda->UpdateParam(featureIter->first, PENALTY_FOR_CONSTRAINED_FEATURES);
+	}   
+      }
+      break;
+    case ConstraintType::yI_xIString:
+      // we only want to constrain one specific feature type
+      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
+      constrainedFeatureTypes[54] = true;
+      // parse the constraint
+      xIString.clear();
+      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
+      xI = vocabEncoder.Encode(xIString);
+      // fire positively constrained features
+      x.clear();
+      x.push_back(xI);
+      yIM1_dummy = yI; // we don't really care
+      index = 0; // we don't really care
+      activeFeatures.clear();
+      // start hack
+      SetTestExample(x);
+      testingMode = true;
+      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
+      testingMode = false;
+      // end hack
+      // set appropriate weights to favor those parameters
+      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
+	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
+      }
+      break;
+    default:
+      assert(false);
+      break;
+    }
+  }
+  // take note of the number of constrained lambda parameters. use this to limit optimization to non-constrained params
+  countOfConstrainedLambdaParameters = lambda->GetParamsCount();
+  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "done adding constrainted lambda features. Count:" << lambda->GetParamsCount() << endl;
+  }
+}
+
+void LatentCrfPosTagger::SetTestExample(vector<int> &tokens) {
+  testData.clear();
+  testData.push_back(tokens);
+}
+
+void LatentCrfPosTagger::Label(vector<int> &tokens, vector<int> &labels) {
+  assert(labels.size() == 0); 
+  assert(tokens.size() > 0);
+  testingMode = true;
+
+  // hack to reuse the code that manipulates the fst
+  SetTestExample(tokens);
+  unsigned sentId = 0;
+  
+  fst::VectorFst<FstUtils::LogArc> fst;
+  vector<FstUtils::LogWeight> alphas, betas;
+  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
+  fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
+  fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
+  fst::ShortestPath(fst2, &shortestPath);
+  std::vector<int> dummy;
+  FstUtils::LinearFstToVector(shortestPath, dummy, labels);
+  assert(labels.size() == tokens.size());
+}
+

@@ -154,8 +154,9 @@ void LatentCrfAligner::InitTheta() {
 
 void LatentCrfAligner::PrepareExample(unsigned exampleId) {
   yDomain.clear();
+  this->yDomain.insert(LatentCrfAligner::START_OF_SENTENCE_Y_VALUE); // always insert the conceptual yValue of word at position -1 in a sentence
   // this length includes the null token that was inserted at the begging of all source sentences
-  srcSentLength = srcSents[exampleId].size();
+  unsigned srcSentLength = testingMode? testSrcSents[exampleId].size() : srcSents[exampleId].size();
   // each position in the src sentence, including null, should have an entry in yDomain
   for(unsigned i = NULL_POSITION; i < NULL_POSITION + srcSentLength; ++i) {
     yDomain.insert(i);
@@ -180,4 +181,41 @@ vector<int>& LatentCrfAligner::GetObservableContext(int exampleId) {
     assert(exampleId < srcSents.size());
     return srcSents[exampleId];
   }   
+}
+
+// tokens = target sentence
+void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<int> &labels) {
+
+  // set up
+  assert(labels.size() == 0); 
+  assert(tokens.size() > 0);
+  testingMode = true;
+  SetTestExample(tokens, context);
+
+  // build an fst in which each path is a complete word alignment of the target sentence, weighted according to the model
+  unsigned sentId = 0;
+  fst::VectorFst<FstUtils::LogArc> fst;
+  std::vector<FstUtils::LogWeight> alphas, betas;
+  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
+  
+  // map to the tropical semiring which enjoys the path property (in order to find the best alignment)
+  fst::VectorFst<fst::StdArc> pathFst, shortestPathFst;
+  fst::ArcMap(fst, &pathFst, FstUtils::LogToTropicalMapper());
+  fst::ShortestPath(pathFst, &shortestPathFst);
+  std::vector<int> dummy;
+  FstUtils::LinearFstToVector(shortestPathFst, dummy, labels);
+
+  assert(labels.size() == tokens.size());  
+}
+  
+void LatentCrfAligner::AddConstrainedFeatures() { 
+  // this configuration is not implemented
+  assert(false);
+}
+
+void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
+  testSrcSents.clear();
+  testSrcSents.push_back(x_s);
+  testTgtSents.clear();
+  testTgtSents.push_back(x_t);
 }

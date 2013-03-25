@@ -112,12 +112,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   ///////////////
 
   // given an observation sequence x (i.e. tokens), find the most likely label sequence y (i.e. labels)
-  void Label(std::vector<int> &tokens, std::vector<int> &labels);
   void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
   void Label(std::vector<std::vector<int> > &tokens, std::vector<std::vector<int> > &lables);
   void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
   void Label(std::string &inputFilename, std::string &outputFilename);
-
+  virtual void Label(std::vector<int> &tokens, std::vector<int> &labels) = 0;
 
   // CONVENIENCE MPI OPERATIONS
   /////////////////////////////
@@ -141,9 +140,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // configure lbfgs parameters according to the LearningInfo member of the model
   lbfgs_parameter_t SetLbfgsConfig();
 
-  // add constrained features with hand-crafted weights
-  void AddConstrainedFeatures();
-
   // (MINI)BATCH LEVEL
 
   void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
@@ -156,7 +152,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   virtual void InitTheta() = 0;
 
-  virtual void SetTestExample(std::vector<int> &tokens) = 0;
+  // add constrained features with hand-crafted weights
+  virtual void AddConstrainedFeatures() = 0;
 
   // SUBSENT LEVEL
   ////////////////
@@ -306,6 +303,13 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   std::vector<int>& GetObservableSequence(int exampleId);
 
+  // add constrained features with hand-crafted weights
+  void AddConstrainedFeatures();
+
+  using UnsupervisedSequenceTaggingModel::Label;
+  void Label(std::vector<int> &tokens, std::vector<int> &labels);
+
+ public:
   std::vector<std::vector<int> > data, testData;
 
   std::vector<int> empty;
