@@ -3,18 +3,19 @@
 
 #include "LatentCrfModel.h"
 
-class LatentCrfWordAligner : public LatentCrfModel {
+class LatentCrfAligner : public LatentCrfModel {
 
  protected:
   LatentCrfAligner(const std::string &textFilename, 
-		       const std::string &outputPrefix, 
-		       LearningInfo &learningInfo,
-		       unsigned numberOfLabels,
-		       unsigned firstLabelId);
+		   const std::string &outputPrefix, 
+		   LearningInfo &learningInfo,
+		   unsigned firstLabelId);
   
   ~LatentCrfAligner();
 
-  std::vector<int> GetObservableSequence(int exampleId);
+  std::vector<int>& GetObservableSequence(int exampleId);
+
+  std::vector<int>& GetObservableContext(int exampleId);
 
   void InitTheta();
 
@@ -22,17 +23,20 @@ class LatentCrfWordAligner : public LatentCrfModel {
 
  public:
 
-  static LatentCrfAligner& GetInstance();
+  static LatentCrfModel* GetInstance();
 
-  static LatentCrfAligner& GetInstance(const std::string &textFilename, 
+  static LatentCrfModel* GetInstance(const std::string &textFilename, 
 				       const std::string &outputPrefix, 
 				       LearningInfo &learningInfo, 
-				       unsigned NUMBER_OF_LABELS, 
 				       unsigned FIRST_LABEL_ID);
 
-  void Label(vector<int> &tokens, vector<int> &context, vector<int> &labels);
+  void Label(std::vector<int> &tokens, std::vector<int> &labels) { assert(false); /* cannot label without context */ }
+
+  void Label(std::vector<int> &tokens, std::vector<int> &context, std::vector<int> &labels);
 
   void AddConstrainedFeatures();
+
+  void SetTestExample(std::vector<int> &x_t, std::vector<int> &x_s);
 
  private:
   // vocabulary of src language

@@ -6,14 +6,32 @@ OPT=-O3
 INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
 DEBUG=-g -ggdb
 
-all: train-latentCrfModel
+all: train-latentCrfPosTagger train-latentCrfAligner
 
-train-latentCrfModel: train-latentCrfModel.o
-	$(CC) train-latentCrfModel.o HmmModel2.o FstUtils.o LatentCrfModel.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfModel
 
-train-latentCrfModel.o: HmmModel2.o LatentCrfModel.o train-latentCrfModel.cc ClustersComparer.h StringUtils.h LearningInfo.h
-	$(CC) $(BEFORE) $(SINGLE) train-latentCrfModel.cc $(OPT)
+# specific to the word alignment task
+train-latentCrfAligner: train-latentCrfAligner.o
+	$(CC) train-latentCrfAligner.o HmmModel2.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfPosTagger
 
+train-latentCrfAligner.o: HmmModel2.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
+	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT)
+
+LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h
+	$(CC) $(BEFORE) $(SINGLE) LatentCrfAligner.cc $(OPT)
+
+
+# specifiic to the pos tagging task
+train-latentCrfPosTagger: train-latentCrfPosTagger.o
+	$(CC) train-latentCrfPosTagger.o HmmModel2.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfPosTagger
+
+train-latentCrfPosTagger.o: HmmModel2.o LatentCrfModel.o LatentCrfPosTagger.o LatentCrfAligner.o train-latentCrfPosTagger.cc ClustersComparer.h StringUtils.h LearningInfo.h
+	$(CC) $(BEFORE) $(SINGLE) train-latentCrfPosTagger.cc $(OPT)
+
+LatentCrfPosTagger.o: LatentCrfModel.o LatentCrfPosTagger.h
+	$(CC) $(BEFORE) $(SINGLE) LatentCrfPosTagger.cc $(OPT)
+
+
+# shared code
 LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
 

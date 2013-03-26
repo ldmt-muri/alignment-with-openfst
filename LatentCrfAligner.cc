@@ -1,21 +1,25 @@
 #include "LatentCrfAligner.h"
 
+string LatentCrfAligner::NULL_TOKEN_STR = "REDICULOUS";
+int LatentCrfAligner::NULL_TOKEN = -1000000;
+unsigned LatentCrfAligner::FIRST_SRC_POSITION =  100000;
+
 // singleton
-LatentCrfModel& LatentCrfAligner::GetInstance(const string &textFilename, 
-					      const string &outputPrefix, 
-					      LearningInfo &learningInfo, 
-					      unsigned FIRST_LABEL_ID) {
-  if(!LatentCrfAligner::instance) {
-    LatentCrfAligner::instance = new LatentCrfAligner(textFilename, outputPrefix, learningInfo, FIRST_LABEL_ID);
+LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename, 
+						const string &outputPrefix, 
+						LearningInfo &learningInfo, 
+						unsigned FIRST_LABEL_ID) {
+  if(!instance) {
+    instance = new LatentCrfAligner(textFilename, outputPrefix, learningInfo, FIRST_LABEL_ID);
   }
-  return *LatentCrfAligner::instance;
+  return instance;
 }
 
-LatentCrfModel& LatentCrfAligner::GetInstance() {
+LatentCrfModel* LatentCrfAligner::GetInstance() {
   if(!instance) {
     assert(false);
   }
-  return *instance;
+  return instance;
 }
 
 LatentCrfAligner::LatentCrfAligner(const string &textFilename,
@@ -61,9 +65,9 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
       }
       // either add it to source vocab or target vocab
       if(src) {
-	x_sDomain.insert(vocabEncoder[*tokenIter]);
+	x_sDomain.insert(vocabEncoder.Encode(*tokenIter));
       } else {
-	zDomain.insert(vocabEncoder[*tokenIter]);
+	zDomain.insert(vocabEncoder.Encode(*tokenIter));
       }
     }
   }
@@ -75,12 +79,12 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   NULL_TOKEN_STR = "__null__token__";
   bool explicitUseUnk = false;
   NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR, explicitUseUnk);
-  assert(NULL_TOKEN != vocabEncoder.UnkInt);
+  assert(NULL_TOKEN != vocabEncoder.UnkInt());
 
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
-  vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN);
+  vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN_STR);
 
   // bool vectors indicating which feature types to use
   assert(enabledFeatureTypes.size() == 0);
@@ -163,7 +167,7 @@ void LatentCrfAligner::PrepareExample(unsigned exampleId) {
   }
 }
 
-vector<int> LatentCrfAligner::GetObservableSequence(int exampleId) {
+vector<int>& LatentCrfAligner::GetObservableSequence(int exampleId) {
   if(testingMode) {
     assert(exampleId < testTgtSents.size());
     return testTgtSents[exampleId];
@@ -199,7 +203,7 @@ void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<i
   BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
   
   // map to the tropical semiring which enjoys the path property (in order to find the best alignment)
-  fst::VectorFst<fst::StdArc> pathFst, shortestPathFst;
+  fst::VectorFst<FstUtils::StdArc> pathFst, shortestPathFst;
   fst::ArcMap(fst, &pathFst, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(pathFst, &shortestPathFst);
   std::vector<int> dummy;

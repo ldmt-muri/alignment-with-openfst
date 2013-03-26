@@ -2,7 +2,7 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
-#include "LatentCrfModel.h"
+#include "LatentCrfPosTagger.h"
 #include "HmmModel2.h"
 
 using namespace fst;
