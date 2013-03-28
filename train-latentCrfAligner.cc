@@ -104,7 +104,15 @@ int main(int argc, char **argv) {
     
   // viterbi (This certainly needs to change since LatentCrfAligner's implementation of the virtual method Label() cannot work
   string labelsFilename = outputFilenamePrefix + ".labels";
-  model->Label(textFilename, labelsFilename);
+  ofstream labelsFile(labelsFilename.c_str());
+  for(unsigned exampleId = 0; exampleId < model->examplesCount; ++exampleId) {
+    std::vector<int> labels;
+    ((LatentCrfAligner*)model)->Label(model->GetObservableSequence(exampleId), model->GetObservableContext(exampleId), labels);
+    for(unsigned i = 0; i < labels.size(); ++i) {
+      labelsFile << labels[i] << " ";
+    }
+    labelsFile << endl;
+  }
+  labelsFile.close();
   cerr << "automatic labels can be found at " << labelsFilename << endl;
-
 }

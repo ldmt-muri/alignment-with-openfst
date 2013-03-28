@@ -516,7 +516,18 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
     vector<int> &srcSent = GetObservableContext(exampleId);
     vector<int> &tgtSent = GetObservableSequence(exampleId);
     assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
-    assert(yi < srcSent.size());
+    yi -= NULL_POSITION;
+    yim1 -= NULL_POSITION;
+    assert(yi < (int)srcSent.size());
+    assert(yim1 < (int)srcSent.size());
+    if(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) == 0) {
+      cerr << "yi = " << yi << ", srcSent[yi] == " << srcSent[yi] << ", nLogThetaGivenOneLabel.params.count(" << srcSent[yi] << ")=0" << " although nLogThetaGivenOneLabel.params.size() = " << nLogThetaGivenOneLabel.params.size() << endl << "keys available are: " << endl;
+      for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = nLogThetaGivenOneLabel.params.begin();
+	  contextIter != nLogThetaGivenOneLabel.params.end();
+	  ++contextIter) {
+	cerr << " " << contextIter->first << endl;
+      }
+    }
     assert(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) > 0);
     return nLogThetaGivenOneLabel[ srcSent[yi] ] [zi];
   } else {
@@ -670,7 +681,18 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   }
   // normalize thetas
   NormalizeThetaMle<int>(thetaMle, thetaMleMarginals);
-  nLogThetaGivenOneLabel = thetaMle;
+
+  // update nLogThetaGivenOneLabel
+  for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = thetaMle.params.begin();
+      contextIter != thetaMle.params.end();
+      ++contextIter) {
+    for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
+	probIter != contextIter->second.end();
+	++probIter) {
+      nLogThetaGivenOneLabel[contextIter->first][probIter->first] = probIter->second;
+    }
+  }
+
   // compute likelihood of \theta for z|y
   assert(!learningInfo.zIDependsOnYIM1); // supervised training does not support this configuration of the model
   double NllZGivenY = 0; 
@@ -1127,7 +1149,16 @@ void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(MultinomialParams::Conditio
     nLogThetaGivenTwoLabels = mleGivenTwoLabels;
   } else {
     NormalizeThetaMle(mleGivenOneLabel, mleMarginalsGivenOneLabel);
-    nLogThetaGivenOneLabel = mleGivenOneLabel;
+    // update nLogThetaGivenOneLabel
+    for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = mleGivenOneLabel.params.begin();
+	contextIter != mleGivenOneLabel.params.end();
+	++contextIter) {
+      for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
+	  probIter != contextIter->second.end();
+	  ++probIter) {
+	nLogThetaGivenOneLabel[contextIter->first][probIter->first] = probIter->second;
+      }
+    }
   }
 }
 
@@ -1259,6 +1290,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
 
     // update the mle for each sentence
+    assert(examplesCount > 0);
     for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
       // sentId is assigned to the process # (sentId % world.size())
       if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -1613,7 +1645,7 @@ void LatentCrfModel::InitLambda() {
   }
 
   // debug info
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS){ 
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before reduce()" << endl;
   }
@@ -1623,7 +1655,7 @@ void LatentCrfModel::InitLambda() {
   mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
   // debug info
-  if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL){ 
+  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after reduce()" << endl;
   }
   
@@ -1636,5 +1668,9 @@ void LatentCrfModel::InitLambda() {
   
   // master broadcasts the full set of features to all slaves
   BroadcastLambdas(0);
-}
 
+  // DEBUG INFO
+  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH){
+    cerr << "|lambda| = " << lambda->GetParamsCount() << endl;
+  }
+}

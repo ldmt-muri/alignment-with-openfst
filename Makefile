@@ -11,12 +11,12 @@ all: train-latentCrfPosTagger train-latentCrfAligner
 
 # specific to the word alignment task
 train-latentCrfAligner: train-latentCrfAligner.o
-	$(CC) train-latentCrfAligner.o HmmModel2.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfPosTagger
+	$(CC) train-latentCrfAligner.o HmmModel2.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
 
 train-latentCrfAligner.o: HmmModel2.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
 	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT)
 
-LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h
+LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h LatentCrfAligner.cc
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfAligner.cc $(OPT)
 
 

@@ -25,8 +25,9 @@
 
 #valgrind --tool=memcheck --leak-check=yes mpirun -np 10 ./train-latentCrfModel example/tb3-pos-wsj-10.eng example/tb3-pos-wsj-10.latentCrf.out example/tb3-pos-wsj-10.pos
 make
-mpirun -np 20 ./train-latentCrfModel example/tb3-pos-wsj-100.eng example/run.latent-crf.$1 example/tb3-pos-wsj-100.pos
+#mpirun -np $2 ./train-latentCrfPosTagger example/tb3-pos-wsj-1000.eng example/run.latent-crf.$1 example/tb3-pos-wsj-1000.pos
+mpirun -np $2 ./train-latentCrfAligner example/medium.kin-eng example/run.latent-crf-aligner.$1 
+#./train-latentCrfModel example/tb3-pos-wsj-10.eng example/run.latent-crf.$1 example/tb3-pos-wsj-10.pos
 
 #make -f Makefile-hmm2
-#mpirun -np 1 ./train-hmm2 example/tb3-pos-wsj-1000.eng example/run.hmm.$1 example/tb3-pos-wsj-1000.pos &> example/run.hmm.$1.log
-
+#mpirun -np 1 ./train-hmm2 example/tb3-pos-wsj-1000.eng example/run.hmm.$1 example/tb3-pos-wsj-1000.pos

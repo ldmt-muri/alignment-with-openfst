@@ -80,11 +80,15 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   bool explicitUseUnk = false;
   NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR, explicitUseUnk);
   assert(NULL_TOKEN != vocabEncoder.UnkInt());
+  cerr << "__null__token__ is encoded as " << NULL_TOKEN << " in vocabEncoder" << endl;
 
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
   vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN_STR);
+  assert(srcSents.size() == tgtSents.size());
+  assert(srcSents.size() > 0);
+  examplesCount = srcSents.size();
 
   // bool vectors indicating which feature types to use
   assert(enabledFeatureTypes.size() == 0);
@@ -172,6 +176,9 @@ vector<int>& LatentCrfAligner::GetObservableSequence(int exampleId) {
     assert(exampleId < testTgtSents.size());
     return testTgtSents[exampleId];
   } else {
+    if(exampleId >= tgtSents.size()) {
+      cerr << exampleId << " < " << tgtSents.size() << endl;
+    }
     assert(exampleId < tgtSents.size());
     return tgtSents[exampleId];
   }
@@ -209,12 +216,14 @@ void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<i
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPathFst, dummy, labels);
 
+  // set down ;)
+  testingMode = false;
+
   assert(labels.size() == tokens.size());  
 }
   
 void LatentCrfAligner::AddConstrainedFeatures() { 
-  // this configuration is not implemented
-  assert(false);
+  // no constrained features to add
 }
 
 void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {

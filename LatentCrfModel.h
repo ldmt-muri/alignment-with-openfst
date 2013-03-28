@@ -255,6 +255,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   static int START_OF_SENTENCE_Y_VALUE;
   static unsigned NULL_POSITION;
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
+  unsigned examplesCount;
 
  protected:
   static LatentCrfModel *instance;
@@ -262,7 +263,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   std::set<int> zDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;
-  unsigned countOfConstrainedLambdaParameters, examplesCount;
+  unsigned countOfConstrainedLambdaParameters;
   double REWARD_FOR_CONSTRAINED_FEATURES, PENALTY_FOR_CONSTRAINED_FEATURES;
   GaussianSampler gaussianSampler;
   SimAnneal simulatedAnnealer;

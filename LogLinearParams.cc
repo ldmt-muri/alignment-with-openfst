@@ -67,6 +67,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
 				   int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
+  // debug info
+  if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "executing FireFeatures(yI=" << yI << ", yIM1=" << yIM1 << ", x_t.size()=" << x_t.size() \
+	 << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE \
+	 << ", NULL=" << NULL_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
+	 << ", activeFeatures.size()=" << activeFeatures.size() << endl;
+  }
+
   stringstream temp;
 
   // first, yI and yIM1 are not zero-based. LatentCrfAligner::NULL_POS maps to position 0 (i.e. the null token). 
@@ -74,7 +82,10 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   yIM1 -= NULL_POS;
   
   // find the src token aligned according to x_t_i
-  assert( yI < x_s.size() && yIM1 < x_s.size() && yI >= 0);
+  assert(yI < (int)x_s.size());
+  assert(yIM1 < (int)x_s.size()); 
+  assert(yI >= 0);
+  assert(yIM1 >= -1);
   int srcToken = x_s[yI];
   int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
   int tgtToken = x_t[i];
