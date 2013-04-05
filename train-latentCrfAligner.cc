@@ -10,15 +10,22 @@ namespace mpi = boost::mpi;
 
 typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename) {
-  assert(argc >= 3);
+void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix) {
+  assert(argc >= 5);
   textFilename = argv[1];
-  outputFilenamePrefix = argv[2];
-  if(argc >= 4) {
-    goldLabelsFilename = argv[3];
-  } else {
-    goldLabelsFilename = "";
+  initialLambdaParamsFilename = argv[2];
+  if(initialLambdaParamsFilename == "none") {
+    initialLambdaParamsFilename.clear();
   }
+  initialThetaParamsFilename = argv[3];
+  if(initialThetaParamsFilename == "none") {
+    initialThetaParamsFilename.clear();
+  }
+  wordPairFeaturesFilename = argv[4];
+  if(wordPairFeaturesFilename == "none") {
+    wordPairFeaturesFilename.clear();
+  }
+  outputFilenamePrefix = argv[5];
 }
 
 int main(int argc, char **argv) {  
@@ -31,8 +38,8 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": parsing arguments...";
   }
-  string textFilename, outputFilenamePrefix, goldLabelsFilename;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename);
+  string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
+  ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix);
   if(world.rank() == 0) {
     cerr << "done." << endl;
   }
@@ -54,7 +61,7 @@ int main(int argc, char **argv) {
   LearningInfo learningInfo;
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
-  learningInfo.useMaxIterationsCount = false;
+  learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.mpiWorld = &world;
   //  learningInfo.useMinLikelihoodDiff = true;
@@ -87,32 +94,50 @@ int main(int argc, char **argv) {
   }
   
   // initialize the model
-  LatentCrfModel* model = LatentCrfAligner::GetInstance(textFilename, outputFilenamePrefix, learningInfo, FIRST_LABEL_ID);
+  LatentCrfModel* model = LatentCrfAligner::GetInstance(textFilename, 
+							outputFilenamePrefix, 
+							learningInfo, 
+							FIRST_LABEL_ID, 
+							initialLambdaParamsFilename, 
+							initialThetaParamsFilename,
+							wordPairFeaturesFilename);
   
-  // all processors must be initialized with the same parameters (it may be OK to remove this cuz they share their parameters before [?] training anyway
-  // but for now, lets keep it
-  model->BroadcastTheta(0);
-  model->BroadcastLambdas(0);
-
   // unsupervised training of the model
   model->Train();
+
+  // print best params
+  if(learningInfo.mpiWorld->rank() == 0) {
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"));
+    model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
+  }
 
   // we don't need the slaves anymore
   if(world.rank() > 0) {
     return 0;
   }
     
-  // viterbi (This certainly needs to change since LatentCrfAligner's implementation of the virtual method Label() cannot work
+  // run viterbi (and write alignments in giza format)
   string labelsFilename = outputFilenamePrefix + ".labels";
   ofstream labelsFile(labelsFilename.c_str());
   for(unsigned exampleId = 0; exampleId < model->examplesCount; ++exampleId) {
+    std::vector<int> &srcSent = model->GetObservableContext(exampleId);
+    std::vector<int> &tgtSent = model->GetObservableSequence(exampleId);
     std::vector<int> labels;
-    ((LatentCrfAligner*)model)->Label(model->GetObservableSequence(exampleId), model->GetObservableContext(exampleId), labels);
+    // run viterbi
+    ((LatentCrfAligner*)model)->Label(tgtSent, srcSent, labels);
+    // 
     for(unsigned i = 0; i < labels.size(); ++i) {
-      labelsFile << labels[i] << " ";
+      // dont write null alignments
+      if(labels[i] == ((LatentCrfAligner*)model)->NULL_POSITION) {
+	continue;
+      }
+      // determine the alignment (i.e. src position) for this tgt position (i)
+      int alignment = labels[i] - ((LatentCrfAligner*)model)->FIRST_SRC_POSITION;
+      assert(alignment >= 0);
+      labelsFile << alignment << "-" << i << " ";
     }
     labelsFile << endl;
   }
   labelsFile.close();
-  cerr << "automatic labels can be found at " << labelsFilename << endl;
+  cerr << "alignments can be found at " << labelsFilename << endl;
 }

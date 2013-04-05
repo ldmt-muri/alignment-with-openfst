@@ -9,8 +9,11 @@ class LatentCrfAligner : public LatentCrfModel {
   LatentCrfAligner(const std::string &textFilename, 
 		   const std::string &outputPrefix, 
 		   LearningInfo &learningInfo,
-		   unsigned firstLabelId);
-  
+		   unsigned firstLabelId,
+		   const std::string &initialLambdaParamsFilename, 
+		   const std::string &initialThetaParamsFilename,
+		   const std::string &wordPairFeaturesFilename);
+
   ~LatentCrfAligner();
 
   std::vector<int>& GetObservableSequence(int exampleId);
@@ -26,9 +29,12 @@ class LatentCrfAligner : public LatentCrfModel {
   static LatentCrfModel* GetInstance();
 
   static LatentCrfModel* GetInstance(const std::string &textFilename, 
-				       const std::string &outputPrefix, 
-				       LearningInfo &learningInfo, 
-				       unsigned FIRST_LABEL_ID);
+				     const std::string &outputPrefix, 
+				     LearningInfo &learningInfo, 
+				     unsigned FIRST_LABEL_ID,
+				     const std::string &initialLambdaParamsFilename, 
+				     const std::string &initialThetaParamsFilename,
+				     const std::string &wordPairFeaturesFilename);
 
   void Label(std::vector<int> &tokens, std::vector<int> &labels) { assert(false); /* cannot label without context */ }
 

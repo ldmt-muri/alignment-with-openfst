@@ -16,7 +16,7 @@ LatentCrfModel& LatentCrfModel::GetInstance() {
 }
 
 LatentCrfModel::~LatentCrfModel() {
-  delete &lambda->srcTypes;
+  delete &lambda->types;
   delete lambda;
 }
 
@@ -25,10 +25,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       const string &outputPrefix, 
 			       LearningInfo &learningInfo, 
 			       unsigned FIRST_LABEL_ID,
-			       LatentCrfModel::Task task) : 
-  gaussianSampler(0.0, 10.0),
-  UnsupervisedSequenceTaggingModel(textFilename) {
-
+			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
+							    UnsupervisedSequenceTaggingModel(textFilename) {
+  
   countOfConstrainedLambdaParameters = 0;
 
   AddEnglishClosedVocab();
@@ -41,9 +40,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   bool syncAllProcesses;
   mpi::broadcast<bool>(*learningInfo.mpiWorld, syncAllProcesses, 0);
 
-  // read the .vocab file master just wrote
-  VocabDecoder *vocabDecoder = new VocabDecoder(outputPrefix + string(".vocab"));
-  lambda = new LogLinearParams(*vocabDecoder);
+  lambda = new LogLinearParams(vocabEncoder);
   
   // set member variables
   this->textFilename = textFilename;
@@ -1169,18 +1166,28 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   assert(learningInfo.optimizationMethod.subOptMethod != 0);
   lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
   lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": m = " << lbfgsParams.m  << endl;
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": m = " << lbfgsParams.m  << endl;
+  }
   lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": xtol = " << lbfgsParams.xtol  << endl;
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": xtol = " << lbfgsParams.xtol  << endl;
+  }
   lbfgsParams.max_linesearch = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration;
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << ": max_linesearch = " << lbfgsParams.max_linesearch  << endl;
+  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": max_linesearch = " << lbfgsParams.max_linesearch  << endl;
+  }
   switch(learningInfo.optimizationMethod.subOptMethod->regularizer) {
   case Regularizer::L1:
     lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->regularizationStrength;
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": orthantwise_c = " << lbfgsParams.orthantwise_c  << endl;
+    if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": orthantwise_c = " << lbfgsParams.orthantwise_c  << endl;
+    }
     // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
     lbfgsParams.linesearch = LBFGS_LINESEARCH_BACKTRACKING;
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": linesearch = " << lbfgsParams.linesearch  << endl;
+    if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
+      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": linesearch = " << lbfgsParams.linesearch  << endl;
+    }
     break;
   case Regularizer::L2:
     // nothing to be done now. l2 is implemented in the lbfgs callback evaluate function.
@@ -1489,12 +1496,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
     mpi::broadcast<bool>(*learningInfo.mpiWorld, converged, 0);    
   
   } while(!converged);
-
-  // debug
-  if(learningInfo.mpiWorld->rank() == 0) {
-    lambda->PersistParams(outputPrefix + string(".final.lambda"));
-    PersistTheta(outputPrefix + string(".final.theta"));
-  }
 }
 
 void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {

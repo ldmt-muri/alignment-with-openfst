@@ -238,6 +238,12 @@ int main(int argc, char **argv) {
     cerr << "training finished!" << endl;
   }
   
+  // print best params
+  if(learningInfo.mpiWorld->rank() == 0) {
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"));
+    model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
+  }
+
   // we don't need the slaves anymore
   if(world.rank() > 0) {
     return 0;

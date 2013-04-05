@@ -123,27 +123,95 @@ namespace MultinomialParams {
   static const int NLOG_INF = -200;
 
 
+  // line format:
+  // event context logP(event|context)
+  // event and/or context can be an integer or a string
   inline void PersistParams(const std::string &paramsFilename, 
-		      const ConditionalMultinomialParam<int> &params, 
-		      const VocabEncoder &vocabEncoder) {
+			    const ConditionalMultinomialParam<int> &params, 
+			    const VocabEncoder &vocabEncoder,
+			    bool decodeContext=false,
+			    bool decodeEvent=false) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    
     for (std::map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
 	 srcIter != params.params.end(); 
 	 srcIter++) {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// line format: 
-	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << vocabEncoder.Decode(tgtIter->first) << " " << vocabEncoder.Decode(srcIter->first) << " " << nExp(tgtIter->second) << std::endl;
+	// write event
+	if(decodeEvent) {
+	  paramsFile << vocabEncoder.Decode(tgtIter->first) << " ";
+	} else {
+	  paramsFile << tgtIter->first << " ";
+	}
+	// write context
+	if(decodeContext) {
+	  paramsFile << vocabEncoder.Decode(srcIter->first) << " ";
+	} else {
+	  paramsFile << srcIter->first << " ";
+	}
+	// print logprob
+	paramsFile << tgtIter->second << std::endl;
       }
     }
     
     paramsFile.close();
   }
-  
+
+  // line format:
+  // event context nlogP(event|context)
+  // event and/or context can be an integer or a string
+  inline void LoadParams(const std::string &paramsFilename,
+			 ConditionalMultinomialParam<int> &params,
+			 const VocabEncoder &vocabEncoder,
+			 bool encodeContext=false,
+			 bool encodeEvent=false) {
+    std::ifstream paramsFile(paramsFilename.c_str(), std::ios::in);
+    
+    string line;
+    while( getline(paramsFile, line) ) {
+      if(line.size() == 0) {
+	continue;
+      }
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      // check format
+      if(splits.size() != 3) {
+	assert(false);
+	exit(1);
+      }
+      // nlogp
+      stringstream nlogPString;
+      nlogPString << splits[2];
+      double nlogP;
+      nlogPString >> nlogP;
+      // event
+      int event = -1;
+      if(encodeEvent) {
+	event = vocabEncoder.ConstEncode(splits[0]);
+      } else {
+	stringstream ss;
+	ss << splits[0];
+	ss >> event;
+      }
+      assert(event >= 0);
+      // context
+      int context = -1;
+      if(encodeContext) {
+	context = vocabEncoder.ConstEncode(splits[1]);
+      } else {
+	stringstream ss;
+	ss << splits[1];
+	ss >> context;
+      }
+      assert(context >= 0);
+      // add p(event|context)
+      params[context][event] = nlogP;
+    }
+    paramsFile.close();
+  }
+
   inline void PersistParams(const std::string &paramsFilename, 
-			     const ConditionalMultinomialParam< std::pair<int, int> > &params, 
-			     const VocabEncoder &vocabEncoder) {
+			    const ConditionalMultinomialParam< std::pair<int, int> > &params, 
+			    const VocabEncoder &vocabEncoder) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
     for (std::map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
 	 srcIter != params.params.end(); 

@@ -29,15 +29,16 @@ class LogLinearParams {
  public:
 
   // for the loglinear word alignment model
-  LogLinearParams(const VocabDecoder &srcTypes, 
-		  const VocabDecoder &tgtTypes, 
+  LogLinearParams(const VocabEncoder &types, 
 		  const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
 		  const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
 		  double gaussianStdDev = 1);
 
   // for the latent CRF model
-  LogLinearParams(const VocabDecoder &types, double gaussianStdDev = 1);
+  LogLinearParams(const VocabEncoder &types, double gaussianStdDev = 1);
   
+  void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
+
   double Hash();
 
   // set learning info
@@ -104,6 +105,9 @@ class LogLinearParams {
   // writes the features to a text file formatted one feature per line.  
   void PersistParams(const std::string& outputFilename); 
 
+  // loads the parameters
+  void LoadParams(const std::string &inputFilename);
+
   // call boost::mpi::broadcast for the essential member variables of this object 
   void Broadcast(boost::mpi::communicator &world, unsigned root);
   
@@ -121,7 +125,7 @@ class LogLinearParams {
   std::vector< std::string > paramIds; 
   
   // maps a word id into a string
-  const VocabDecoder &srcTypes, &tgtTypes;
+  const VocabEncoder &types;
 
   // TODO: inappropriate for this general class. consider adding to a derived class
   // maps [srcTokenId][tgtTokenId] => forward logprob
@@ -135,6 +139,8 @@ class LogLinearParams {
   const GaussianSampler *gaussianSampler;
 
   const std::set< int > *englishClosedClassTypes;
+  
+  std::map< int, std::map< int, std::map<std::string, double> > > precomputedFeaturesWithTwoInputs;
 };
 
 #endif

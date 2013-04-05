@@ -6,11 +6,20 @@ unsigned LatentCrfAligner::FIRST_SRC_POSITION =  100000;
 
 // singleton
 LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename, 
-						const string &outputPrefix, 
-						LearningInfo &learningInfo, 
-						unsigned FIRST_LABEL_ID) {
+					      const string &outputPrefix, 
+					      LearningInfo &learningInfo, 
+					      unsigned FIRST_LABEL_ID,
+					      const string &initialLambdaParamsFilename, 
+					      const string &initialThetaParamsFilename,
+					      const string &wordPairFeaturesFilename) {
   if(!instance) {
-    instance = new LatentCrfAligner(textFilename, outputPrefix, learningInfo, FIRST_LABEL_ID);
+    instance = new LatentCrfAligner(textFilename, 
+				    outputPrefix,
+				    learningInfo, 
+				    FIRST_LABEL_ID, 
+				    initialLambdaParamsFilename, 
+				    initialThetaParamsFilename,
+				    wordPairFeaturesFilename);
   }
   return instance;
 }
@@ -25,12 +34,14 @@ LatentCrfModel* LatentCrfAligner::GetInstance() {
 LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 				   const string &outputPrefix,
 				   LearningInfo &learningInfo,
-				   unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename,
-									     outputPrefix,
-									     learningInfo,
-									     FIRST_LABEL_ID,
-									     LatentCrfAligner::Task::WORD_ALIGNMENT) {
-
+				   unsigned FIRST_LABEL_ID,
+				   const string &initialLambdaParamsFilename, 
+				   const string &initialThetaParamsFilename,
+				   const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename,
+											    outputPrefix,
+											    learningInfo,
+											    FIRST_LABEL_ID,
+											    LatentCrfAligner::Task::WORD_ALIGNMENT) {
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -80,8 +91,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   bool explicitUseUnk = false;
   NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR, explicitUseUnk);
   assert(NULL_TOKEN != vocabEncoder.UnkInt());
-  cerr << "__null__token__ is encoded as " << NULL_TOKEN << " in vocabEncoder" << endl;
-
+  
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
@@ -104,27 +114,37 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   for(int i = 51; i < 100; i++) {
     enabledFeatureTypes.push_back(false);
   }
-  enabledFeatureTypes[101] = true;  // I( y_i-y_{i-1} == 0 )
+  enabledFeatureTypes[101] = true;  // I( y_i - y_{i-1} == 0 )
   enabledFeatureTypes[102] = true;  // I( floor( ln(y_i - y_{i-1}) ) )
   enabledFeatureTypes[103] = true;  // I( tgt[i] aligns_to src[y_i] )
+  enabledFeatureTypes[104] = true;  // precomputed features (src-tgt word pair)
+  enabledFeatureTypes[105] = true;  // I( y_i - y_{i-1} )
+  enabledFeatureTypes[106] = true;  // I( src[y_{i-1}]:src[y_{i}] )   captures the intuition that certain src side transitions are more common than others
+  enabledFeatureTypes[107] = true;  // |y_i/len(src) - i/len(tgt)|
 
   // initialize (and normalize) the log theta params to gaussians
-  InitTheta();
-
-  // make sure all slaves have the same theta values
-  BroadcastTheta(0);
-
-  // persist initial parameters
-  assert(learningInfo.iterationsCount == 0);
-  if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
-    stringstream thetaParamsFilename;
-    thetaParamsFilename << outputPrefix << ".initial.theta";
-    PersistTheta(thetaParamsFilename.str());
+  if(initialThetaParamsFilename.size() == 0) {
+    InitTheta();
+    BroadcastTheta(0);
+  } else {
+    assert(nLogThetaGivenOneLabel.params.size() == 0);
+    MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder);
+    assert(nLogThetaGivenOneLabel.params.size() > 0);
   }
   
+  // populate the map of precomputed feature ids and feature values
+  lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+
   // initialize the lambda parameters
-  // add all features in this data set to lambda.params
-  InitLambda();
+  if(initialLambdaParamsFilename.size() == 0) {
+    // add all features in this data set to lambda.params
+    InitLambda();
+    BroadcastLambdas(0);
+  } else {
+    assert(lambda->GetParamsCount() == 0);
+    lambda->LoadParams(initialLambdaParamsFilename);
+    assert(lambda->GetParamsCount() > 0);
+  }
 }
 
 void LatentCrfAligner::InitTheta() {

@@ -2,13 +2,11 @@
 
 using namespace std;
 
-LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes, 
-				 const VocabDecoder &tgtTypes, 
+LogLinearParams::LogLinearParams(const VocabEncoder &types, 
 				 const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
 				 const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
 				 double gaussianStdDev) :
-  srcTypes(srcTypes), 
-  tgtTypes(tgtTypes), 
+  types(types), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
   ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
   COUNT_OF_FEATURE_TYPES(100) {
@@ -16,13 +14,62 @@ LogLinearParams::LogLinearParams(const VocabDecoder &srcTypes,
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
 
-LogLinearParams::LogLinearParams(const VocabDecoder &types, double gaussianStdDev) : 
-  srcTypes(types), 
-  tgtTypes(types),
+LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDev) : 
+  types(types), 
   ibmModel1ForwardScores(map<int, map<int, double> >()),
   ibmModel1BackwardScores(map<int, map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
+}
+
+// by two inputs, i mean that a precomputed feature value is a function of two strings
+// example line in the precomputed features file:
+// madrasa ||| school ||| F52:editdistance=7 F53:capitalconsistency=1
+void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairFeaturesFilename) {
+  ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
+  string line;
+  while( getline(wordPairFeaturesFile, line) ) {
+    if(line.size() == 0) {
+      continue;
+    }
+    std::vector<string> splits;
+    StringUtils::SplitString(line, ' ', splits);
+    // check format
+    if(splits.size() < 5) {
+      assert(false);
+      exit(1);
+    }
+    // splitsIter
+    vector<string>::iterator splitsIter = splits.begin();
+    // read the first input
+    string &input1String = *(splitsIter++);
+    int input1 = types.ConstEncode(input1String);
+    // skip |||
+    assert(*splitsIter == "|||");
+    splitsIter++;
+    // read the second input
+    string &input2String = *(splitsIter++);
+    int input2 = types.ConstEncode(input2String);
+    // skip |||
+    assert(*splitsIter == "|||");
+    splitsIter++;
+    // the remaining elements are precomputed features for (input1, input2)
+    while(splitsIter != splits.end()) {
+      // read feature id
+      std::vector<string> featureIdAndValue;
+      StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+      assert(featureIdAndValue.size() == 2);
+      string &featureId = featureIdAndValue[0];
+      // read feature value
+      double featureValue;
+      stringstream temp;
+      temp << featureIdAndValue[1];
+      temp >> featureValue;
+      // store it for quick retrieval later on
+      precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+    }
+  }
+  wordPairFeaturesFile.close();
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
@@ -81,6 +128,9 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   yI -= NULL_POS;
   yIM1 -= NULL_POS;
   
+  // the encoder/decoder used for referencing precomputed feature
+  
+  
   // find the src token aligned according to x_t_i
   assert(yI < (int)x_s.size());
   assert(yIM1 < (int)x_s.size()); 
@@ -89,8 +139,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   int srcToken = x_s[yI];
   int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
   int tgtToken = x_t[i];
-
-  // now, fire features
 
   // F101: I( y_i-y_{i-1} == 0 )
   if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
@@ -122,7 +170,47 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
     AddParam(temp.str());
     activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
+  
+  // F104: precomputed(tgt[i], src[y_i])
+  if(enabledFeatureTypes.size() > 104 && enabledFeatureTypes[104]) {
+    assert(precomputedFeaturesWithTwoInputs.size() > 0);
+    map<string, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
+    for(map<string, double>::const_iterator precomputedIter = precomputedFeatures.begin();
+	precomputedIter != precomputedFeatures.end();
+	precomputedIter++) {
+      AddParam(precomputedIter->first);
+      activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
+    }
+  }
+
+  // F105: I( y_i - y_{i-1} == k )
+  if(enabledFeatureTypes.size() > 105 && enabledFeatureTypes[105]) {
+    temp.str("");
+    temp << "F105:";
+    int diff = yI - yIM1;
+    temp << diff;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
 	 
+  // F106: I( src[y_{i-1}]:src[y_i] )
+  if(enabledFeatureTypes.size() > 106 && enabledFeatureTypes[106]) {
+    temp.str("");
+    temp << "F106:" << prevSrcToken << ":" << srcToken;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
+  
+  // F107: |i/len(src) - j/len(tgt)|
+  // yI+yIM1 > 0 ensures that at least one of them will be meaningful in the computation of diagonal deviation
+  if(enabledFeatureTypes.size() > 107 && enabledFeatureTypes[107] && (yI + yIM1 > 0)) {
+    string diagonalDeviation = "F107:diag-dev";
+    AddParam(diagonalDeviation);
+    double deviation = (yI == 0)?
+      fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
+      fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
+    activeFeatures[paramIndexes[diagonalDeviation]] += deviation;
+  }
 }
 
 
@@ -133,7 +221,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
   
   stringstream temp;
   
-  const VocabDecoder &types = srcTypes;
   const int &xI = x[i];
   const std::string& xIString = types.Decode(x[i]);
   unsigned xIStringSize = xIString.size();
@@ -592,8 +679,8 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   }
 
   // F7: orthographic similarity (subset of word association features in Chris et al. 2011)
-  const std::string& srcTokenString = srcTypes.Decode(srcToken);
-  const std::string& tgtTokenString = tgtTypes.Decode(tgtToken);
+  const std::string& srcTokenString = types.Decode(srcToken);
+  const std::string& tgtTokenString = types.Decode(tgtToken);
   //  cerr << "computing ortho-similarity(" << srcToken << " (" << srcTokenString << ") " << ", " << tgtToken << " (" << tgtTokenString << ") )" << endl;
   //  double orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
   //  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
@@ -675,13 +762,42 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 }
 
 // each line consists of: <featureStringId><space><featureWeight>\n
-void LogLinearParams::PersistParams(const string& outputFilename) {
+void LogLinearParams::PersistParams(const string &outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   
   for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
     paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
   }
 
+  paramsFile.close();
+}
+
+// each line consists of: <featureStringId><space><featureWeight>\n
+void LogLinearParams::LoadParams(const string &inputFilename) {
+  assert(paramIndexes.size() == paramWeights.size() && paramIndexes.size() == paramIds.size());
+  ifstream paramsFile(inputFilename.c_str(), ios::in);
+  
+  string line;
+  // for each line
+  while(getline(paramsFile, line)) {
+    if(line.size() == 0) {
+      continue;
+    }
+    std::vector<string> splits;
+    StringUtils::SplitString(line, ' ', splits);
+    // check format
+    if(splits.size() != 2) {
+      assert(false);
+      exit(1);
+    }
+    stringstream weightString;
+    weightString << splits[1];
+    double weight;
+    weightString >> weight;
+    string &paramId = splits[0];
+    // add the param
+    AddParam(paramId, weight);
+  }
   paramsFile.close();
 }
 

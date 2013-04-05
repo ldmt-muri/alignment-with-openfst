@@ -74,12 +74,22 @@ class VocabEncoder {
     closedVocab.insert(code);
   }
 
-  int UnkInt() {
-    return tokenToInt[UNK];
+  int UnkInt() const {
+    return tokenToInt.find(UNK)->second;
   }
 
   string UnkString() {
     return UNK;
+  }
+
+  // a constant version of the encode function which guarantees that the underlying object state does not change
+  // i.e. you cannot add new words to the vocab using this method
+  int ConstEncode(const string &token) const {
+    if(tokenToInt.count(token) == 0) {
+      return tokenToInt.find(UNK)->second;
+    } else {
+      return tokenToInt.find(token)->second;
+    }    
   }
 
   int Encode(const string& token, bool explicitUseUnk) {
