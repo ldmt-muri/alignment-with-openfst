@@ -1,0 +1,44 @@
+Building and Using Parallel Texts:
+Data Driven Machine Translation and Beyond
+HLT-NAACL 2003 Workshop
+http://www.cs.unt.edu/~rada/wpt
+
+
+TEST DATA FOR THE ENGLISH-FRENCH WORD ALIGNMENT TASK
+
+
+Data
+----
+The test set for English-French contains 447 sentences. See the
+"Guidelines" for details regarding the annotation scheme.
+These sentences were extracted from a set of word aligned sentences
+created by Prof.Hermann Ney and Franz Och.
+
+File Naming Conventions
+-----------------------
+There is one set of files, with the English text carrying the .e extension,
+and the French text carrying the .f extension. The file FilePairs.test 
+includes the names of this file pair, with lines in the format:
+<English_File_Name> <French_Text_File_Name>
+
+Source and target language
+-------------------------
+For this task, English is the source language, and French is the target
+language. Therefore, in a word alignment line:
+sentence_no position_L1 position_L2 [S|P] [confidence]
+
+position_L1 represents the position of the word within the English sentence, 
+position_L2 represents the position of the word within the French sentence,
+
+[the first word in a sentence is at position 1]
+
+Other
+-----
+1. An alignment has to be provided for each word in the test files. If a word
+does not appear in any alignment, we assume by default a P[robable] NULL 
+alignment for that word.
+
+2. Participants are required to submit one file with alignment results.
+
+
+

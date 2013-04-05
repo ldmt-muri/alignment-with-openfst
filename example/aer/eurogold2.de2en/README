@@ -1,0 +1,15 @@
+gold alignments for Europarl German-English, version 2 (December 2012)
+
+provided are gold alignments (sure and possible) for 300 sentence pairs of German-English Europarl.
+The annotations were made and thoroughly checked by Thomas Schoenemann, a native German speaker,
+with the help of some self-designed software tools.
+The first 150 sentence pairs were annotated at Lund Univsersity, Sweden, and present in version 1.
+Version 2 comprises slight corrections of these annotations as well as 150 brand new pairs (the test set).
+
+Annotations are provided in two different formats:
+- dev.ref.A and test.ref.A are in RegAligner-compatible format
+- dev.ref.standard.A and test.ref.standard.A use the common format for gold alignments
+
+In addition to the raw annotations, in the directory viz/ you find two ways of visualizations of the annotations.
+
+There is no need to cite anything, but please refer to the URL when you make use of the data.

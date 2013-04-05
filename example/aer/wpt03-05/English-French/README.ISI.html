@@ -1,0 +1,320 @@
+<html>
+<header>
+<title>
+Aligned Hansards of the 36th Parliament of Canada
+</title>
+</header>
+<body bgcolor=#FFFFCC>
+<div align=center>
+<hr>
+<h1>
+<p>Aligned <i>Hansards</i> of the 36<sup>th</sup> Parliament of Canada<br>
+Release 2001-1a<br>
+<small><p><small>
+&#150; provided by the 
+<a href="http://www.isi.edu/natural-language">
+Natural Language Group</a> of the 
+<a href="http://www.isi.edu">USC Information</a>
+Sciences Institute &#150;</small></p>
+<p>Ulrich Germann, Editor</small></p>
+</h1>
+<hr>
+</div>
+<p>
+<h2>What it is</h2> 
+
+<p>This release contains 1.3 million pairs of aligned text chunks
+(sentences or smaller fragments) from the official records
+(<i>Hansards</i>) of the 36<sup>th</sup> 
+<a href="http://www.parl.gc.ca">Canadian Parliament</a>.</p>
+
+<p>Samples are available online <a href="http://liszt.isi.edu:8080/rewrite/hansard/view-sentence-pairs.cgi">HERE</a>.</p>
+
+<h2>How The Alignment Was Performed</h2>
+<ol>
+<li><b>Raw Text Extraction:</b> The raw text was extracted from HTML
+    files (as available via <tt><a
+    href="http://www.parl.gc.ca">http://www.parl.gc.ca</a></tt>) with
+    a perl script that makes use of the
+    <a href="http://search.cpan.org/doc/GAAS/HTML-Parser-3.15/Parser.pm">
+    HTML::Parser</a> module by Gisle Aas / Michael A. Chase.
+    </li>
+<li><b>Sentence Splitting:</b> 
+   The raw text was split into sentences with Adwait Ratnaparkhi's 
+   <a href="http://www.cis.upenn.edu/~adwait/statnlp.html">
+   MXTERMINATOR</a>. For details on MXTERMINATOR, see 
+   <tt><a href="http://www.cis.upenn.edu/~adwait/statnlp.html">
+   http://www.cis.upenn.edu/~adwait/statnlp.html</tt></a>.
+   </li>
+<li><b>Text Alignment:</b> 
+   The sentences were aligned with I. Dan Melamed's 
+   <a href="http://www.cis.upenn.edu/~melamed/.GSA/README.htm">
+   GSA tool</a>. See 
+   <tt><a href="http://www.cis.upenn.edu/~melamed/.GSA/README.htm">
+   http://www.cis.upenn.edu/~melamed/.GSA/README.htm</a></tt>
+   for details on GSA.
+   </li>
+<li>One-to-one correspondences were then extracted from the aligned  
+data.</li>
+</ol>
+
+<h2>Coverage</h2>
+
+The complete Hansards of the debates in the House and Senate of the 
+36<sup>th</sup> Canadian Parliament, as far as available, were aligned. 
+The corpus was then split into 5 sets of sentence pairs: 
+training (80% of the sentence pairs), two sets of sentence pairs for 
+testing (5% each), and two sets of sentence 
+pairs for final evaluation (5% each). The current release consists
+of the training and testing sets. The evaluation sets are reserved
+for future MT evaluation purposes and currently not available.</p>
+
+Table 1 shows the size of the various subcorpora:</p>
+
+<table align=center cellspacing=0 cellpadding=5 border=0 bgcolor=#DDDDAA>
+<th rowspan=12 bgcolor=#DDDDAA>&nbsp;</th>
+<th colspan=8 aign=center>
+<hr>Table 1: Corpus Size<hr>
+</th>
+<th rowspan=12 bgcolor=#DDDDAA>&nbsp;</th>
+<tr>
+<th>&nbsp;</th>
+<th colspan=3 align=center bgcolor=#CCCCFF>House Debates</th>
+<th rowspan=9 bgcolor=#DDDDAA>&nbsp;</th>
+<th colspan=3 align=center bgcolor=#CCFFFF>Senate Debates</th>
+<tr>
+<th bgcolor=#DDDDAA>&nbsp;</th>
+<th align=right bgcolor=#CCCCFF>Sentence<br>Pairs</th>
+<th align=right bgcolor=#CCCCFF>English<br>Words</th>
+<th align=right bgcolor=#CCCCFF>French<br>Words</th>
+<th align=right bgcolor=#CCFFFF>Sentence<br>Pairs</th>
+<th align=right bgcolor=#CCFFFF>English<br>Words</th>
+<th align=right bgcolor=#CCFFFF>French<br>Words</th>
+<tr>
+<th bgcolor=#DDDDAA>training</th>
+
+<!-- training house -->
+<td align=right bgcolor=#CCCCFF>948 K</td>   
+<td align=right bgcolor=#CCCCFF>14,614 K</td>
+<td align=right bgcolor=#CCCCFF>15,657 K</td>
+
+<!-- training senate -->
+<td align=right bgcolor=#CCFFFF>182 K</td>
+<td align=right bgcolor=#CCFFFF>3,030 K</td>
+<td align=right bgcolor=#CCFFFF>3,249 K</td>
+
+<tr>
+
+<th bgcolor=#DDDDAA>testing 1</th>
+
+<!-- testing 1 house -->
+<td align=right bgcolor=#CCCCFF>62 K</td>
+<td align=right bgcolor=#CCCCFF>995 K</td>
+<td align=right bgcolor=#CCCCFF>1,067 K</td>
+
+<!-- testing 1 senate -->
+<td align=right bgcolor=#CCFFFF>13 K</td>
+<td align=right bgcolor=#CCFFFF>222 K</td>
+<td align=right bgcolor=#CCFFFF>237 K</td>
+
+<tr>
+
+<th abgcolor=#DDDDAA>testing 2</th>
+
+<!-- testing 2 house -->
+<td align=right bgcolor=#CCCCFF>60 K</td>
+<td align=right bgcolor=#CCCCFF>758 K</td>
+<td align=right bgcolor=#CCCCFF>806 K</td>
+
+<!-- testing 2 senate -->
+<td align=right bgcolor=#CCFFFF>12 K</td>
+<td align=right bgcolor=#CCFFFF>211 K</td>
+<td align=right bgcolor=#CCFFFF>226 K</td>
+
+<tr>
+
+<th bgcolor=#DDDDAA>
+<font color=#999999><i>eval 1<sup>*</sup></i></font>
+</th> 
+
+<!-- eval 1 house -->
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>63 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>975 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>1,048 K</i></font></td>
+
+<!-- eval 1 senate -->
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>13 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>204 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>216 K</i></font></td>  
+<tr>
+
+<th bgcolor=#DDDDAA>
+<font color=#999999><i>eval 2<sup>*</sup></i></font>
+</th> 
+
+<!-- eval 2 house -->
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>62 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>969 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>1,039 K</i></font></td>
+
+<!-- eval 2 senate -->
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>12 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>211 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>225 K</i></font></td> 
+
+<tr>
+
+<th bgcolor=#DDDDAA>released</th>
+
+<!-- released house -->
+<th align=right bgcolor=#EFEFFF>1,070 K</th>
+<th align=right bgcolor=#EFEFFF>16,366 K</th>
+<th align=right bgcolor=#EFEFFF>17,530 K</th>
+
+<!-- released senate -->
+<th align=right bgcolor=#EFFFFF>208 K</th>
+<th align=right bgcolor=#EFFFFF>3,464 K</th>
+<th align=right bgcolor=#EFFFFF>3,712 K</th>
+
+<tr>
+
+<th bgcolor=#DDDDAA>
+<font color=#999999><i>Total<sup>*</sup></i></font>
+</th> 
+
+
+<!-- total house -->
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>1,195 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>18,311 K</i></font></td>
+<td align=right bgcolor=#CCCCFF>
+    <font color=#666699><i>19,618  K</i></font></td>
+
+<!-- total senate -->
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>233 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>3,879 K</i></font></td>
+<td align=right bgcolor=#CCFFFF>
+    <font color=#669999><i>4,153 K</i></font></td>
+
+<tr>
+<td bgcolor=#DDDDAA colspan=8 align=left>
+<hr>
+<sup>*</sup> not released
+<hr>
+</td><tr>
+</table>
+
+<h2>File Format</h2>
+
+The release consists of sets of corresponding files 
+(*.e and *.f) that contain one sentence per line, so that
+sentence No. <var>n</var> in the file <var>xyz</var>.e corresponds 
+to sentence No. <var>n</var> in the file <var>xyz</var>.f. 
+In order to save space, individual files are gzipped individually.</p>
+
+For each day of parliamentary sessions, there is 
+usually one file per language. Occasionally, there are several.</p>
+
+<h2>Caveats</h2>
+
+<ol>
+<li>
+<p>
+   This release contains only sentence pairs. Even though the order
+   of the sentences is the same as in the original, there may be
+   gaps resulting from many-to-one, many-to-many, or one-to-many
+   alignments that were filtered out. Therefore, this release
+   may not be suitable for discourse-related research.
+   Table 2 shows the total number of sentences on the English and 
+   French sides and the number of sentence pairs extracted.
+
+<li>Neither the sentence splitting nor the alignments are perfect. 
+   In particular, watch out for pairs that differ considerably 
+   in length. You may want to filter these out before you do any
+   statistical training.</li>
+</ol>
+
+<table bgcolor=#CCCC99 border=0 cellspacing=0 cellpadding=5 align=center>
+<th align=center colspan=5>
+<hr>Table 2: Total Number of Sentences in the <i>Hansards</i><hr>
+</th>
+<tr>
+<th>&nbsp;</th>
+<th valign=bottom align=right>English</th>
+<th valign=bottom align=right>French</th>
+<th align=right>pairs<br>released</th>
+<th align=right>pairs<br>total</th>
+<tr>
+<th>House Debates</th>
+<td align=right>1,925 K</td>
+<td align=right>18,94 K</td>
+<td align=right>1,070 K</td>
+<td align=right>1,195 K</td>
+<tr>
+<th>Senate Debates</th>
+<td align=right>281 K</td>
+<td align=right>276 K</td>
+<td align=right>208 K</td>
+<td align=right>233 K</td>
+<tr>
+</table>
+</p></li>
+
+<h2>Credits</h2>
+
+We are very grateful to the Canadian people in general and to the
+Canadian Parliament in particular for making the <i>Hansards</i>
+available to the general public free of charge and without any restrictions
+that would hamper research. Their generosity is gratefully acknowledged.
+</p>
+
+<p>We would also like to thank the authors of the aforementioned software
+tools for making them available to the research community.
+Without them the alignment of the <i>Hansards</i> would have been 
+much more difficult, if not impossible. Their generosity, too, is 
+gratefully acknowledged.</p>
+
+<p>The alignment of the <i>Hansards</i> was performed as part of the
+<a href="http://www.isi.edu/natural-language/projects/rewrite/index.html">
+<i>ReWrite</i> project</a> under funding from the 
+<a href="http://www.darpa.mil/ito/research/tides/index.html"><i>
+DARPA TIDES</i> program</a>.</p>
+
+
+<h2>Download The Corpus</h2>
+<ul>
+<li>
+<a href="http://www.isi.edu/natural-language/download/hansard/hansard.36.r2001-1a.house.debates.training.tar">House Debates Training Set (ca. 61 MB)</a></li>
+<li>
+<a href="http://www.isi.edu/natural-language/download/hansard/hansard.36.r2001-1a.house.debates.testing.tar">House Debates Testing Sets (ca. &nbsp;7 MB)</a></p></li>
+
+<li>
+<a href="http://www.isi.edu/natural-language/download/hansard/hansard.36.r2001-1a.senate.debates.training.tar">Senate Debates Training Set (ca. 13 MB)</a></li>
+<li>
+<a href="http://www.isi.edu/natural-language/download/hansard/hansard.36.r2001-1a.senate.debates.testing.tar">Senate Debates Testing Sets (ca. &nbsp;2 MB)</a></li>
+</ul>
+
+<h2>"Installation"</h2>
+Unpack the tar balls</p>
+<pre>
+% tar xvf *.tar
+</pre>
+
+</p>
+</body>
+</html>

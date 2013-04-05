@@ -1,0 +1,32 @@
+Building and Using Parallel Texts:
+Data Driven Machine Translation and Beyond
+HLT-NAACL 2003 Workshop
+http://www.cs.unt.edu/~rada/wpt
+
+
+TRAINING DATA FOR THE ENGLISH-FRENCH WORD ALIGNMENT TASK
+
+
+Data source
+-----------
+The English-French training data are part of the "ISI Hansards", edited 
+by Ulrich Germann at ISI. Please check the README.ISI.html file for
+additional details regarding the source of these texts, and how they were
+created.
+
+Data preprocessing
+------------------
+All files were tokenized using the English (French) tokenizers provided
+in the EGYPT toolkit. 
+http://www.clsp.jhu.edu/ws99/projects/mt/toolkit/
+
+Moreover, a vocabulary of "lower case" words was automatically created from
+all files (one vocabulary per language), and consequently used to 
+"de-capitalize" the sentences. 
+
+File naming conventions
+-----------------------
+There are 475 English texts (carrying the .e extension), and 475 French 
+texts (carrying the .f extension). The file FilePairs.training includes
+the names of all file pairs, with lines in the format:
+<English_Text_File_Name> <French_Text_File_Name>
