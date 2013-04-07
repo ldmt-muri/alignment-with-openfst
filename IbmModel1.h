@@ -14,31 +14,41 @@
 using namespace fst;
 using namespace std;
 
-#define NULL_SRC_TOKEN_ID 1
-
 class IbmModel1 : public IAlignmentModel {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeParams();
   
   // creates an fst for each target sentence
-  void CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts);
+  void CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFsts);
 
   void CreateGrammarFst();
 
-  void CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentGrammarFsts);
+  void CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >& perSentGrammarFsts);
   
   // zero all parameters
   void ClearParams();
   
-  void LearnParameters(vector< VectorFst< LogArc > >& tgtFsts);
+  void LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts);
   
  public:
 
-  IbmModel1(const string& srcIntCorpusFilename, 
-	    const string& tgtIntCorpusFilename, 
+  // bitextFilename is formatted as:
+  // source sentence ||| target sentence
+  IbmModel1(const string& bitextFilename, 
 	    const string& outputFilenamePrefix, 
-	    const LearningInfo& learningInfo);
+	    const LearningInfo& learningInfo,
+	    const string &NULL_SRC_TOKEN,
+	    const VocabEncoder &vocabEncoder);
+  
+  IbmModel1(const string& bitextFilename, 
+	    const string& outputFilenamePrefix, 
+	    const LearningInfo& learningInfe);
+  
+  void CoreConstructor(const string& bitextFilename, 
+		       const string& outputFilenamePrefix, 
+		       const LearningInfo& learningInfo,
+		       const string &NULL_SRC_TOKEN);
 
   virtual void PrintParams();
 
@@ -55,14 +65,16 @@ class IbmModel1 : public IAlignmentModel {
   virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
  private:
-  string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
-  VectorFst<LogArc> grammarFst;
+  string bitextFilename, outputPrefix;
+  VectorFst<FstUtils::LogArc> grammarFst;
   LearningInfo learningInfo;
   vector< vector<int> > srcSents, tgtSents;
-  VocabEncoder vocabEncoder;
 
  public:  
+  // nlog prob(tgt word|src word)
   MultinomialParams::ConditionalMultinomialParam<int> params;
+  int NULL_SRC_TOKEN_ID;
+  VocabEncoder vocabEncoder;
 
 };
 

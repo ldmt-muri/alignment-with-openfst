@@ -2,7 +2,9 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
+
 #include "LatentCrfAligner.h"
+#include "IbmModel1.h"
 
 using namespace fst;
 using namespace std;
@@ -26,6 +28,58 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &initia
     wordPairFeaturesFilename.clear();
   }
   outputFilenamePrefix = argv[5];
+}
+
+// returns the rank of the process which have found the best HMM parameters
+void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN) {
+
+  // only the master does this
+  if(world.rank() != 0){
+    return;
+  }
+
+  outputFilenamePrefix += ".ibm1";
+
+  // ibm model1 initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
+  assert(latentCrfAligner.learningInfo.zIDependsOnYIM1 == false);
+
+  // configurations
+  cerr << "rank #" << world.rank() << ": training the ibm model 1 to initialize latentCrfAligner parameters..." << endl;
+
+  LearningInfo learningInfo;
+  learningInfo.useMaxIterationsCount = true;
+  learningInfo.maxIterationsCount = 5;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
+  learningInfo.minLikelihoodRelativeDiff = 0.01;
+  learningInfo.debugLevel = DebugLevel::CORPUS;
+  learningInfo.mpiWorld = &world;
+  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+
+  // initialize the model
+  IbmModel1 ibmModel1(textFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN, latentCrfAligner.vocabEncoder);
+
+  // train model parameters
+  cerr << "rank #" << world.rank() << ": train the model..." << endl;
+  ibmModel1.Train();
+  cerr << "rank #" << world.rank() << ": training finished!" << endl;
+  
+  // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
+  string ibm1PrecomputedFeatureId = "_ibm1";
+  cerr << "rank #" << world.rank() << "now update the multinomial params of the latentCrfALigner model." << endl;
+  for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
+      contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
+      contextIter++) {
+    
+    for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+
+      assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
+      probIter->second = ibmModel1.params[contextIter->first][probIter->first];
+      latentCrfAligner->lambda->AddToPrecomputedFeaturesWith2Inputs(contextIter->first, probIter->first, ibm1PrecomputedFeatureId, probIter->second);
+    }
+  }
+  
+  cerr << "rank #" << world.rank() << "ibm model 1 initialization finished." << endl;
 }
 
 int main(int argc, char **argv) {  
@@ -102,6 +156,11 @@ int main(int argc, char **argv) {
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);
   
+  // ibm model 1 initialization of theta params. also updates the lambda precomputed features by adding ibm model 1 probs
+  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, *((LatentCrfAligner*)model), ((LatentCrfAligner*)model)->NULL_TOKEN_STR);
+  model->BroadcastTheta(0);
+  model->BroadcastLambdas(0);
+
   // unsupervised training of the model
   model->Train();
 

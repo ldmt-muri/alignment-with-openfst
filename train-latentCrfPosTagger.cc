@@ -98,7 +98,6 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
     }
 
     // now initialize the latentCrfPosTagger's theta parameters
-    MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
     for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
 	contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
 	contextIter++) {

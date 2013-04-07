@@ -22,6 +22,12 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDe
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
 
+// add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
+void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue) {
+  precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+}
+
+
 // by two inputs, i mean that a precomputed feature value is a function of two strings
 // example line in the precomputed features file:
 // madrasa ||| school ||| F52:editdistance=7 F53:capitalconsistency=1
@@ -210,6 +216,21 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
       fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
       fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
     activeFeatures[paramIndexes[diagonalDeviation]] += deviation;
+  }
+
+  enabledFeatureTypes[108] = true;  
+  // F108: value = I( i==0 && y_i==0 )   ///OR\\\  I( i==len(tgt) && y_i==len(src) ) 
+  string theBeginningAligns = "F108:begin";
+  string theEndingAligns = "F108:end";
+  if(enabledFeatureTypes.size() > 108 && enabledFeatureTypes[108]) {
+    if(i == 0 && yI == 0) {
+      AddParam(theBeginningAligns);
+      activeFeatures[paramIndexes[theBeginningAligns]] += 1.0;
+    }
+    if(i == x_t.size() - 1 && yI == x_s.size() - 1) {
+      AddParam(theEndingAligns);
+      activeFeatures[paramIndexes[theEndingAligns]] += 1.0;
+    }
   }
 }
 

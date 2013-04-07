@@ -114,13 +114,15 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   for(int i = 51; i < 100; i++) {
     enabledFeatureTypes.push_back(false);
   }
-  enabledFeatureTypes[101] = true;  // I( y_i - y_{i-1} == 0 )
-  enabledFeatureTypes[102] = true;  // I( floor( ln(y_i - y_{i-1}) ) )
-  enabledFeatureTypes[103] = true;  // I( tgt[i] aligns_to src[y_i] )
-  enabledFeatureTypes[104] = true;  // precomputed features (src-tgt word pair)
-  enabledFeatureTypes[105] = true;  // I( y_i - y_{i-1} )
-  enabledFeatureTypes[106] = true;  // I( src[y_{i-1}]:src[y_{i}] )   captures the intuition that certain src side transitions are more common than others
-  enabledFeatureTypes[107] = true;  // |y_i/len(src) - i/len(tgt)|
+  enabledFeatureTypes[101] = false;  // (bool) // id = y_i-y_{i-1} 
+  enabledFeatureTypes[102] = false;  // (bool) // id = floor( ln(y_i - y_{i-1}) )
+  enabledFeatureTypes[103] = false;  // (bool) // id = tgt[i] aligns_to src[y_i]
+  enabledFeatureTypes[104] = true;  // precomputed features (src-tgt word pair), including model1.   this is the features chris used in his 2011 paper with Gimpel
+  enabledFeatureTypes[105] = true;  // (bool) // id = y_i - y_{i-1} captures the intuition that certain jump distances are more common than others
+  enabledFeatureTypes[106] = false;  // (bool) // id = src[y_{i-1}]:src[y_{i}]  captures the intuition that certain src side transitions are more common than others
+  enabledFeatureTypes[107] = true;  // (real) // value = |y_i/len(src) - i/len(tgt)| the positional features used by dyer in several WA papers
+  enabledFeatureTypes[108] = true;  // (bool) // value = I( i==0 && y_i==0 )
+                                    // (bool) // value = I( i==len(tgt) && y_i==len(src) ) captures the intuition that the first and last word in the target sentence usually aligns to the first and last word in the src sentence, respectively.
 
   // initialize (and normalize) the log theta params to gaussians
   if(initialThetaParamsFilename.size() == 0) {

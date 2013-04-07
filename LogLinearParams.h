@@ -39,6 +39,8 @@ class LogLinearParams {
   
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
+  void AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue);
+
   double Hash();
 
   // set learning info

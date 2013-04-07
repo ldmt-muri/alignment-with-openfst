@@ -33,8 +33,19 @@ class VocabEncoder {
     intToToken[nextId++] = UNK;
   }
 
+  // copy constructor (deep)
+  VocabEncoder(const VocabEncoder &original) {
+    this->firstId = original.firstId;
+    this->nextId = original.nextId;
+    this->tokenToInt = original.tokenToInt;
+    this->intToToken = original.intToToken;
+    this->UNK = original.UNK;
+    this->useUnk = original.useUnk;
+    this->closedVocab = original.closedVocab;
+  }
+
   VocabEncoder(const std::string& textFilename, unsigned firstId = 2) {
-    useUnk = true;
+    useUnk = false;
     this->firstId = firstId;
     nextId = firstId;
     UNK = "_unk_";
@@ -122,7 +133,7 @@ class VocabEncoder {
   }
   
   // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, string &nullToken) {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken) {
     assert(srcSents.size() == 0 && tgtSents.size() == 0);
     
     // open data file
@@ -152,7 +163,8 @@ class VocabEncoder {
       // src sent is written before tgt sent
       bool src = true;
       if(nullToken.size() > 0) {
-	srcSents[lineNumber].push_back(Encode(nullToken));
+	// insert null token at the beginning of src sentence
+	srcSents[lineNumber].push_back(Encode(nullToken, false));
       }
       for(unsigned i = 0; i < temp.size(); i++) {
 	if(splits[i] == "|||") {
@@ -222,6 +234,11 @@ class VocabEncoder {
 
 class VocabDecoder {
  public:
+  std::map<int, std::string> vocab;
+  std::string UNK;
+  std::set<int> closedVocab;
+
+ public:
   VocabDecoder(const VocabDecoder& another) {
     vocab = another.vocab;
     UNK = another.UNK;
@@ -277,10 +294,8 @@ class VocabDecoder {
     return x;
   }
 
-  std::map<int, std::string> vocab;
-  std::string UNK;
-  std::set<int> closedVocab;
 };
+
 
 #endif
 

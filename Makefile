@@ -11,9 +11,9 @@ all: train-latentCrfPosTagger train-latentCrfAligner
 
 # specific to the word alignment task
 train-latentCrfAligner: train-latentCrfAligner.o
-	$(CC) train-latentCrfAligner.o HmmModel2.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
+	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
 
-train-latentCrfAligner.o: HmmModel2.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
+train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
 	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT)
 
 LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h LatentCrfAligner.cc
@@ -32,14 +32,17 @@ LatentCrfPosTagger.o: LatentCrfModel.o LatentCrfPosTagger.h
 
 
 # shared code
-LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h
+LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h MultinomialParams.h
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
 
 LogLinearParams.o: fdict.o LogLinearParams.cc LogLinearParams.h LogLinearParams-inl.h
 	$(CC) $(BEFORE) $(SINGLE) LogLinearParams.cc $(OPT)
 
-HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h LearningInfo.h
+HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h LearningInfo.h StringUtils.h MultinomialParams.h
 	$(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
+
+IbmModel1.o: FstUtils.o IbmModel1.cc IbmModel1.h LearningInfo.h StringUtils.h IAlignmentModel.h MultinomialParams.h VocabEncoder.h
+	$(CC) $(BEFORE) $(SINGLE) IbmModel1.cc $(OPT)
 
 FstUtils.o: FstUtils.cc FstUtils.h
 	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
@@ -69,4 +72,5 @@ erstream.o:
 	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/erstream.cxx $(OPT)
 
 clean:
-	rm -rf train-latentCrfModel FstUtils.o HmmModel2.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfModel.o train-latentCrfModel
+	rm -rf train-latentCrfModel FstUtils.o HmmModel2.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfModel.o train-latentCrfModel train-latentCrfAligner.o train-latentCrfAligner train-latentCrfPosTagger.o train-latentCrfPosTagger LatentCrfPosTagger.o LatentCrfAligner.o IbmModel1.o
+

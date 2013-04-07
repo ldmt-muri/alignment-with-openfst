@@ -52,12 +52,13 @@ class LatentCrfAligner : public LatentCrfModel {
   std::vector< std::vector<int> > srcSents, tgtSents, testSrcSents, testTgtSents;
 
   // null token
-  static string NULL_TOKEN_STR;
   static int NULL_TOKEN;
 
  public:
   // the value of y_i that indicates an alignment to the NULL source token, and to the first token in the source sentence, respectively.
   static unsigned FIRST_SRC_POSITION;
+  // the string representing the null token at the source sentence which produce "spurious" tgt words.
+  static string NULL_TOKEN_STR;
 };
 
 #endif

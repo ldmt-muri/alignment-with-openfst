@@ -3,27 +3,46 @@
 using namespace std;
 using namespace fst;
 
+IbmModel1::IbmModel1(const string& bitextFilename, 
+		     const string& outputFilenamePrefix, 
+		     const LearningInfo& learningInfo,
+		     const string &NULL_SRC_TOKEN,
+		     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder) {
+  CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN);
+}
+
+IbmModel1::IbmModel1(const string& bitextFilename, 
+		     const string& outputFilenamePrefix, 
+		     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename) {
+  
+  CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__token__");
+}
+
 // initialize model 1 scores
-IbmModel1::IbmModel1(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo) {
+void IbmModel1::CoreConstructor(const string& bitextFilename, 
+				const string& outputFilenamePrefix, 
+				const LearningInfo& learningInfo,
+				const string &NULL_SRC_TOKEN) {
   // set member variables
-  this->srcCorpusFilename = srcIntCorpusFilename;
-  this->tgtCorpusFilename = tgtIntCorpusFilename;
+  this->bitextFilename = bitextFilename;
   this->outputPrefix = outputFilenamePrefix;
   this->learningInfo = learningInfo;
-
-  // encode and memorize training data
-  vocabEncoder.useUnk = false;
-  vocabEncoder.Read(srcCorpusFilename, srcSents);
-  vocabEncoder.Read(tgtCorpusFilename, tgtSents);
-  assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
-
+  
+  // read encoded training data 
+  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN);
+  assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());  
+  assert(vocabEncoder.ConstEncode(NULL_SRC_TOKEN) != vocabEncoder.UnkInt());
+  
+  // at this point, you would expect NULL_SRC_TOKEN to already have an encoding in vocabEncoder
+  NULL_SRC_TOKEN_ID = vocabEncoder.ConstEncode(NULL_SRC_TOKEN);
+  
   // initialize the model parameters
   cerr << "init model1 params" << endl;
   stringstream initialModelFilename;
   initialModelFilename << outputPrefix << ".param.init";
   InitParams();
   PersistParams(initialModelFilename.str());
-
+  
   // create the initial grammar FST
   cerr << "create grammar fst" << endl;
   CreateGrammarFst();
@@ -34,7 +53,7 @@ void IbmModel1::Train() {
 
   // create tgt fsts
   cerr << "create tgt fsts" << endl;
-  vector< VectorFst <LogArc> > tgtFsts;
+  vector< VectorFst <FstUtils::LogArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
   // training iterations
@@ -46,24 +65,24 @@ void IbmModel1::Train() {
   PersistParams(outputPrefix + ".param.final");
 }
 
-void IbmModel1::CreateTgtFsts(vector< VectorFst< LogArc > >& targetFsts) {
+void IbmModel1::CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFsts) {
 
   for(unsigned i = 0; i < tgtSents.size(); i++) {
     // read the list of integers representing target tokens
     vector< int > &intTokens  =tgtSents[i];
     
     // create the fst
-    VectorFst< LogArc > tgtFst;
+    VectorFst< FstUtils::LogArc > tgtFst;
     int statesCount = intTokens.size() + 1;
     for(int stateId = 0; stateId < intTokens.size()+1; stateId++) {
       int temp = tgtFst.AddState();
       assert(temp == stateId);
       if(stateId == 0) continue;
-      tgtFst.AddArc(stateId-1, LogArc(intTokens[stateId-1], intTokens[stateId-1], 0, stateId));
+      tgtFst.AddArc(stateId-1, FstUtils::LogArc(intTokens[stateId-1], intTokens[stateId-1], 0, stateId));
     }
     tgtFst.SetStart(0);
     tgtFst.SetFinal(intTokens.size(), 0);
-    ArcSort(&tgtFst, ILabelCompare<LogArc>());
+    ArcSort(&tgtFst, ILabelCompare<FstUtils::LogArc>());
     targetFsts.push_back(tgtFst);
     
     // for debugging
@@ -77,11 +96,11 @@ void IbmModel1::NormalizeParams() {
 }
 
 void IbmModel1::PrintParams() {
-  MultinomialParams::PrintParams<int>(params);
+  params.PrintParams();
 }
 
 void IbmModel1::PersistParams(const string& outputFilename) {
-  MultinomialParams::PersistParams1(outputFilename, params, vocabEncoder);
+  MultinomialParams::PersistParams(outputFilename, params, vocabEncoder);
 }
 
 // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
@@ -89,10 +108,6 @@ void IbmModel1::InitParams() {
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     // read the list of integers representing target tokens
     vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
-    // we want to allow target words to align to NULL (which has srcTokenId = 1).
-    if(srcTokens[0] != NULL_SRC_TOKEN_ID) {
-      srcTokens.insert(srcTokens.begin(), NULL_SRC_TOKEN_ID);
-    } 
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
@@ -109,7 +124,7 @@ void IbmModel1::InitParams() {
 	} else {
 	  // otherwise, add nLog(1/3) to the original value, effectively counting the number of times 
 	  // this srcToken-tgtToken pair appears in the corpus
-	  translations[tgtToken] = Plus( LogWeight(translations[tgtToken]), LogWeight(FstUtils::nLog(1/3.0)) ).Value();
+	  translations[tgtToken] = Plus( FstUtils::LogWeight(translations[tgtToken]), FstUtils::LogWeight(FstUtils::nLog(1/3.0)) ).Value();
 	}
       }
     }
@@ -126,7 +141,7 @@ void IbmModel1::CreateGrammarFst() {
   }
   
   // create the only state in this fst, and make it initial and final
-  LogArc::StateId dummy = grammarFst.AddState();
+  FstUtils::LogArc::StateId dummy = grammarFst.AddState();
   assert(dummy == 0);
   grammarFst.SetStart(0);
   grammarFst.SetFinal(0, 0);
@@ -136,14 +151,14 @@ void IbmModel1::CreateGrammarFst() {
       int tgtToken = tgtIter->first;
       int srcToken = srcIter->first;
       double paramValue = tgtIter->second;
-      grammarFst.AddArc(fromState, LogArc(tgtToken, srcToken, paramValue, toState));
+      grammarFst.AddArc(fromState, FstUtils::LogArc(tgtToken, srcToken, paramValue, toState));
     }
   }
-  ArcSort(&grammarFst, ILabelCompare<LogArc>());
+  ArcSort(&grammarFst, ILabelCompare<FstUtils::LogArc>());
   //  PrintFstSummary(grammarFst);
 }
 
-void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentGrammarFsts) {
+void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >& perSentGrammarFsts) {
   
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector<int> &srcTokens = srcSents[sentId];
@@ -154,17 +169,17 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< LogArc > >& perSentG
     assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
     
     // create the fst
-    VectorFst< LogArc > grammarFst;
+    VectorFst< FstUtils::LogArc > grammarFst;
     int stateId = grammarFst.AddState();
     assert(stateId == 0);
     for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
       for(set<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
-	grammarFst.AddArc(stateId, LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));	
+	grammarFst.AddArc(stateId, FstUtils::LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));	
       }
     }
     grammarFst.SetStart(stateId);
     grammarFst.SetFinal(stateId, 0);
-    ArcSort(&grammarFst, ILabelCompare<LogArc>());
+    ArcSort(&grammarFst, ILabelCompare<FstUtils::LogArc>());
     perSentGrammarFsts.push_back(grammarFst);
     
   }
@@ -179,12 +194,12 @@ void IbmModel1::ClearParams() {
   }
 }
 
-void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
+void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts) {
   clock_t compositionClocks = 0, forwardBackwardClocks = 0, updatingFractionalCountsClocks = 0, grammarConstructionClocks = 0, normalizationClocks = 0;
   clock_t t00 = clock();
   do {
     clock_t t05 = clock();
-    vector< VectorFst< LogArc > > perSentGrammarFsts;
+    vector< VectorFst< FstUtils::LogArc > > perSentGrammarFsts;
     CreatePerSentGrammarFsts(perSentGrammarFsts);
     grammarConstructionClocks += clock() - t05;
 
@@ -197,20 +212,20 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
     
     // iterate over sentences
     int sentsCounter = 0;
-    for( vector< VectorFst< LogArc > >::const_iterator tgtIter = tgtFsts.begin(), grammarIter = perSentGrammarFsts.begin(); 
+    for( vector< VectorFst< FstUtils::LogArc > >::const_iterator tgtIter = tgtFsts.begin(), grammarIter = perSentGrammarFsts.begin(); 
 	 tgtIter != tgtFsts.end() && grammarIter != perSentGrammarFsts.end(); 
 	 tgtIter++, grammarIter++) {
       
       // build the alignment fst
       clock_t t20 = clock();
-      VectorFst< LogArc > tgtFst = *tgtIter, perSentGrammarFst = *grammarIter, alignmentFst;
+      VectorFst< FstUtils::LogArc > tgtFst = *tgtIter, perSentGrammarFst = *grammarIter, alignmentFst;
       Compose(tgtFst, perSentGrammarFst, &alignmentFst);
       compositionClocks += clock() - t20;
       //FstUtils::PrintFstSummary(alignmentFst);
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
-      vector<LogWeight> alphas, betas;
+      vector<FstUtils::LogWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
       float fSentLogLikelihood = betas[alignmentFst.Start()].Value();
@@ -228,15 +243,15 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
 	learningInfo.useEarlyStopping && 
 	sentsCounter % learningInfo.trainToDevDataSize == 0;
       for (int stateId = 0; !excludeFractionalCountsInThisSent && stateId < alignmentFst.NumStates() ;stateId++) {
-	for (ArcIterator<VectorFst< LogArc > > arcIter(alignmentFst, stateId);
+	for (ArcIterator<VectorFst< FstUtils::LogArc > > arcIter(alignmentFst, stateId);
 	     !arcIter.Done();
 	     arcIter.Next()) {
 	  int srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
 	  int fromState = stateId, toState = arcIter.Value().nextstate;
 	  
 	  // probability of using this parameter given this sentence pair and the previous model
-	  LogWeight currentParamLogProb = arcIter.Value().weight;
-	  LogWeight unnormalizedPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]);
+	  FstUtils::LogWeight currentParamLogProb = arcIter.Value().weight;
+	  FstUtils::LogWeight unnormalizedPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]);
 	  //float fUnnormalizedPosteriorProb = exp(-1.0 * unnormalizedPosteriorLogProb.Value());
 	  //float fNormalizedPosteriorProb = (fUnnormalizedPosteriorProb / alignmentsCount) / fSentLikelihood;
 	  //float fNormalizedPosteriorLogProb = -1.0 * log(fNormalizedPosteriorProb);
@@ -265,7 +280,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< LogArc > >& tgtFsts) {
 	  */
 	    
 	  // append the fractional count for this parameter
-	  params[srcToken][tgtToken] = Plus(LogWeight(params[srcToken][tgtToken]), LogWeight(fNormalizedPosteriorLogProb)).Value();
+	  params[srcToken][tgtToken] = Plus(FstUtils::LogWeight(params[srcToken][tgtToken]), FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
 	  
 	  // logging
 	  /*
@@ -340,9 +355,9 @@ void IbmModel1::Align(const string &alignmentsFilename) {
   ofstream outputAlignments;
   outputAlignments.open(alignmentsFilename.c_str(), ios::out);
 
-  vector< VectorFst< LogArc > > perSentGrammarFsts;
+  vector< VectorFst< FstUtils::LogArc > > perSentGrammarFsts;
   CreatePerSentGrammarFsts(perSentGrammarFsts);
-  vector< VectorFst <LogArc> > tgtFsts;
+  vector< VectorFst <FstUtils::LogArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
   assert(tgtFsts.size() == srcSents.size());
@@ -351,7 +366,7 @@ void IbmModel1::Align(const string &alignmentsFilename) {
 
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
-    VectorFst< LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
+    VectorFst< FstUtils::LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
     
     // given a src token id, what are the possible src position (in this sentence)
     map<int, set<int> > srcTokenToSrcPos;
@@ -361,14 +376,14 @@ void IbmModel1::Align(const string &alignmentsFilename) {
     
     // build alignment fst and compute potentials
     Compose(tgtFst, perSentGrammarFst, &alignmentFst);
-    vector<LogWeight> alphas, betas;
+    vector<FstUtils::LogWeight> alphas, betas;
     ShortestDistance(alignmentFst, &alphas, false);
     ShortestDistance(alignmentFst, &betas, true);
     double fSentLogLikelihood = betas[alignmentFst.Start()].Value();
     
     // tropical has the path property. we need this property to compute the shortest path
-    VectorFst< StdArc > alignmentFstProbsWithPathProperty, bestAlignment, corrected;
-    ArcMap(alignmentFst, &alignmentFstProbsWithPathProperty, LogToTropicalMapper());
+    VectorFst< FstUtils::StdArc > alignmentFstProbsWithPathProperty, bestAlignment, corrected;
+    ArcMap(alignmentFst, &alignmentFstProbsWithPathProperty, FstUtils::LogToTropicalMapper());
     ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
    
     // fix labels
@@ -379,9 +394,9 @@ void IbmModel1::Align(const string &alignmentsFilename) {
     int startState = bestAlignment.Start();
     int currentState = startState;
     int tgtPos = 0;
-    while(bestAlignment.Final(currentState) == LogWeight::Zero()) {
+    while(bestAlignment.Final(currentState) == FstUtils::LogWeight::Zero()) {
       // get hold of the arc
-      ArcIterator< VectorFst< StdArc > > aiter(bestAlignment, currentState);
+      ArcIterator< VectorFst< FstUtils::StdArc > > aiter(bestAlignment, currentState);
       // identify the next state
       int nextState = aiter.Value().nextstate;
       // skip epsilon arcs
