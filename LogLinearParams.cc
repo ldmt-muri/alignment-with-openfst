@@ -218,7 +218,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
     activeFeatures[paramIndexes[diagonalDeviation]] += deviation;
   }
 
-  enabledFeatureTypes[108] = true;  
   // F108: value = I( i==0 && y_i==0 )   ///OR\\\  I( i==len(tgt) && y_i==len(src) ) 
   string theBeginningAligns = "F108:begin";
   string theEndingAligns = "F108:end";

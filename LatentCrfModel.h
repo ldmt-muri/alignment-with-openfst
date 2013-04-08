@@ -256,10 +256,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   static unsigned NULL_POSITION;
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   unsigned examplesCount;
+  std::string textFilename, outputPrefix;
 
  protected:
   static LatentCrfModel *instance;
-  std::string textFilename, outputPrefix;
   std::set<int> zDomain, yDomain;
   // vectors specifiying which feature types to use (initialized in the constructor)
   std::vector<bool> enabledFeatureTypes;

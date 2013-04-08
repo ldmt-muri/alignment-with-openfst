@@ -40,6 +40,8 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void Label(std::vector<int> &tokens, std::vector<int> &context, std::vector<int> &labels);
 
+  void Label(const string &labelsFilename);
+
   void AddConstrainedFeatures();
 
   void SetTestExample(std::vector<int> &x_t, std::vector<int> &x_s);

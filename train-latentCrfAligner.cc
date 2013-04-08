@@ -1,4 +1,8 @@
 #include <fenv.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <stdio.h>
+
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
@@ -11,6 +15,61 @@ using namespace std;
 namespace mpi = boost::mpi;
 
 typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
+
+void my_handler(int s) {
+  
+  cerr << "___________________//////////////////////// INTERRUPTED " << s << "\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\___________________" << endl;
+  cerr << "stopped training." << endl;
+  LatentCrfModel *model = LatentCrfAligner::GetInstance();
+  LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
+  if(aligner.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": running viterbi..." << endl;
+  } else {
+    cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": will exit." << endl;
+    exit(1);
+  }
+  string suffix = ".interrupted-labels";
+  string labelsFilename = aligner.outputPrefix + suffix;
+  aligner.Label(labelsFilename);
+  cerr << "viterbi word alignment can be found at " << labelsFilename << endl;
+  cerr << "now, persist the current model parameters..." << endl;
+  suffix = ".interrupted-theta";
+  string thetaFilename = aligner.outputPrefix + suffix;
+  aligner.PersistTheta(thetaFilename);
+  cerr << "done persisting theta params" << endl;
+  cerr << "theta params can be found at " << thetaFilename << endl;
+  suffix = ".interrupted-lambda";
+  string lambdaFilename = aligner.outputPrefix + suffix;
+  aligner.lambda->PersistParams(lambdaFilename);
+  cerr << "done persisting lambda params." << endl;
+  cerr << "lambda params can be found at " << lambdaFilename << endl;
+  exit(1); 
+}
+
+void register_my_handler() {
+  struct sigaction sigIntHandler;
+
+  sigIntHandler.sa_handler = my_handler;
+  sigemptyset(&sigIntHandler.sa_mask);
+  sigIntHandler.sa_flags = 0;
+
+  sigaction(SIGINT, &sigIntHandler, NULL);
+  /*
+  sigaction(2, &sigIntHandler, NULL);
+  sigaction(4, &sigIntHandler, NULL);
+  sigaction(5, &sigIntHandler, NULL);
+  sigaction(7, &sigIntHandler, NULL);
+  sigaction(8, &sigIntHandler, NULL);
+  sigaction(14, &sigIntHandler, NULL);
+  sigaction(19, &sigIntHandler, NULL);
+  sigaction(20, &sigIntHandler, NULL);
+  sigaction(21, &sigIntHandler, NULL);
+  sigaction(22, &sigIntHandler, NULL);
+  sigaction(26, &sigIntHandler, NULL);
+  sigaction(27, &sigIntHandler, NULL);
+  sigaction(31, &sigIntHandler, NULL);
+  */
+}
 
 void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix) {
   assert(argc >= 5);
@@ -31,7 +90,7 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &initia
 }
 
 // returns the rank of the process which have found the best HMM parameters
-void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN) {
+void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename) {
 
   // only the master does this
   if(world.rank() != 0){
@@ -48,12 +107,12 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
 
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 5;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
@@ -64,25 +123,43 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   ibmModel1.Train();
   cerr << "rank #" << world.rank() << ": training finished!" << endl;
   
-  // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
-  string ibm1PrecomputedFeatureId = "_ibm1";
-  cerr << "rank #" << world.rank() << "now update the multinomial params of the latentCrfALigner model." << endl;
-  for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
-      contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
-      contextIter++) {
-    
-    for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-
-      assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
-      probIter->second = ibmModel1.params[contextIter->first][probIter->first];
-      latentCrfAligner->lambda->AddToPrecomputedFeaturesWith2Inputs(contextIter->first, probIter->first, ibm1PrecomputedFeatureId, probIter->second);
+  // only override theta params if initialThetaParamsFilename is not specified
+  if(initialThetaParamsFilename.size() == 0) {
+    // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
+    cerr << "rank #" << world.rank() << ": now update the multinomial params of the latentCrfALigner model." << endl;
+    for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
+	contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
+	contextIter++) {
+      
+      for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+	
+	assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
+	probIter->second = ibmModel1.params[contextIter->first][probIter->first];
+      }
     }
   }
   
-  cerr << "rank #" << world.rank() << "ibm model 1 initialization finished." << endl;
+  cerr << "rank #" << world.rank() << ": ibm model 1 initialization finished." << endl;
+}
+
+void endOfKIterationsCallbackFunction() {
+  // get hold of the model
+  LatentCrfModel *model = LatentCrfAligner::GetInstance();
+  LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
+  if(aligner.learningInfo.mpiWorld->rank() != 0) {
+    return;
+  } 
+
+  // find viterbi alignment for the top K examples of the training set (i.e. our test set)
+  stringstream labelsFilename;
+  labelsFilename << aligner.outputPrefix << ".labels.iter" << aligner.learningInfo.iterationsCount;
+  aligner.Label(labelsFilename.str());
 }
 
 int main(int argc, char **argv) {  
+
+  // register interrupt handlers
+  register_my_handler();
 
   // boost mpi initialization
   mpi::environment env(argc, argv);
@@ -124,7 +201,7 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = false;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
@@ -140,6 +217,9 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.supervisedTraining = false;
+  learningInfo.firstKExamplesToLabel = 9;//447;
+  learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+  learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
 
   // add constraints
   learningInfo.constraints.clear();
@@ -155,11 +235,25 @@ int main(int argc, char **argv) {
 							initialLambdaParamsFilename, 
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);
+  LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
   // ibm model 1 initialization of theta params. also updates the lambda precomputed features by adding ibm model 1 probs
-  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, *((LatentCrfAligner*)model), ((LatentCrfAligner*)model)->NULL_TOKEN_STR);
-  model->BroadcastTheta(0);
-  model->BroadcastLambdas(0);
+  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename);
+
+  latentCrfAligner.BroadcastTheta(0);
+  latentCrfAligner.BroadcastLambdas(0);
+
+  cerr << "rank #" << world.rank() << "update the precomputed features with model1." << endl;
+  string ibm1PrecomputedFeatureId = "_ibm1";
+  for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
+      contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
+      contextIter++) {
+    
+    for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+
+      latentCrfAligner.lambda->AddToPrecomputedFeaturesWith2Inputs(contextIter->first, probIter->first, ibm1PrecomputedFeatureId, probIter->second);
+    }
+  }
 
   // unsupervised training of the model
   model->Train();
@@ -177,26 +271,6 @@ int main(int argc, char **argv) {
     
   // run viterbi (and write alignments in giza format)
   string labelsFilename = outputFilenamePrefix + ".labels";
-  ofstream labelsFile(labelsFilename.c_str());
-  for(unsigned exampleId = 0; exampleId < model->examplesCount; ++exampleId) {
-    std::vector<int> &srcSent = model->GetObservableContext(exampleId);
-    std::vector<int> &tgtSent = model->GetObservableSequence(exampleId);
-    std::vector<int> labels;
-    // run viterbi
-    ((LatentCrfAligner*)model)->Label(tgtSent, srcSent, labels);
-    // 
-    for(unsigned i = 0; i < labels.size(); ++i) {
-      // dont write null alignments
-      if(labels[i] == ((LatentCrfAligner*)model)->NULL_POSITION) {
-	continue;
-      }
-      // determine the alignment (i.e. src position) for this tgt position (i)
-      int alignment = labels[i] - ((LatentCrfAligner*)model)->FIRST_SRC_POSITION;
-      assert(alignment >= 0);
-      labelsFile << alignment << "-" << i << " ";
-    }
-    labelsFile << endl;
-  }
-  labelsFile.close();
+  ((LatentCrfAligner*)model)->Label(labelsFilename);
   cerr << "alignments can be found at " << labelsFilename << endl;
 }

@@ -207,6 +207,9 @@ class LearningInfo {
     supervisedTraining = false;
     unspecified = 0;
     unspecified2 = 0;
+    firstKExamplesToLabel = 100;
+    invokeCallbackFunctionEveryKIterations = 10;
+    endOfKIterationsCallbackFunction = 0;
   }
 
   bool IsModelConverged() {
@@ -352,6 +355,12 @@ class LearningInfo {
   bool supervisedTraining;
 
   int unspecified, unspecified2;
+
+  unsigned firstKExamplesToLabel;
+
+  unsigned invokeCallbackFunctionEveryKIterations;
+
+  void (*endOfKIterationsCallbackFunction)();
 };
 
 

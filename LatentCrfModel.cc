@@ -1265,7 +1265,7 @@ void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
   if(learningInfo.zIDependsOnYIM1) {
     MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenTwoLabels, vocabEncoder);
   } else {
-    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder);
+    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
   }
 }
 
@@ -1320,7 +1320,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     BroadcastTheta(0);
 
     // debug info
-    if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && learningInfo.mpiWorld->rank() == 0) {
+    if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
       stringstream thetaParamsFilename;
       thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
       thetaParamsFilename << ".theta";
@@ -1471,6 +1471,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
       }
       lambda->PersistParams(lambdaParamsFilename.str());
+    }
+
+    // label the first K examples from the training set (i.e. the test set)
+    if(learningInfo.iterationsCount % learningInfo.invokeCallbackFunctionEveryKIterations == 0 &&      \
+       learningInfo.endOfKIterationsCallbackFunction != 0  &&        \
+       learningInfo.mpiWorld->rank() == 0) {
+      // call the call back function
+      (*learningInfo.endOfKIterationsCallbackFunction)();
     }
 
     // debug info

@@ -216,6 +216,17 @@ vector<int>& LatentCrfAligner::GetObservableContext(int exampleId) {
   }   
 }
 
+void LatentCrfAligner::AddConstrainedFeatures() { 
+  // no constrained features to add
+}
+
+void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
+  testSrcSents.clear();
+  testSrcSents.push_back(x_s);
+  testTgtSents.clear();
+  testTgtSents.push_back(x_t);
+}
+
 // tokens = target sentence
 void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<int> &labels) {
 
@@ -244,13 +255,28 @@ void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<i
   assert(labels.size() == tokens.size());  
 }
   
-void LatentCrfAligner::AddConstrainedFeatures() { 
-  // no constrained features to add
-}
-
-void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
-  testSrcSents.clear();
-  testSrcSents.push_back(x_s);
-  testTgtSents.clear();
-  testTgtSents.push_back(x_t);
+void LatentCrfAligner::Label(const string &labelsFilename) {
+  // run viterbi (and write alignments in giza format)
+  ofstream labelsFile(labelsFilename.c_str());
+  assert(learningInfo.firstKExamplesToLabel <= examplesCount);
+  for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    std::vector<int> &srcSent = GetObservableContext(exampleId);
+    std::vector<int> &tgtSent = GetObservableSequence(exampleId);
+    std::vector<int> labels;
+    // run viterbi
+    Label(tgtSent, srcSent, labels);
+    // 
+    for(unsigned i = 0; i < labels.size(); ++i) {
+      // dont write null alignments
+      if(labels[i] == NULL_POSITION) {
+	continue;
+      }
+      // determine the alignment (i.e. src position) for this tgt position (i)
+      int alignment = labels[i] - FIRST_SRC_POSITION;
+      assert(alignment >= 0);
+      labelsFile << alignment << "-" << i << " ";
+    }
+    labelsFile << endl;
+  }
+  labelsFile.close();
 }
