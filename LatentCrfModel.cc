@@ -10,6 +10,7 @@ unsigned LatentCrfModel::NULL_POSITION = -100;
 
 LatentCrfModel& LatentCrfModel::GetInstance() {
   if(!instance) {
+    cerr << "no instance found at LatentCrfModel::GetInstance()" << endl;
     assert(false);
   }
   return *instance;

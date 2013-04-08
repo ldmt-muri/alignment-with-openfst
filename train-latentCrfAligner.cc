@@ -26,7 +26,7 @@ void my_handler(int s) {
     cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": running viterbi..." << endl;
   } else {
     cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": will exit." << endl;
-    exit(1);
+    exit(0);
   }
   string suffix = ".interrupted-labels";
   string labelsFilename = aligner.outputPrefix + suffix;
@@ -43,7 +43,7 @@ void my_handler(int s) {
   aligner.lambda->PersistParams(lambdaFilename);
   cerr << "done persisting lambda params." << endl;
   cerr << "lambda params can be found at " << lambdaFilename << endl;
-  exit(1); 
+  exit(0);
 }
 
 void register_my_handler() {
@@ -54,6 +54,9 @@ void register_my_handler() {
   sigIntHandler.sa_flags = 0;
 
   sigaction(SIGINT, &sigIntHandler, NULL);
+  sigaction(SIGTERM, &sigIntHandler, NULL);
+  sigaction(SIGUSR1, &sigIntHandler, NULL);
+  sigaction(SIGUSR2, &sigIntHandler, NULL);
   /*
   sigaction(2, &sigIntHandler, NULL);
   sigaction(4, &sigIntHandler, NULL);
@@ -217,7 +220,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.supervisedTraining = false;
-  learningInfo.firstKExamplesToLabel = 9;//447;
+  learningInfo.firstKExamplesToLabel = 447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
 
