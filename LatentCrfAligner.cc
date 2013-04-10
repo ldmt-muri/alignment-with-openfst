@@ -21,7 +21,6 @@ LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename,
 				    initialThetaParamsFilename,
 				    wordPairFeaturesFilename);
   }
-  cerr << "rank #" << learningInfo.mpiWorld->rank() << "instance = " << instance << endl;
   return instance;
 }
 
@@ -132,7 +131,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     BroadcastTheta(0);
   } else {
     assert(nLogThetaGivenOneLabel.params.size() == 0);
-    MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder);
+    MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
     assert(nLogThetaGivenOneLabel.params.size() > 0);
   }
   
