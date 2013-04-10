@@ -210,6 +210,8 @@ class LearningInfo {
     firstKExamplesToLabel = 100;
     invokeCallbackFunctionEveryKIterations = 10;
     endOfKIterationsCallbackFunction = 0;
+    smoothMultinomialParams = false;
+    fixDOverC = false;
   }
 
   bool IsModelConverged() {
@@ -361,6 +363,10 @@ class LearningInfo {
   unsigned invokeCallbackFunctionEveryKIterations;
 
   void (*endOfKIterationsCallbackFunction)();
+  
+  bool smoothMultinomialParams;
+
+  bool fixDOverC;
 };
 
 

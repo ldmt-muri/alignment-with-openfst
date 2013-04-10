@@ -724,6 +724,14 @@ void LatentCrfModel::Train() {
   }
 }
 
+double LatentCrfModel::EvaluateNll() {  
+  vector<double> gradientPiece(lambda->GetParamsCount(), 0.0);
+  double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+  double nllTotal = -1;
+  mpi::all_reduce<double>(*learningInfo.mpiWorld, nllPiece, nllTotal, std::plus<double>());
+  return nllTotal;
+}
+
 // to interface with the simulated annealing library at http://www.taygeta.com/annealing/simanneal.html
 float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   // singleton
@@ -968,7 +976,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 }
 
 // -loglikelihood is the return value
-double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambdaSparseVector) {
+double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda) {
 
   // for each sentence in this mini batch, aggregate the Nll and its derivatives across sentences
   double Nll = 0;
@@ -976,7 +984,9 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
   // mini batch is not supported
   assert(learningInfo.optimizationMethod.subOptMethod->miniBatchSize == 0 || 
 	 learningInfo.optimizationMethod.subOptMethod->miniBatchSize == examplesCount);
-
+  
+  assert(derivativeWRTLambda.size() == lambda->GetParamsCount());
+  
   // for each training example
   for(int sentId = 0; sentId < examplesCount; sentId++) {
     
@@ -984,7 +994,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       continue;
     }
-
+    
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
@@ -1019,7 +1029,11 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
 	}
         assert(false);
       }
-      derivativeWRTLambdaSparseVector[dIter->first] -= dOverC;
+      if(derivativeWRTLambda.size() <= dIter->first) {
+	cerr << "problematic feature index is " << dIter->first << " cuz derivativeWRTLambda.size() = " << derivativeWRTLambda.size() << endl;
+      }
+      assert(derivativeWRTLambda.size() > dIter->first);
+      derivativeWRTLambda[dIter->first] -= dOverC;
     }
 
     // compute the F map fro this sentence
@@ -1050,9 +1064,10 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
 	}
 	assert(false);
       }
-      derivativeWRTLambdaSparseVector[fIter->first] += fOverZ;
-      if(std::isnan(derivativeWRTLambdaSparseVector[fIter->first]) || 
-	 std::isinf(derivativeWRTLambdaSparseVector[fIter->first])) {
+      assert(fIter->first < derivativeWRTLambda.size());
+      derivativeWRTLambda[fIter->first] += fOverZ;
+      if(std::isnan(derivativeWRTLambda[fIter->first]) || 
+	 std::isinf(derivativeWRTLambda[fIter->first])) {
 	cerr << "rank #" << learningInfo.mpiWorld->rank() << ": ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
 	assert(false);
       }
@@ -1284,6 +1299,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
   bool converged = false;
   do {
 
+    // debug.     
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "compute the objective before updating theta...";
+    }
+    double objectiveBeforeUpdatingTheta = EvaluateNll();
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "objective = " << objectiveBeforeUpdatingTheta << endl;
+    }
+
     // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
     // data structure to hold theta MLE estimates
     MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
@@ -1331,6 +1355,16 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       PersistTheta(thetaParamsFilename.str());
     }
+
+    // debug. 
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "compute the objective after updating theta...";
+    }
+    double objectiveAfterUpdatingTheta = EvaluateNll();
+    if(learningInfo.mpiWorld->rank()  == 0) {
+      cerr << "objective = " << objectiveAfterUpdatingTheta << endl;
+    }
+
 
     // update the lambdas
     // debug info
@@ -1392,7 +1426,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	      break;
 	    }
 
-	    // receive the latest parameter weights from the master (TODO: can we assume that slaves already have the latest lambda parameter weights at this point?)
+	    // receive the latest parameter weights from the master
+	    // (TODO: can we assume that slaves already have the latest lambda parameter weights at this point?)
 	    mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
 	    
 	    // process your share of examples
@@ -1402,7 +1437,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	    // merge your gradient with other slaves
 	    mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, dummy, 
 					  AggregateVectors2(), 0);
-
+	    
 	    // aggregate the loglikelihood computation as well
 	    double dummy2;
 	    mpi::reduce<double>(*learningInfo.mpiWorld, nllPiece, dummy2, std::plus<double>(), 0);
@@ -1462,6 +1497,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       lambda->PrintParams();
+    }
+
+    // debug. 
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "compute the objective after updating theta...";
+    }
+    double objectiveAfterUpdatingLambda = EvaluateNll();
+    if(learningInfo.mpiWorld->rank()  == 0) {
+      cerr << "objective = " << objectiveAfterUpdatingLambda << endl;
     }
 
     // persist updated lambda params

@@ -64,6 +64,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // call back function for simulated annealing
   static float EvaluateNll(float *lambdasArray);
 
+  // evaluate the \sum_<x,z>  -log(z|x) , plus L2(\lambda) when the model is configured to use it
+  double EvaluateNll();
+
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double LbfgsCallbackEvalYGivenXLambdaGradient(void *ptrFromSentId,
 						       const double *lambdasArray,
@@ -257,7 +260,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   unsigned examplesCount;
   std::string textFilename, outputPrefix;
-
+  
  protected:
   static LatentCrfModel *instance;
   std::set<int> zDomain, yDomain;

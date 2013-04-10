@@ -57,21 +57,6 @@ void register_my_handler() {
   sigaction(SIGTERM, &sigIntHandler, NULL);
   sigaction(SIGUSR1, &sigIntHandler, NULL);
   sigaction(SIGUSR2, &sigIntHandler, NULL);
-  /*
-  sigaction(2, &sigIntHandler, NULL);
-  sigaction(4, &sigIntHandler, NULL);
-  sigaction(5, &sigIntHandler, NULL);
-  sigaction(7, &sigIntHandler, NULL);
-  sigaction(8, &sigIntHandler, NULL);
-  sigaction(14, &sigIntHandler, NULL);
-  sigaction(19, &sigIntHandler, NULL);
-  sigaction(20, &sigIntHandler, NULL);
-  sigaction(21, &sigIntHandler, NULL);
-  sigaction(22, &sigIntHandler, NULL);
-  sigaction(26, &sigIntHandler, NULL);
-  sigaction(27, &sigIntHandler, NULL);
-  sigaction(31, &sigIntHandler, NULL);
-  */
 }
 
 void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix) {
@@ -183,9 +168,6 @@ int main(int argc, char **argv) {
 
   // randomize draws
   int seed = time(NULL);
-  if(world.rank() == 0) {
-    cerr << "master" << world.rank() << ": executing srand(" << seed << ")" << endl;
-  }
   srand(seed);
 
   // configurations
@@ -210,10 +192,10 @@ int main(int argc, char **argv) {
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 8;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 5;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
@@ -223,6 +205,7 @@ int main(int argc, char **argv) {
   learningInfo.firstKExamplesToLabel = 447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
+  learningInfo.fixDOverC = false;
 
   // add constraints
   learningInfo.constraints.clear();
@@ -246,7 +229,6 @@ int main(int argc, char **argv) {
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);
 
-  cerr << "rank #" << world.rank() << "update the precomputed features with model1." << endl;
   string ibm1PrecomputedFeatureId = "_ibm1";
   for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
       contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();

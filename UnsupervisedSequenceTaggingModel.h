@@ -88,7 +88,8 @@ class UnsupervisedSequenceTaggingModel {
 
  protected:
   
- UnsupervisedSequenceTaggingModel(const string &vocabEncoderFilenameInitializer) : vocabEncoder(vocabEncoderFilenameInitializer)  {   }
+ UnsupervisedSequenceTaggingModel(const string &vocabEncoderFilenameInitializer) : vocabEncoder(vocabEncoderFilenameInitializer)  { 
+  }
   ~UnsupervisedSequenceTaggingModel() { }
 
  public:

@@ -25,6 +25,7 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDe
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
 void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue) {
   precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+  AddParam(featureId);
 }
 
 
