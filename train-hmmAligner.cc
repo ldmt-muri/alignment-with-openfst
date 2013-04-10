@@ -1,22 +1,20 @@
 #include "LearningInfo.h"
 #include "FstUtils.h"
 #include "StringUtils.h"
-#include "HmmModel.h"
+#include "HmmAligner.h"
 
 using namespace fst;
 using namespace std;
 using namespace boost;
 
-void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &srcTestSetFilename, string &tgtTestSetFilename, string &outputFilepathPrefix) {
-  assert(argc == 6 || argc == 4);
-  srcCorpusFilename = argv[1];
-  tgtCorpusFilename = argv[2];
-  if(argc == 6) {
-    srcTestSetFilename = argv[3];
-    tgtTestSetFilename = argv[4];
-    outputFilepathPrefix = argv[5];
-  } else if(argc == 4) {
+void ParseParameters(int argc, char **argv, string& bitextFilename, string &testBitextFilename, string &outputFilepathPrefix) {
+  assert(argc == 4 || argc == 3);
+  bitextFilename = argv[1];
+  if(argc == 4) {
+    testBitextFilename = argv[2];
     outputFilepathPrefix = argv[3];
+  } else if(argc == 3) {
+    outputFilepathPrefix = argv[2];
   } else {
     cerr << "invalid arguments" << endl;
   }
@@ -29,8 +27,8 @@ int main(int argc, char **argv) {
 
   // parse arguments
   cout << "parsing arguments" << endl;
-  string srcCorpusFilename, tgtCorpusFilename, srcTestSetFilename, tgtTestSetFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, srcTestSetFilename, tgtTestSetFilename, outputFilenamePrefix);
+  string bitextFilename, testBitextFilename, outputFilenamePrefix;
+  ParseParameters(argc, argv, bitextFilename, testBitextFilename, outputFilenamePrefix);
 
   // specify stopping criteria
   LearningInfo learningInfo;
@@ -47,15 +45,15 @@ int main(int argc, char **argv) {
   learningInfo.persistFinalParams = false;
 
   // initialize the model
-  HmmModel model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
+  HmmAligner model(bitextFilename, outputFilenamePrefix, learningInfo);
 
   // train model parameters
   model.Train();
 
   // align the test set
-  if(srcTestSetFilename.size() > 0) {
+  if(testBitextFilename.size() > 0) {
     string outputAlignmentsFilename = outputFilenamePrefix + ".test.align";
-    model.AlignTestSet(srcTestSetFilename, tgtTestSetFilename, outputAlignmentsFilename);
+    model.AlignTestSet(testBitextFilename, outputAlignmentsFilename);
   } else {
     string outputAlignmentsFilename = outputFilenamePrefix + ".train.align";
     model.Align(outputAlignmentsFilename);

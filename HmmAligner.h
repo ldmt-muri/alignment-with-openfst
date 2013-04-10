@@ -1,5 +1,5 @@
-#ifndef _HMM_MODEL_H_
-#define _HMM_MODEL_H_
+#ifndef _HMM_ALIGNER_H_
+#define _HMM_ALIGNER_H_
 
 #include <iostream>
 #include <fstream>
@@ -36,64 +36,67 @@ using namespace MultinomialParams;
 // But, when i == 0, there's no a_{-1}. we can use this constant whenever we need a_{-1}
 #define INITIAL_SRC_POS -1
 
-class HmmModel : public IAlignmentSampler, public IAlignmentModel {
+//class HmmAligner : public IAlignmentSampler, public IAlignmentModel {
+class HmmAligner {
 
   // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
   void NormalizeFractionalCounts();
   
   // creates an fst for each target sentence
-  void CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts);
+  void CreateTgtFsts(vector< VectorFst< FstUtils::LogQuadArc > >& targetFsts);
 
   // creates a 1st order markov fst for each source sentence
-  void CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts);
+  void CreateSrcFsts(vector< VectorFst< FstUtils::LogQuadArc > >& srcFsts);
 
   // creates an fst for each src sentence, which remembers the last visited src token
-  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<FstUtils::LogQuadArc>& srcFst);
 
   // create a grammar
   void CreateGrammarFst(); // deprecated
   void CreatePerSentGrammarFsts();
-  void CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokens, VectorFst< LogQuadArc >& perSentGrammarFst);
+  void CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokens, VectorFst< FstUtils::LogQuadArc >& perSentGrammarFst);
   
   // zero all parameters
   void ClearFractionalCounts();
   
-  void LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts);
+  void LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tgtFsts);
   
-  void BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst, 
-			 const VectorFst< LogQuadArc > &perSentGrammarFst,
-			 const VectorFst< LogQuadArc > &srcFst, 
-			 VectorFst< LogQuadArc > &alignmentFst);
+  void BuildAlignmentFst(const VectorFst< FstUtils::LogQuadArc > &tgtFst, 
+			 const VectorFst< FstUtils::LogQuadArc > &perSentGrammarFst,
+			 const VectorFst< FstUtils::LogQuadArc > &srcFst, 
+			 VectorFst< FstUtils::LogQuadArc > &alignmentFst);
 
-  void CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc > &tgtFst);
+  void CreateTgtFst(const vector<int> tgtTokens, VectorFst< FstUtils::LogQuadArc > &tgtFst);
     
  public:
 
-  HmmModel(const string& srcIntCorpusFilename, const string& tgtIntCorpusFilename, const string& outputFilenamePrefix, const LearningInfo& learningInfo);
+  HmmAligner(const string& bitextFilename, 
+	     const string& outputFilenamePrefix, 
+	     const LearningInfo& learningInfo);
 
-  virtual void PrintParams();
+  void PrintParams();
 
-  virtual void PersistParams(const string& outputFilename);
+  void PersistParams(const string& outputFilename);
 
   // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-  virtual void InitParams();
+  void InitParams();
 
-  virtual void Train();
+  void Train();
 
   string AlignSent(vector<int> srcTokens, vector<int> tgtTokens);
 
-  virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &alignmentsFilename);
+  void AlignTestSet(const string &testBitextFilename, const string &alignmentsFilename);
 
   void Align(const string &alignmentsFilename);
   
-  virtual void Align();
+  void Align();
 
   void DeepCopy(const ConditionalMultinomialParam<int>& original, 
 		ConditionalMultinomialParam<int>& duplicate);
 
-  virtual void SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
+  void SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb);
 
-  virtual void SampleAGivenST(const std::vector<int> &srcTokens,
+  void SampleAGivenST(const std::vector<int> &srcTokens,
 			      const std::vector<int> &tgtTokens,
 			      std::vector<int> &alignments,
 			      double &logProb);
@@ -107,8 +110,8 @@ class HmmModel : public IAlignmentSampler, public IAlignmentModel {
 
   // Compose(perSentTgtFst * grammarFst * perSentSrcFst) => alignment fst
   // weight = (currentSrcPos, prevSrcPos, arcWeight)
-  //  VectorFst<LogQuadArc> grammarFst;
-  vector<VectorFst<LogQuadArc> > perSentGrammarFsts;
+  //  VectorFst<FstUtils::LogQuadArc> grammarFst;
+  vector<VectorFst<FstUtils::LogQuadArc> > perSentGrammarFsts;
 
   // configurations
   LearningInfo learningInfo;

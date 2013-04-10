@@ -1,4 +1,4 @@
-#include "HmmModel.h"
+#include "HmmAligner.h"
 
 using namespace std;
 using namespace fst;
@@ -6,10 +6,9 @@ using namespace MultinomialParams;
 using namespace boost;
 
 // initialize model 1 scores
-HmmModel::HmmModel(const string& srcIntCorpusFilename, 
-		   const string& tgtIntCorpusFilename, 
-		   const string& outputFilenamePrefix, 
-		   const LearningInfo& learningInfo) {
+HmmAligner::HmmAligner(const string& bitextFilename, 
+		       const string& outputFilenamePrefix, 
+		       const LearningInfo& learningInfo) {
 
   // Note: seed with time(0) if you don't care about reproducbility
   srand(425);
@@ -20,8 +19,7 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
 
   // encode training data
   vocabEncoder.useUnk = false;
-  vocabEncoder.Read(srcIntCorpusFilename, srcSents);
-  vocabEncoder.Read(tgtIntCorpusFilename, tgtSents);
+  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_TOKEN);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
   // initialize the model parameters
@@ -39,13 +37,13 @@ HmmModel::HmmModel(const string& srcIntCorpusFilename,
   CreatePerSentGrammarFsts();
 }
 
-void HmmModel::Train() {
+void HmmAligner::Train() {
 
   // create tgt fsts
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create tgt fsts" << endl;
   }
-  vector< VectorFst <LogQuadArc> > tgtFsts;
+  vector< VectorFst <FstUtils::LogQuadArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
   // training iterations
@@ -57,7 +55,7 @@ void HmmModel::Train() {
 }
 
 // src fsts are 1st order markov models
-void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
+void HmmAligner::CreateSrcFsts(vector< VectorFst< FstUtils::LogQuadArc > >& srcFsts) {
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector< int > &intTokens = srcSents[sentId];
     if(intTokens[0] != NULL_SRC_TOKEN_ID) {
@@ -72,25 +70,25 @@ void HmmModel::CreateSrcFsts(vector< VectorFst< LogQuadArc > >& srcFsts) {
     }
 
     // create the fst
-    VectorFst< LogQuadArc > srcFst;
+    VectorFst< FstUtils::LogQuadArc > srcFst;
     Create1stOrderSrcFst(intTokens, srcFst);
     srcFsts.push_back(srcFst);
   }
 }
 
-void HmmModel::CreatePerSentGrammarFsts() {
+void HmmAligner::CreatePerSentGrammarFsts() {
   perSentGrammarFsts.clear();
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
       vector<int> &srcTokens = srcSents[sentId];
       vector<int> &tgtTokens = tgtSents[sentId];
       assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
-      VectorFst< LogQuadArc > perSentGrammarFst;
+      VectorFst< FstUtils::LogQuadArc > perSentGrammarFst;
       CreatePerSentGrammarFst(srcTokens, tgtTokens, perSentGrammarFst);
       perSentGrammarFsts.push_back(perSentGrammarFst);
   }
 }
 
-void HmmModel::CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokensVector, VectorFst< LogQuadArc >& perSentGrammarFst) {
+void HmmAligner::CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokensVector, VectorFst< FstUtils::LogQuadArc >& perSentGrammarFst) {
   
   set<int> tgtTokens(tgtTokensVector.begin(), tgtTokensVector.end());
 
@@ -102,18 +100,18 @@ void HmmModel::CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtT
   assert(stateId == 0);
   for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
     for(set<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
-      perSentGrammarFst.AddArc(stateId, LogQuadArc(*tgtTokenIter, *srcTokenIter, FstUtils::EncodeQuad(0, 0, 0, tFractionalCounts[*srcTokenIter][*tgtTokenIter]), stateId));	
+      perSentGrammarFst.AddArc(stateId, FstUtils::LogQuadArc(*tgtTokenIter, *srcTokenIter, FstUtils::EncodeQuad(0, 0, 0, tFractionalCounts[*srcTokenIter][*tgtTokenIter]), stateId));	
     }
   }
   
   perSentGrammarFst.SetStart(stateId);
-  perSentGrammarFst.SetFinal(stateId, LogQuadWeight::One());
-  ArcSort(&perSentGrammarFst, ILabelCompare<LogQuadArc>());
+  perSentGrammarFst.SetFinal(stateId, FstUtils::LogQuadWeight::One());
+  ArcSort(&perSentGrammarFst, ILabelCompare<FstUtils::LogQuadArc>());
 }								       
 
 // assumptions:
 // - tgtFst is empty
-void HmmModel::CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc > &tgtFst) {
+void HmmAligner::CreateTgtFst(const vector<int> tgtTokens, VectorFst< FstUtils::LogQuadArc > &tgtFst) {
   assert(tgtFst.NumStates() == 0);
   int statesCount = tgtTokens.size() + 1;
   for(int stateId = 0; stateId < tgtTokens.size()+1; stateId++) {
@@ -122,47 +120,47 @@ void HmmModel::CreateTgtFst(const vector<int> tgtTokens, VectorFst< LogQuadArc >
     if(stateId == 0) continue;
     int tgtPos = stateId;
     tgtFst.AddArc(stateId-1, 
-		  LogQuadArc(tgtTokens[stateId-1], 
+		  FstUtils::LogQuadArc(tgtTokens[stateId-1], 
 			       tgtTokens[stateId-1], 
 			       FstUtils::EncodeQuad(tgtPos, 0, 0, 0), 
 			       stateId));
   }
   tgtFst.SetStart(0);
-  tgtFst.SetFinal(tgtTokens.size(), LogQuadWeight::One());
-  ArcSort(&tgtFst, ILabelCompare<LogQuadArc>());
+  tgtFst.SetFinal(tgtTokens.size(), FstUtils::LogQuadWeight::One());
+  ArcSort(&tgtFst, ILabelCompare<FstUtils::LogQuadArc>());
 }
 
-void HmmModel::CreateTgtFsts(vector< VectorFst< LogQuadArc > >& targetFsts) {
+void HmmAligner::CreateTgtFsts(vector< VectorFst< FstUtils::LogQuadArc > >& targetFsts) {
   // for each line
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     vector< int > &intTokens = tgtSents[sentId];
     
     // create the fst
-    VectorFst< LogQuadArc > tgtFst;
+    VectorFst< FstUtils::LogQuadArc > tgtFst;
     CreateTgtFst(intTokens, tgtFst);
     targetFsts.push_back(tgtFst);
   }
 }
 
-void HmmModel::NormalizeFractionalCounts() {
+void HmmAligner::NormalizeFractionalCounts() {
   MultinomialParams::NormalizeParams(aFractionalCounts);
   MultinomialParams::NormalizeParams(tFractionalCounts);
 }
 
-void HmmModel::PrintParams() {
-  MultinomialParams::PrintParams(aParams);
-  MultinomialParams::PrintParams(tFractionalCounts);
+void HmmAligner::PrintParams() {
+  aParams.PrintParams();
+  tFractionalCounts.PrintParams();
 }
 
-void HmmModel::PersistParams(const string& outputFilename) {
+void HmmAligner::PersistParams(const string& outputFilename) {
   string translationFilename = outputFilename + string(".t");
-  MultinomialParams::PersistParams1(translationFilename, tFractionalCounts, vocabEncoder);
+  MultinomialParams::PersistParams(translationFilename, tFractionalCounts, vocabEncoder, true, true);
   string transitionFilename = outputFilename + string(".a");
-  MultinomialParams::PersistParams1(transitionFilename, aParams, vocabEncoder);
+  MultinomialParams::PersistParams(transitionFilename, aParams, vocabEncoder, false, false);
 }
 
 // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
-void HmmModel::InitParams() {
+void HmmAligner::InitParams() {
   // for each parallel sentence
   for(int sentId = 0; sentId < srcSents.size(); sentId++) {
 
@@ -191,7 +189,7 @@ void HmmModel::InitParams() {
 	} else {
 	  // otherwise, add nLog(1/3) to the original value, effectively counting the number of times 
 	  // this srcToken-tgtToken pair appears in the corpus
-	  tParamsGivenS_i[tgtToken] = Plus( LogWeight(tParamsGivenS_i[tgtToken]), LogWeight(FstUtils::nLog(1/3.0)) ).Value();
+	  tParamsGivenS_i[tgtToken] = Plus( FstUtils::LogWeight(tParamsGivenS_i[tgtToken]), FstUtils::LogWeight(FstUtils::nLog(1/3.0)) ).Value();
 	}
 	tParamsGivenS_i[tgtToken] = fabs(gaussianSampler.Draw());
       }
@@ -215,7 +213,7 @@ void HmmModel::InitParams() {
 }
 
 // make a deep copy of parameters
-void HmmModel::DeepCopy(const ConditionalMultinomialParam<int>& original, 
+void HmmAligner::DeepCopy(const ConditionalMultinomialParam<int>& original, 
 			ConditionalMultinomialParam<int>& duplicate) {
   // zero duplicate
   MultinomialParams::ClearParams(duplicate);
@@ -233,7 +231,7 @@ void HmmModel::DeepCopy(const ConditionalMultinomialParam<int>& original,
 }
 
 /*
-void HmmModel::CreateGrammarFst() {
+void HmmAligner::CreateGrammarFst() {
   // clear grammar
   if (grammarFst.NumStates() > 0) {
     grammarFst.DeleteArcs(grammarFst.Start());
@@ -242,10 +240,10 @@ void HmmModel::CreateGrammarFst() {
   }
   
   // create the only state in this fst, and make it initial and final
-  LogQuadArc::StateId dummy = grammarFst.AddState();
+  FstUtils::LogQuadArc::StateId dummy = grammarFst.AddState();
   assert(dummy == 0);
   grammarFst.SetStart(0);
-  grammarFst.SetFinal(0, LogQuadWeight::One());
+  grammarFst.SetFinal(0, FstUtils::LogQuadWeight::One());
   int fromState = 0, toState = 0;
   assert(tFractionalCounts.params.size() > 0);
   for(map<int, MultinomialParam>::const_iterator srcIter = tFractionalCounts.params.begin(); srcIter != tFractionalCounts.params.end(); srcIter++) {
@@ -254,13 +252,13 @@ void HmmModel::CreateGrammarFst() {
       int srcToken = (*srcIter).first;
       float paramValue = (*tgtIter).second;
       grammarFst.AddArc(fromState, 
-			LogQuadArc(tgtToken, 
+			FstUtils::LogQuadArc(tgtToken, 
 				     srcToken, 
 				     FstUtils::EncodeQuad(0, 0, 0, paramValue), 
 				     toState));
     }
   }
-  ArcSort(&grammarFst, ILabelCompare<LogQuadArc>());
+  ArcSort(&grammarFst, ILabelCompare<FstUtils::LogQuadArc>());
 }
 */
 
@@ -276,7 +274,7 @@ void HmmModel::CreateGrammarFst() {
 // - the "1stOrder" part of the function name indicates this FST represents a first order markov process
 //   for alignment transitions.
 //
-void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst) {
+void HmmAligner::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<FstUtils::LogQuadArc>& srcFst) {
   // enforce assumptions
   assert(srcTokens.size() > 0 && srcTokens[0] == NULL_SRC_TOKEN_ID);
   assert(srcFst.NumStates() == 0);
@@ -298,44 +296,44 @@ void HmmModel::Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQ
     if(i == 0) {
       srcFst.SetStart(i);
     } else {
-      srcFst.SetFinal(i, LogQuadWeight::One());
+      srcFst.SetFinal(i, FstUtils::LogQuadWeight::One());
     }
 
     // we don't allow prevAlignment to be null alignment in our markov model. if a null alignment happens after alignment = 5, we use 5 as prevAlignment, not the null alignment. if null alignment happens before any non-null alignment, we use a special src position INITIAL_SRC_POS to indicate the prevAlignment
     int prevAlignment = i == 0? INITIAL_SRC_POS : i;
 
     // each state can go to itself with the null src token
-    srcFst.AddArc(i, LogQuadArc(srcTokens[0], srcTokens[0], FstUtils::EncodeQuad(0, i, prevAlignment, aParams[prevAlignment][i]), i));
+    srcFst.AddArc(i, FstUtils::LogQuadArc(srcTokens[0], srcTokens[0], FstUtils::EncodeQuad(0, i, prevAlignment, aParams[prevAlignment][i]), i));
 
     // each state can go to states representing non-null alignments
     for(int j = 1; j < srcTokens.size(); j++) {
-      srcFst.AddArc(i, LogQuadArc(srcTokens[j], srcTokens[j], FstUtils::EncodeQuad(0, j, prevAlignment, aParams[prevAlignment][j]), j));
+      srcFst.AddArc(i, FstUtils::LogQuadArc(srcTokens[j], srcTokens[j], FstUtils::EncodeQuad(0, j, prevAlignment, aParams[prevAlignment][j]), j));
     }
   }
  
   // arc sort to enable composition
-  ArcSort(&srcFst, ILabelCompare<LogQuadArc>());
+  ArcSort(&srcFst, ILabelCompare<FstUtils::LogQuadArc>());
 
   // for debugging
   //  cerr << "=============SRC FST==========" << endl;
   //  cerr << FstUtils::PrintFstSummary(srcFst);
 }
 
-void HmmModel::ClearFractionalCounts() {
+void HmmAligner::ClearFractionalCounts() {
   MultinomialParams::ClearParams(tFractionalCounts, learningInfo.smoothMultinomialParams);
   MultinomialParams::ClearParams(aFractionalCounts, learningInfo.smoothMultinomialParams);
 }
 
-void HmmModel::BuildAlignmentFst(const VectorFst< LogQuadArc > &tgtFst,
-				 const VectorFst< LogQuadArc > &perSentGrammarFst,
-				 const VectorFst< LogQuadArc > &srcFst, 
-				 VectorFst< LogQuadArc > &alignmentFst) {
-  VectorFst< LogQuadArc > temp;
+void HmmAligner::BuildAlignmentFst(const VectorFst< FstUtils::LogQuadArc > &tgtFst,
+				 const VectorFst< FstUtils::LogQuadArc > &perSentGrammarFst,
+				 const VectorFst< FstUtils::LogQuadArc > &srcFst, 
+				 VectorFst< FstUtils::LogQuadArc > &alignmentFst) {
+  VectorFst< FstUtils::LogQuadArc > temp;
   Compose(tgtFst, perSentGrammarFst, &temp);
   Compose(temp, srcFst, &alignmentFst);  
 }
 
-void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
+void HmmAligner::LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tgtFsts) {
   clock_t compositionClocks = 0, forwardBackwardClocks = 0, updatingFractionalCountsClocks = 0, normalizationClocks = 0;
   clock_t t00 = clock();
   do {
@@ -345,7 +343,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create src fsts" << endl;
     }
-    vector< VectorFst <LogQuadArc> > srcFsts;
+    vector< VectorFst <FstUtils::LogQuadArc> > srcFsts;
     CreateSrcFsts(srcFsts);
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": created src fsts" << endl;
@@ -362,26 +360,26 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
     
     // iterate over sentences
     int sentsCounter = 0;
-    for( vector< VectorFst< LogQuadArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(), perSentGrammarIter = perSentGrammarFsts.begin(); 
+    for( vector< VectorFst< FstUtils::LogQuadArc > >::const_iterator tgtIter = tgtFsts.begin(), srcIter = srcFsts.begin(), perSentGrammarIter = perSentGrammarFsts.begin(); 
 	 tgtIter != tgtFsts.end() && srcIter != srcFsts.end() && perSentGrammarIter != perSentGrammarFsts.end(); 
 	 tgtIter++, srcIter++, perSentGrammarIter++, sentsCounter++) {
 
       // build the alignment fst
       clock_t t20 = clock();
-      const VectorFst< LogQuadArc > &tgtFst = *tgtIter, &srcFst = *srcIter, &perSentGrammarFst = *perSentGrammarIter;
-      VectorFst< LogQuadArc > alignmentFst;
+      const VectorFst< FstUtils::LogQuadArc > &tgtFst = *tgtIter, &srcFst = *srcIter, &perSentGrammarFst = *perSentGrammarIter;
+      VectorFst< FstUtils::LogQuadArc > alignmentFst;
       BuildAlignmentFst(tgtFst, perSentGrammarFst,  srcFst, alignmentFst);
       compositionClocks += clock() - t20;
       if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
 	cerr << "built alignment fst. |tgtFst| = " << tgtFst.NumStates() << ", |srcFst| = " << srcFst.NumStates() << ", |alignmentFst| = " << alignmentFst.NumStates() << endl;
-	cerr << "===SRC FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(srcFst);
-	cerr << "===TGT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(tgtFst);
-	cerr << "===ALIGNMENT FST===" << endl << FstUtils::PrintFstSummary<LogQuadArc>(alignmentFst);
+	cerr << "===SRC FST===" << endl << FstUtils::PrintFstSummary<FstUtils::LogQuadArc>(srcFst);
+	cerr << "===TGT FST===" << endl << FstUtils::PrintFstSummary<FstUtils::LogQuadArc>(tgtFst);
+	cerr << "===ALIGNMENT FST===" << endl << FstUtils::PrintFstSummary<FstUtils::LogQuadArc>(alignmentFst);
       }
       
       // run forward/backward for this sentence
       clock_t t30 = clock();
-      vector<LogQuadWeight> alphas, betas;
+      vector<FstUtils::LogQuadWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
       if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
@@ -410,7 +408,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 	learningInfo.useEarlyStopping && 
 	sentsCounter % learningInfo.trainToDevDataSize == 0;
       for (int stateId = 0; !excludeFractionalCountsInThisSent && stateId < alignmentFst.NumStates() ;stateId++) {
-	for (ArcIterator<VectorFst< LogQuadArc > > arcIter(alignmentFst, stateId);
+	for (ArcIterator<VectorFst< FstUtils::LogQuadArc > > arcIter(alignmentFst, stateId);
 	     !arcIter.Done();
 	     arcIter.Next()) {
 
@@ -433,12 +431,12 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 	    
 	  // update tFractionalCounts
 	  tFractionalCounts[srcToken][tgtToken] = 
-	    Plus(LogWeight(tFractionalCounts[srcToken][tgtToken]), 
-		 LogWeight(fNormalizedPosteriorLogProb)).Value();
+	    Plus(FstUtils::LogWeight(tFractionalCounts[srcToken][tgtToken]), 
+		 FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
 	  // update aFractionalCounts
 	  aFractionalCounts[prevSrcPos][currentSrcPos] = 
-	    Plus(LogWeight(aFractionalCounts[prevSrcPos][currentSrcPos]),
-		 LogWeight(fNormalizedPosteriorLogProb)).Value();
+	    Plus(FstUtils::LogWeight(aFractionalCounts[prevSrcPos][currentSrcPos]),
+		 FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
 	  
 	}
       }
@@ -523,7 +521,7 @@ void HmmModel::LearnParameters(vector< VectorFst< LogQuadArc > >& tgtFsts) {
 // assumptions:
 // - both aParams and tFractionalCounts are properly normalized logProbs
 // sample both an alignment and a translation, given src sentence and tgt length
-void HmmModel::SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb) {
+void HmmAligner::SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vector<int>& tgtTokens, vector<int>& alignments, double& hmmLogProb) {
 
   // intialize
   int prevAlignment = INITIAL_SRC_POS;
@@ -559,7 +557,7 @@ void HmmModel::SampleATGivenS(const vector<int>& srcTokens, int tgtLength, vecto
 }
 
 // sample an alignment given a source sentence and a its translation.
-void HmmModel::SampleAGivenST(const std::vector<int> &srcTokens,
+void HmmAligner::SampleAGivenST(const std::vector<int> &srcTokens,
 		    const std::vector<int> &tgtTokens,
 		    std::vector<int> &alignments,
 		    double &logProb) {
@@ -570,7 +568,7 @@ void HmmModel::SampleAGivenST(const std::vector<int> &srcTokens,
 // given the current model, align a test sentence
 // assumptions: 
 // - the null token has *NOT* been inserted yet
-string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
+string HmmAligner::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   static int sentCounter = 0;
   
@@ -581,21 +579,21 @@ string HmmModel::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   }
   
   // build aGivenTS
-  VectorFst<LogQuadArc> tgtFst, srcFst, alignmentFst, perSentGrammarFst;
+  VectorFst<FstUtils::LogQuadArc> tgtFst, srcFst, alignmentFst, perSentGrammarFst;
   CreateTgtFst(tgtTokens, tgtFst);  
   Create1stOrderSrcFst(srcTokens, srcFst);
   CreatePerSentGrammarFst(srcTokens, tgtTokens, perSentGrammarFst);
   BuildAlignmentFst(tgtFst, perSentGrammarFst, srcFst, alignmentFst);
-  VectorFst< LogArc > alignmentFstProbs;
-  ArcMap(alignmentFst, &alignmentFstProbs, LogQuadToLogPositionMapper());
+  VectorFst< FstUtils::LogArc > alignmentFstProbs;
+  ArcMap(alignmentFst, &alignmentFstProbs, FstUtils::LogQuadToLogPositionMapper());
   // tropical has the path property
-  VectorFst< StdArc > alignmentFstProbsWithPathProperty, bestAlignment;
-  ArcMap(alignmentFstProbs, &alignmentFstProbsWithPathProperty, LogToTropicalMapper());
+  VectorFst< FstUtils::StdArc > alignmentFstProbsWithPathProperty, bestAlignment;
+  ArcMap(alignmentFstProbs, &alignmentFstProbsWithPathProperty, FstUtils::LogToTropicalMapper());
   ShortestPath(alignmentFstProbsWithPathProperty, &bestAlignment);
   return FstUtils::PrintAlignment(bestAlignment);
 }
 
-void HmmModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
+void HmmAligner::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
 
   vector< vector<int> > srcTestSents, tgtTestSents;
   vocabEncoder.Read(srcTestSetFilename, srcTestSents);
@@ -615,11 +613,11 @@ void HmmModel::AlignTestSet(const string &srcTestSetFilename, const string &tgtT
   outputAlignments.close();
 }
 
-void HmmModel::Align() {
+void HmmAligner::Align() {
   Align(outputPrefix + ".train.align");
 }
 
-void HmmModel::Align(const string &alignmentsFilename) {
+void HmmAligner::Align(const string &alignmentsFilename) {
   ofstream outputAlignments;
   if(learningInfo.mpiWorld->rank() == 0) {
     outputAlignments.open(alignmentsFilename.c_str(), ios::out);
