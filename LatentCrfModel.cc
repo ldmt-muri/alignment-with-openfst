@@ -724,11 +724,16 @@ void LatentCrfModel::Train() {
   }
 }
 
+// when l2 is specified, the regularized objective is returned. when l1 or none is specified, the unregualrized objective is returned
 double LatentCrfModel::EvaluateNll() {  
   vector<double> gradientPiece(lambda->GetParamsCount(), 0.0);
   double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
   double nllTotal = -1;
   mpi::all_reduce<double>(*learningInfo.mpiWorld, nllPiece, nllTotal, std::plus<double>());
+  assert(nllTotal != -1);
+  if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+    nllTotal = AddL2Term(nllTotal);
+  }
   return nllTotal;
 }
 
@@ -755,11 +760,11 @@ float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   float objective = (float)LbfgsCallbackEvalZGivenXLambdaGradient(ptrFromSentId, dblLambdasArray, dummy, lambdasCount, 1.0);
   return objective;
 }
-
+ 
 // lbfgs' callback function for evaluating -logliklihood(y|x) and its d/d_\lambda
 // this is needed for supervised training of the CRF
 double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
-							      const double *lambdasArray,
+							       const double *lambdasArray,
 							      double *gradient,
 							      const int lambdasCount,
 							      const double step) {
@@ -862,7 +867,9 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     }
 
     if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-      cerr << "." << model.learningInfo.mpiWorld->rank();
+      if(sentId % model.learningInfo.nSentsPerDot == 0) {
+	cerr << "." << model.learningInfo.mpiWorld->rank();
+      }
     }
   }
 
@@ -912,6 +919,31 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   return Nll;
 }
 
+// adds the l2 term to both the objective and the gradient (obviously, the term actually is different). return value is the 
+// the objective after adding the l2 term.
+double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective) {
+  double l2RegularizedObjective = unregularizedObjective;
+  // this is where the L2 term is added to both the gradient and objective function
+  assert(lambda->GetParamsCount() == unregularizedGradient.size());
+  for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
+    double lambda_i = lambda->GetParamWeight(i);
+    regularizedGradient[i] = unregularizedGradient[i] + 2.0 * learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i;
+    l2RegularizedObjective += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
+    assert(!std::isnan(unregularizedGradient[i]) || !std::isinf(unregularizedGradient[i]));
+  } 
+  return l2RegularizedObjective;
+}
+
+// adds the l2 term to the objective. return value is the the objective after adding the l2 term.
+double LatentCrfModel::AddL2Term(double unregularizedObjective) {
+  double l2RegularizedObjective = unregularizedObjective;
+  for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
+    double lambda_i = lambda->GetParamWeight(i);
+    l2RegularizedObjective += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
+  } 
+  return l2RegularizedObjective;
+}
+
 // the callback function lbfgs calls to compute the -log likelihood(z|x) and its d/d_\lambda
 // this function is not expected to be executed by any slave; only the master process with rank 0
 double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentId,
@@ -937,20 +969,16 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   // even the master needs to process its share of sentences
   vector<double> gradientPiece(model.lambda->GetParamsCount(), 0.0), reducedGradient;
   double NllPiece = model.ComputeNllZGivenXAndLambdaGradient(gradientPiece);
-  double reducedNll = 0;
+  double reducedNll = -1;
 
   // now, the master aggregates gradient pieces computed by the slaves
   mpi::reduce< vector<double> >(*model.learningInfo.mpiWorld, gradientPiece, reducedGradient, AggregateVectors2(), 0);
   mpi::reduce<double>(*model.learningInfo.mpiWorld, NllPiece, reducedNll, std::plus<double>(), 0);
+  assert(reducedNll != -1);
 
   // fill in the gradient array allocated by lbfgs
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-    // this is where the L2 term is added to both the gradient and objective function
-    for(unsigned i = 0; i < model.lambda->GetParamsCount(); i++) {
-      gradient[i] = reducedGradient[i] + 2.0 * model.learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambdasArray[i];
-      reducedNll += model.learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambdasArray[i] * lambdasArray[i];
-      assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
-    } 
+    reducedNll = model.AddL2Term(reducedGradient, gradient, reducedNll);
   } else {
     assert(gradientPiece.size() == reducedGradient.size() && gradientPiece.size() == model.lambda->GetParamsCount());
     for(unsigned i = 0; i < model.lambda->GetParamsCount(); i++) {
@@ -961,11 +989,9 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 
   if(model.learningInfo.debugLevel == DebugLevel::MINI_BATCH) {
     if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-      cerr << " objective = " << reducedNll << endl;
-    } else if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1) {
-      cerr << " unregularized objective = " << reducedNll << endl;	
+      cerr << " l2 reg. objective = " << reducedNll << endl;
     } else {
-      cerr << " objective = " << reducedNll << endl;
+      cerr << " unregularized objective = " << reducedNll << endl;	
     }
   }
   
@@ -1074,7 +1100,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
     }
 
     // debug info
-    if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+    if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && sentId % learningInfo.nSentsPerDot == 0) {
       cerr << ".";
     }
   } // end of training examples 
@@ -1137,20 +1163,22 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   return 0;
 }
 
-void LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
-					   MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-					   map<int, double> &mleMarginalsGivenOneLabel,
-					   MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
-					   map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
-
+double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
+					     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+					     map<int, double> &mleMarginalsGivenOneLabel,
+					     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
+					     map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+  
   // in the word alignment model, yDomain depends on the example
   PrepareExample(sentId);
   
+  double nll = -1;
   if(learningInfo.zIDependsOnYIM1) {
-    UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+    nll = UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
   } else {
-    UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel);
+    nll = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel);
   }
+  return nll;
 }
 
 void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
@@ -1299,50 +1327,69 @@ void LatentCrfModel::BlockCoordinateDescent() {
   bool converged = false;
   do {
 
-    // debug.     
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "compute the objective before updating theta...";
-    }
-    double objectiveBeforeUpdatingTheta = EvaluateNll();
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "objective = " << objectiveBeforeUpdatingTheta << endl;
-    }
-
-    // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
-    // data structure to hold theta MLE estimates
-    MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
-    MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
-    map<int, double> mleMarginalsGivenOneLabel;
-    map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
-
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ====================== ITERATION " << learningInfo.iterationsCount << " =====================" << endl << endl;
-      cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas: =========" << endl << endl;
+      cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas using a few EM iterations: =========" << endl << endl;
     }
 
-    // update the mle for each sentence
-    assert(examplesCount > 0);
-    for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
-      // sentId is assigned to the process # (sentId % world.size())
-      if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-	continue;
+    // run a few EM iterations to update thetas
+    for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
+
+      // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
+      // data structure to hold theta MLE estimates
+      MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
+      MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
+      map<int, double> mleMarginalsGivenOneLabel;
+      map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
+
+      // update the mle for each sentence
+      assert(examplesCount > 0);
+      if(learningInfo.mpiWorld->rank() == 0) {
+	cerr << endl << "aggregating soft counts for each theta parameter...";
+      }
+      double unregularizedObjective = 0;
+      for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
+	// sentId is assigned to the process # (sentId % world.size())
+	if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+	  continue;
+	}
+	
+	unregularizedObjective += UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	if(sentId % learningInfo.nSentsPerDot == 0) {
+	  cerr << ".";
+	}
       }
 
-      UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-    }
+      // debug info
+      cerr << learningInfo.mpiWorld->rank() << "|";
+      
+      // accumulate mle counts from slaves
+      ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
+      mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
 
-    // accumulate mle counts from slaves
-    ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
-    
-    // normalize mle and update nLogTheta on master
-    if(learningInfo.mpiWorld->rank() == 0) {
-      NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel, 
-				      mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-    }
+      double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
+	AddL2Term(unregularizedObjective):
+	unregularizedObjective;
 
-    // update nLogTheta on slaves
-    BroadcastTheta(0);
+      if(learningInfo.mpiWorld->rank() == 0) {
+	if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+	  cerr << "l2 reg. objective = " << regularizedObjective << endl;
+	} else { 
+	  cerr << "unregularized objective = " << unregularizedObjective << endl;
+	}
+      }
+      
+      // normalize mle and update nLogTheta on master
+      if(learningInfo.mpiWorld->rank() == 0) {
+	NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel, 
+					mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+      }
+
+      // update nLogTheta on slaves
+      BroadcastTheta(0);
+
+    }
 
     // debug info
     if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
@@ -1362,9 +1409,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
     double objectiveAfterUpdatingTheta = EvaluateNll();
     if(learningInfo.mpiWorld->rank()  == 0) {
-      cerr << "objective = " << objectiveAfterUpdatingTheta << endl;
+      if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+	cerr << "l2 reg. objective = " << objectiveAfterUpdatingTheta << endl;
+      } else {
+	cerr << "unregularized objective = " << objectiveAfterUpdatingTheta << endl;
+      }
     }
-
 
     // update the lambdas
     // debug info
@@ -1493,20 +1543,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
 
     } // for each minibatch
-
-    // debug info
-    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-      lambda->PrintParams();
-    }
-
-    // debug. 
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "compute the objective after updating lambda...";
-    }
-    double objectiveAfterUpdatingLambda = EvaluateNll();
-    if(learningInfo.mpiWorld->rank()  == 0) {
-      cerr << "objective = " << objectiveAfterUpdatingLambda << endl;
-    }
 
     // persist updated lambda params
     stringstream lambdaParamsFilename;

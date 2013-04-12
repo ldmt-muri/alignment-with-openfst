@@ -17,23 +17,34 @@ void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextTyp
     }
     if(abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) > 0.01) {
       cerr << "ERROR: abs( (mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_] ) = ";
-      cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]); 
-      cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_;
+      cerr << abs((mleMarginals[y_] - unnormalizedMarginalProbz_giveny_) / mleMarginals[y_]) << endl; 
+      cerr << "mleMarginals[y_] = " << mleMarginals[y_] << " unnormalizedMarginalProbz_giveny_ = " << unnormalizedMarginalProbz_giveny_ << endl;
       cerr << " --error ignored, but try to figure out what's wrong!" << endl;
     }
     // normalize the mle estimates to sum to one for each context
     for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
+      assert(!std::isnan(mleMarginals[y_]) && !std::isinf(mleMarginals[y_]));
+      assert(mleMarginals[y_] > zIter->second);
       double normalizedProbz_giveny_ = zIter->second / mleMarginals[y_];
+      assert(!std::isnan(mle[y_][z_]) && !std::isinf(mle[y_][z_]));
+      if(std::isnan(normalizedProbz_giveny_) || std::isinf(normalizedProbz_giveny_)) {
+	cerr << "normalizedProbz_giveny_ = " << normalizedProbz_giveny_ << " = zIter->second / mleMarginals[y_] = " << zIter->second << " / " << mleMarginals[y_] << endl;
+      }
+      assert(!std::isnan(normalizedProbz_giveny_) && !std::isnan(normalizedProbz_giveny_));
       mle[y_][z_] = normalizedProbz_giveny_;
+	
       // take the nlog
       mle[y_][z_] = MultinomialParams::nLog(mle[y_][z_]);
+      assert(!std::isnan(mle[y_][z_]) && !std::isinf(mle[y_][z_]));
+
     }
   }
 }
 
 template <typename ContextType>
-void UpdateThetaMleForSent(const unsigned sentId, 
+// returns -log p(z|x)
+double UpdateThetaMleForSent(const unsigned sentId, 
 			   MultinomialParams::ConditionalMultinomialParam<ContextType> &mle, 
 			   std::map<ContextType, double> &mleMarginals) {
   if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
@@ -52,7 +63,8 @@ void UpdateThetaMleForSent(const unsigned sentId,
   ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
-  double nLogZ = ComputeNLogZ_lambda(thetaLambdaFst, thetaLambdaBetas);
+  double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+  double nLogP_ZGivenX = nLogC - nLogZ;
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
   for(typename std::map< ContextType, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
@@ -65,6 +77,7 @@ void UpdateThetaMleForSent(const unsigned sentId,
       mleMarginals[y_] += bOverCZ;
     }
   }
+  return nLogP_ZGivenX;
 }
 
 

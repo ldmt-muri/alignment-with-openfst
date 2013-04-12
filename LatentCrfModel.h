@@ -179,11 +179,17 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // SENT LEVEL
   ///////////
 
+  // adds l2 reguarlization term (for lambdas) to both the objective and the gradient
+  double AddL2Term(const std::vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective);
+
+  // adds l2 reguarlization term (for lambdas) to the objective
+  double AddL2Term(double unregularizedObjective);
+
   // prepare the model before processing an example
   virtual void PrepareExample(unsigned exampleId) = 0;
 
   // collect soft counts from this sentence
-  void UpdateThetaMleForSent(const unsigned sentId, 
+  double UpdateThetaMleForSent(const unsigned sentId, 
 			     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
 			     std::map<int, double> &mleMarginalsGivenOneLabel,
 			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 

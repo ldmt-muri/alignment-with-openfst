@@ -212,6 +212,8 @@ class LearningInfo {
     endOfKIterationsCallbackFunction = 0;
     smoothMultinomialParams = false;
     fixDOverC = false;
+    nSentsPerDot = 1;
+    emIterationsCount = 1;
   }
 
   bool IsModelConverged() {
@@ -367,6 +369,10 @@ class LearningInfo {
   bool smoothMultinomialParams;
 
   bool fixDOverC;
+
+  unsigned nSentsPerDot;
+
+  unsigned emIterationsCount;
 };
 
 

@@ -73,6 +73,12 @@ public:
     return paramWeights[paramIndexes[paramId]];
   }
   
+  // returns the current weight of this param (adds the parameter if necessary)
+  inline double GetParamWeight(unsigned &paramIndex) {
+    assert(paramIndex < paramWeights.size());
+    return paramWeights[paramIndex];
+  }
+  
   // returns the difference between new and old weights of a parameter, given its string ID. 
   // assumptions:
   // - paramId already exists
