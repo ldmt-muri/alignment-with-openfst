@@ -40,16 +40,19 @@ void UpdateThetaMleForSent(const unsigned sentId,
     std::cerr << "sentId = " << sentId << endl;
   }
   assert(sentId < examplesCount);
-  // build the FST
+  // build the FSTs
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
-  std::vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, alphas, betas);
+  fst::VectorFst<FstUtils::LogArc> lambdaFst;
+  std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+  BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence
   std::map< ContextType, std::map< int, LogVal<double> > > B;
   B.clear();
-  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, alphas, betas, B);
+  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
-  double nLogC = ComputeNLogC(thetaLambdaFst, betas);
+  double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+  double nLogZ = ComputeNLogZ_lambda(thetaLambdaFst, thetaLambdaBetas);
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
   for(typename std::map< ContextType, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
@@ -57,9 +60,9 @@ void UpdateThetaMleForSent(const unsigned sentId,
     for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
       double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
-      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
-      mle[y_][z_] += bOverC;
-      mleMarginals[y_] += bOverC;
+      double bOverCZ = MultinomialParams::nExp(nLogb - nLogC - nLogZ);
+      mle[y_][z_] += bOverCZ;
+      mleMarginals[y_] += bOverCZ;
     }
   }
 }

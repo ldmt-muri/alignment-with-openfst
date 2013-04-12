@@ -1501,7 +1501,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // debug. 
     if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "compute the objective after updating theta...";
+      cerr << "compute the objective after updating lambda...";
     }
     double objectiveAfterUpdatingLambda = EvaluateNll();
     if(learningInfo.mpiWorld->rank()  == 0) {

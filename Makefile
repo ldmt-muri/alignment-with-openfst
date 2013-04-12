@@ -8,8 +8,17 @@ DEBUG=-g -ggdb
 
 all: train-latentCrfPosTagger train-latentCrfAligner
 
+# specific to the word alignment hmm model
+train-hmmAligner: train-hmmAligner.o
+	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o $(LIBS) -o train-latentCrfAligner
 
-# specific to the word alignment task
+train-hmmAligner.o: FstUtils.o HmmAligner.o train-hmmAligner.cc LearningInfo.h StringUtils.h
+	$(CC) $(BEFORE) $(SINGLE) train-hmmAligner.cc $(OPT)
+
+HmmAligner.o: FstUtils.o HmmAligner.cc HmmAligner.h LearningInfo.h StringUtils.h MultinomialParams.h
+	$(CC) $(BEFORE) $(SINGLE) HmmAligner.cc $(OPT)
+
+# specific to the word alignment latent crf model
 train-latentCrfAligner: train-latentCrfAligner.o
 	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
 
@@ -29,7 +38,6 @@ train-latentCrfPosTagger.o: HmmModel2.o LatentCrfModel.o LatentCrfPosTagger.o La
 
 LatentCrfPosTagger.o: LatentCrfModel.o LatentCrfPosTagger.h
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfPosTagger.cc $(OPT)
-
 
 # shared code
 LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h MultinomialParams.h
