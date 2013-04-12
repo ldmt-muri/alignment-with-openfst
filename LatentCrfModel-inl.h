@@ -32,6 +32,7 @@ void NormalizeThetaMle(MultinomialParams::ConditionalMultinomialParam<ContextTyp
 	cerr << "normalizedProbz_giveny_ = " << normalizedProbz_giveny_ << " = zIter->second / mleMarginals[y_] = " << zIter->second << " / " << mleMarginals[y_] << endl;
       }
       assert(!std::isnan(normalizedProbz_giveny_) && !std::isnan(normalizedProbz_giveny_));
+      assert(normalizedProbz_giveny_ > -0.001 && normalizedProbz_giveny_ < 1.001);
       mle[y_][z_] = normalizedProbz_giveny_;
 	
       // take the nlog
@@ -71,14 +72,16 @@ double UpdateThetaMleForSent(const unsigned sentId,
     const ContextType &y_ = yIter->first;
     for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
-      double nLogb = zIter->second.s_? zIter->second.v_ : -zIter->second.v_;
-      double bOverCZ = MultinomialParams::nExp(nLogb - nLogC - nLogZ);
-      mle[y_][z_] += bOverCZ;
-      mleMarginals[y_] += bOverCZ;
+      double nLogb = -log<double>(zIter->second);
+      assert(zIter->second.s_ == false); //  all B values are supposed to be positive
+      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+      double bOverZ = MultinomialParams::nExp(nLogb - nLogZ);
+      assert(bOverC > -0.001);
+      mle[y_][z_] += bOverC;
+      mleMarginals[y_] += bOverC;
     }
   }
   return nLogP_ZGivenX;
 }
-
 
 #endif

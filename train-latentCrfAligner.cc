@@ -100,7 +100,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 1;
+  learningInfo.persistParamsAfterNIteration = 5;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
@@ -186,26 +186,28 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = false;
-  learningInfo.persistParamsAfterNIteration = 1;
+  learningInfo.persistParamsAfterNIteration = 5;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 8;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 5;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.supervisedTraining = false;
-  learningInfo.firstKExamplesToLabel = 447;
+  learningInfo.firstKExamplesToLabel = 90; //447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
   learningInfo.fixDOverC = false;
+  learningInfo.nSentsPerDot = 10;
+  learningInfo.emIterationsCount = 1;
 
   // add constraints
   learningInfo.constraints.clear();
