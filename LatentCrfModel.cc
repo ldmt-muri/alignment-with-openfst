@@ -502,6 +502,16 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   //  cerr << "}\n";
 }
 
+
+double LatentCrfModel::GetNLogTheta(const pair<int,int> context, int event) {
+  return nLogThetaGivenTwoLabels[context][event];
+}
+
+
+double LatentCrfModel::GetNLogTheta(int context, int event) {
+  return nLogThetaGivenOneLabel[context][event];
+}
+
 double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId) {
   if(task == Task::POS_TAGGING) {
     if(learningInfo.zIDependsOnYIM1) {
@@ -527,7 +537,7 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
       }
     }
     assert(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) > 0);
-    return nLogThetaGivenOneLabel[ srcSent[yi] ] [zi];
+    return nLogThetaGivenOneLabel[ srcSent[yi] ][zi];
   } else {
     assert(false);
   }
@@ -1333,87 +1343,128 @@ void LatentCrfModel::BlockCoordinateDescent() {
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas using a few EM iterations: =========" << endl << endl;
     }
 
-    // run a few EM iterations to update thetas
-    for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
-
-      // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
-      // data structure to hold theta MLE estimates
-      MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
-      MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
-      map<int, double> mleMarginalsGivenOneLabel;
-      map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
-
-      // update the mle for each sentence
-      assert(examplesCount > 0);
-      if(learningInfo.mpiWorld->rank() == 0) {
-	cerr << endl << "aggregating soft counts for each theta parameter...";
-      }
-      double unregularizedObjective = 0;
-      for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
-	// sentId is assigned to the process # (sentId % world.size())
-	if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-	  continue;
+    if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
+      // run a few EM iterations to update thetas
+      for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
+	
+	// UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
+	// data structure to hold theta MLE estimates
+	MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
+	MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
+	map<int, double> mleMarginalsGivenOneLabel;
+	map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
+	
+	// update the mle for each sentence
+	assert(examplesCount > 0);
+	if(learningInfo.mpiWorld->rank() == 0) {
+	  cerr << endl << "aggregating soft counts for each theta parameter...";
+	}
+	double unregularizedObjective = 0;
+	for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
+	  // sentId is assigned to the process # (sentId % world.size())
+	  if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+	    continue;
+	  }
+	  
+	  unregularizedObjective += UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	  if(sentId % learningInfo.nSentsPerDot == 0) {
+	    cerr << ".";
+	  }
 	}
 	
-	unregularizedObjective += UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-	if(sentId % learningInfo.nSentsPerDot == 0) {
-	  cerr << ".";
+	// debug info
+	cerr << learningInfo.mpiWorld->rank() << "|";
+	
+	// accumulate mle counts from slaves
+	ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
+	mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
+	
+	double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
+	  AddL2Term(unregularizedObjective):
+	  unregularizedObjective;
+	
+	if(learningInfo.mpiWorld->rank() == 0) {
+	  if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+	    cerr << "l2 reg. objective = " << regularizedObjective << endl;
+	  } else { 
+	    cerr << "unregularized objective = " << unregularizedObjective << endl;
+	  }
 	}
-      }
+	
+	// normalize mle and update nLogTheta on master
+	if(learningInfo.mpiWorld->rank() == 0) {
+	  NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel, 
+					  mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	}
+	
+	// update nLogTheta on slaves
+	BroadcastTheta(0);
+	
+      } // end of EM iterations
 
       // debug info
-      cerr << learningInfo.mpiWorld->rank() << "|";
-      
-      // accumulate mle counts from slaves
-      ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
-      mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
-
-      double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
-	AddL2Term(unregularizedObjective):
-	unregularizedObjective;
-
-      if(learningInfo.mpiWorld->rank() == 0) {
-	if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-	  cerr << "l2 reg. objective = " << regularizedObjective << endl;
-	} else { 
-	  cerr << "unregularized objective = " << unregularizedObjective << endl;
+      if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
+	stringstream thetaParamsFilename;
+	thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
+	thetaParamsFilename << ".theta";
+	if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
+	  cerr << "master" << learningInfo.mpiWorld->rank() << ": persisting theta parameters in iteration " \
+	       << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
 	}
+	PersistTheta(thetaParamsFilename.str());
       }
       
-      // normalize mle and update nLogTheta on master
+      // debug. 
       if(learningInfo.mpiWorld->rank() == 0) {
-	NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel, 
-					mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	cerr << "compute the objective after updating theta...";
       }
+      double objectiveAfterUpdatingTheta = EvaluateNll();
+      if(learningInfo.mpiWorld->rank()  == 0) {
+	if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+	  cerr << "l2 reg. objective = " << objectiveAfterUpdatingTheta << endl;
+	} else {
+	  cerr << "unregularized objective = " << objectiveAfterUpdatingTheta << endl;
+	}
+      } 
+      // end of if(thetaOptMethod->algorithm == EM)
+    } else if (learningInfo.thetaOptMethod->algorithm == GRADIENT_DESCENT) {
+      assert(learningInfo.mpiWorld->size() == 1); // this method is only supported for single-threaded runs
+      
+      for(int gradientDescentIter = 0; gradientDescentIter < 10; ++gradientDescentIter) {
+	
+	cerr << "at the beginning of gradient descent iteration " << gradientDescentIter << ", EvaluateNll() = " << EvaluateNll() << endl;
+	
+	MultinomialParams::ConditionalMultinomialParam<int> gradientOfNll;
+	ComputeNllZGivenXThetaGradient(gradientOfNll);
+	for(std::map< int, std::map<int, double> >::iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
+	    yIter != nLogThetaGivenOneLabel.params.end(); 
+	    ++yIter) {
+	  double marginal = 0.0;
+	  for(std::map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+	    double oldTheta = MultinomialParams::nExp(zIter->second);
+	    double newTheta = oldTheta - learningInfo.thetaOptMethod->learningRate * gradientOfNll[yIter->first][zIter->first];
+	    if(newTheta <= 0) {
+	      newTheta = 0.00001;
+	      cerr << "^";
+	    }
+	    marginal += newTheta;
+	    zIter->second = newTheta;
+	  } // end of theta updates for a particular event
 
-      // update nLogTheta on slaves
-      BroadcastTheta(0);
+	  // now project (i.e. renormalize)
+	  for(std::map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+	    double newTheta = zIter->second;
+	    double projectedNewTheta = newTheta / marginal;
+	    double nlogProjectedNewTheta = MultinomialParams::nLog(projectedNewTheta);
+	    zIter->second = nlogProjectedNewTheta;
+	  }
 
-    }
-
-    // debug info
-    if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
-      stringstream thetaParamsFilename;
-      thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
-      thetaParamsFilename << ".theta";
-      if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-	cerr << "master" << learningInfo.mpiWorld->rank() << ": persisting theta parameters in iteration " \
-	     << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
-      }
-      PersistTheta(thetaParamsFilename.str());
-    }
-
-    // debug. 
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "compute the objective after updating theta...";
-    }
-    double objectiveAfterUpdatingTheta = EvaluateNll();
-    if(learningInfo.mpiWorld->rank()  == 0) {
-      if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-	cerr << "l2 reg. objective = " << objectiveAfterUpdatingTheta << endl;
-      } else {
-	cerr << "unregularized objective = " << objectiveAfterUpdatingTheta << endl;
-      }
+	} // end of theta updates for a particular context
+      } // end of gradient descent iterations
+      // end of if(thetaOptMethod->algorithm == GRADIENT DESCENT)
+    } else {
+      // other optimization methods of theta are not implemented
+      assert(false);
     }
 
     // update the lambdas

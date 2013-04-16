@@ -171,6 +171,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    FastSparseVector<double> &activeFeatures);
 
   double GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId);
+  double GetNLogTheta(const std::pair<int,int> context, int event);
+  double GetNLogTheta(int context, int event);
 
   virtual std::vector<int>& GetObservableSequence(int exampleId) = 0;
 

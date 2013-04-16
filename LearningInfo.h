@@ -36,7 +36,7 @@ namespace Regularizer {
 }
 
 namespace OptAlgorithm {
-  enum OptAlgorithm {GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION};
+  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION};
 }
 
 namespace DebugLevel {
@@ -214,6 +214,7 @@ class LearningInfo {
     fixDOverC = false;
     nSentsPerDot = 1;
     emIterationsCount = 1;
+    thetaOptMethod = 0;
   }
 
   bool IsModelConverged() {
@@ -373,6 +374,8 @@ class LearningInfo {
   unsigned nSentsPerDot;
 
   unsigned emIterationsCount;
+
+  OptMethod *thetaOptMethod;
 };
 
 

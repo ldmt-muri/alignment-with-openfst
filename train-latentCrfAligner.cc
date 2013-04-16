@@ -201,6 +201,11 @@ int main(int argc, char **argv) {
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
+  // thetas
+  learningInfo.thetaOptMethod = new OptMethod();
+  learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+  learningInfo.thetaOptMethod->learningRate = 0.01;
+  // general
   learningInfo.supervisedTraining = false;
   learningInfo.firstKExamplesToLabel = 90; //447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
