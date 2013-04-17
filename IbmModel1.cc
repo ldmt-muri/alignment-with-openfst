@@ -100,7 +100,7 @@ void IbmModel1::PrintParams() {
 }
 
 void IbmModel1::PersistParams(const string& outputFilename) {
-  MultinomialParams::PersistParams(outputFilename, params, vocabEncoder);
+  MultinomialParams::PersistParams(outputFilename, params, vocabEncoder, true, true);
 }
 
 // finds out what are the parameters needed by reading hte corpus, and assigning initial weights based on the number of co-occurences
@@ -228,7 +228,10 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       vector<FstUtils::LogWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
-      float fSentLogLikelihood = betas[alignmentFst.Start()].Value();
+      double alignmentsCount = pow( (srcSents[sentsCounter].size()), tgtSents[sentsCounter].size());
+      float fSentLogLikelihood = MultinomialParams::nLog(MultinomialParams::nExp(betas[alignmentFst.Start()].Value()) / alignmentsCount);
+      assert(fSentLogLikelihood > -0.001);
+      
       forwardBackwardClocks += clock() - t30;
       //      cout << "sent's shifted log likelihood = " << fShiftedSentLogLikelihood << endl;
       //      float fSentLikelihood = exp(-1.0 * fShiftedSentLogLikelihood) / alignmentsCount;
@@ -299,8 +302,17 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       } else {
 	logLikelihood += fSentLogLikelihood;
       }
-      //	cout << "iteration's loglikelihood = " << logLikelihood << endl;
-      
+      cerr << "likelihood of sent # " << sentsCounter << " = " << fSentLogLikelihood << endl;
+      cerr << "iteration's loglikelihood after sent # " << sentsCounter << " = " << logLikelihood << endl;
+      cerr << FstUtils::PrintFstSummary(alignmentFst) << endl << "===============================" << endl;
+      for(unsigned i = 0; i < betas.size(); ++i) {
+	cerr << "betas[" << i << "] = " << betas[i] << endl;
+      }
+      for(unsigned i = 0; i < alphas.size(); ++i) {
+	cerr << "alphas[" << i << "] = " << alphas[i] << endl;
+      }
+      cerr << "alignmentFst.Start() = " << alignmentFst.Start() << endl;
+      cerr << "==========================" << endl << endl;
       // logging
       if (++sentsCounter % 1000 == 0) {
 	cerr << sentsCounter << " sents processed. iterationLoglikelihood = " << logLikelihood <<  endl;
@@ -325,7 +337,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
     grammarConstructionClocks += clock() - t60;
 
     // logging
-    cerr << "iterations # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
+    cerr << "iteration # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
     
     // update learningInfo
     learningInfo.logLikelihood.push_back(logLikelihood);
