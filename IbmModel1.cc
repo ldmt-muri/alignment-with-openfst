@@ -229,8 +229,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
       double alignmentsCount = pow( (srcSents[sentsCounter].size()), tgtSents[sentsCounter].size());
-      float fSentLogLikelihood = MultinomialParams::nLog(MultinomialParams::nExp(betas[alignmentFst.Start()].Value()) / alignmentsCount);
-      assert(fSentLogLikelihood > -0.001);
+      float fSentLogLikelihood = betas[alignmentFst.Start()].Value();
       
       forwardBackwardClocks += clock() - t30;
       //      cout << "sent's shifted log likelihood = " << fShiftedSentLogLikelihood << endl;
@@ -302,17 +301,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       } else {
 	logLikelihood += fSentLogLikelihood;
       }
-      cerr << "likelihood of sent # " << sentsCounter << " = " << fSentLogLikelihood << endl;
-      cerr << "iteration's loglikelihood after sent # " << sentsCounter << " = " << logLikelihood << endl;
-      cerr << FstUtils::PrintFstSummary(alignmentFst) << endl << "===============================" << endl;
-      for(unsigned i = 0; i < betas.size(); ++i) {
-	cerr << "betas[" << i << "] = " << betas[i] << endl;
-      }
-      for(unsigned i = 0; i < alphas.size(); ++i) {
-	cerr << "alphas[" << i << "] = " << alphas[i] << endl;
-      }
-      cerr << "alignmentFst.Start() = " << alignmentFst.Start() << endl;
-      cerr << "==========================" << endl << endl;
+
       // logging
       if (++sentsCounter % 1000 == 0) {
 	cerr << sentsCounter << " sents processed. iterationLoglikelihood = " << logLikelihood <<  endl;
