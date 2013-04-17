@@ -642,6 +642,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 }
 
 void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
+  assert(task != Task::WORD_ALIGNMENT); // the latent variable y_ needs to be re-interpreted for the word alignment task while using mle[] or theta[]
   // encode labels
   assert(goldLabelsFilename.size() != 0);
   VocabEncoder labelsEncoder(goldLabelsFilename, FIRST_ALLOWED_LABEL_VALUE);
@@ -1117,6 +1118,8 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
     }
   } // end of training examples 
 
+  cerr << learningInfo.mpiWorld->rank() << "|";
+
   return Nll;  
 }
 
@@ -1290,10 +1293,10 @@ void LatentCrfModel::BroadcastTheta(unsigned rankId) {
   }
 }
 
-void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
-					   MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels,
-					   map<int, double> mleMarginalsGivenOneLabel,
-					   map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels) {
+void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+					   MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels,
+					   map<int, double> &mleMarginalsGivenOneLabel,
+					   map<std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank" << learningInfo.mpiWorld->rank() << ": before calling ReduceMleAndMarginals()" << endl;
   }
@@ -1372,7 +1375,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	    continue;
 	  }
 	  
-	  unregularizedObjective += UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	  double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+	  unregularizedObjective += sentLoglikelihood;
+
 	  if(sentId % learningInfo.nSentsPerDot == 0) {
 	    cerr << ".";
 	  }
@@ -1853,7 +1858,6 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
       double nLogb = -log<double>(zIter->second);
       assert(zIter->second.s_ == false); //  all B values are supposed to be positive
       double bOverC = MultinomialParams::nExp(nLogb - nLogC);
-      double bOverZ = MultinomialParams::nExp(nLogb - nLogZ);
       assert(bOverC > -0.001);
       mle[context][z_] += bOverC;
       mleMarginals[context] += bOverC;
@@ -1863,6 +1867,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 }
 
 // returns -log p(z|x)
+// TODO: we don't need the lambdaFst. the return value of this function is just used for debugging.
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					     MultinomialParams::ConditionalMultinomialParam<pair<int,int> > &mle, 
 					     std::map< pair<int, int> , double> &mleMarginals) {
@@ -1894,7 +1899,6 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
       double nLogb = -log<double>(zIter->second);
       assert(zIter->second.s_ == false); //  all B values are supposed to be positive
       double bOverC = MultinomialParams::nExp(nLogb - nLogC);
-      double bOverZ = MultinomialParams::nExp(nLogb - nLogZ);
       assert(bOverC > -0.001);
       mle[y_][z_] += bOverC;
       mleMarginals[y_] += bOverC;

@@ -124,10 +124,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // CONVENIENCE MPI OPERATIONS
   /////////////////////////////
 
-  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel, 
-			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > mleGivenTwoLabels,
-			     std::map<int, double> mleMarginalsGivenOneLabel,
-			     std::map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels);
+  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+			     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels,
+			     std::map<int, double> &mleMarginalsGivenOneLabel,
+			     std::map<std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
   // broadcasts the essential member variables in LogLinearParam
   void BroadcastLambdas(unsigned rankId);
