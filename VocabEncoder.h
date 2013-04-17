@@ -133,7 +133,7 @@ class VocabEncoder {
   }
   
   // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken) {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken="") {
     assert(srcSents.size() == 0 && tgtSents.size() == 0);
     
     // open data file

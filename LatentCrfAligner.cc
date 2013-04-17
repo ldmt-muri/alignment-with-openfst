@@ -96,7 +96,11 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
-  vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN_STR);
+  if(learningInfo.allowNullAlignments) {
+    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN_STR);
+  } else {
+    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents);
+  }
   assert(srcSents.size() == tgtSents.size());
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
@@ -170,14 +174,18 @@ void LatentCrfAligner::InitTheta() {
       int srcToken = srcSent[i];
       for(unsigned j = 0; j < tgtSent.size(); ++j) {
 	int tgtToken = tgtSent[j];
-	nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
+	if(learningInfo.initializeThetasWithGaussian) {
+	  nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
+	} else if (learningInfo.initializeThetasWithUniform || learningInfo.initializeThetasWithModel1) {
+	  nLogThetaGivenOneLabel.params[srcToken][tgtToken] = 1;
+	}
       }
     }
   }
 
   // then normalize them
   MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
-  
+
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done" << endl;
   }
@@ -186,10 +194,11 @@ void LatentCrfAligner::InitTheta() {
 void LatentCrfAligner::PrepareExample(unsigned exampleId) {
   yDomain.clear();
   this->yDomain.insert(LatentCrfAligner::START_OF_SENTENCE_Y_VALUE); // always insert the conceptual yValue of word at position -1 in a sentence
-  // this length includes the null token that was inserted at the begging of all source sentences
+  // if null alignments are enabled, this length will include the null token that was inserted at the begging of all source sentences
   unsigned srcSentLength = testingMode? testSrcSents[exampleId].size() : srcSents[exampleId].size();
   // each position in the src sentence, including null, should have an entry in yDomain
-  for(unsigned i = NULL_POSITION; i < NULL_POSITION + srcSentLength; ++i) {
+  unsigned firstPossibleYValue = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
+  for(unsigned i = firstPossibleYValue; i < firstPossibleYValue + srcSentLength; ++i) {
     yDomain.insert(i);
   }
 }
@@ -280,4 +289,15 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
     labelsFile << endl;
   }
   labelsFile.close();
+}
+
+int LatentCrfAligner::GetContextOfTheta(unsigned sentId, int y) {
+  vector<int> &srcSent = GetObservableContext(sentId);
+  if(y == NULL_POSITION) {
+    return NULL_TOKEN;
+  } else {
+    assert(y - FIRST_SRC_POSITION < srcSent.size());
+    assert(y - FIRST_SRC_POSITION >= 0);
+    return srcSent[y - FIRST_SRC_POSITION];
+  }
 }

@@ -24,6 +24,8 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void PrepareExample(unsigned exampleId);
 
+  int GetContextOfTheta(unsigned sentId, int y);
+
  public:
 
   static LatentCrfModel* GetInstance();

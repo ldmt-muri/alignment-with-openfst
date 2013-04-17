@@ -85,8 +85,13 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 
 // initializes the parameter weight by drawing from a gaussian
 bool LogLinearParams::AddParam(const string &paramId) {
+  // does the parameter already exist?
+  if(paramIndexes.count(paramId) > 1) {
+    return false;
+  }
+
   // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
-  double paramWeight = gaussianSampler->Draw();
+  double paramWeight = this->learningInfo->initializeLambdasWithGaussian? gaussianSampler->Draw() : 0.0;
   
   // add param
   return AddParam(paramId, paramWeight);
@@ -118,22 +123,22 @@ bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
 
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
-				   int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
+				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
   // debug info
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "executing FireFeatures(yI=" << yI << ", yIM1=" << yIM1 << ", x_t.size()=" << x_t.size() \
 	 << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE \
-	 << ", NULL=" << NULL_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
+	 << ", FIRST_POS=" << FIRST_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
 	 << ", activeFeatures.size()=" << activeFeatures.size() << endl;
   }
 
   stringstream temp;
 
-  // first, yI and yIM1 are not zero-based. LatentCrfAligner::NULL_POS maps to position 0 (i.e. the null token). 
-  yI -= NULL_POS;
-  yIM1 -= NULL_POS;
+  // first, yI and yIM1 are not zero-based. LatentCrfAligner::FIRST_POS maps to the first position in the src sentence (this means the null token, if null alignments are enabled, or the first token in the src sent). 
+  yI -= FIRST_POS;
+  yIM1 -= FIRST_POS;
   
   // the encoder/decoder used for referencing precomputed feature
   
@@ -142,7 +147,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   assert(yI < (int)x_s.size());
   assert(yIM1 < (int)x_s.size()); 
   assert(yI >= 0);
-  assert(yIM1 >= -1);
+  assert(yIM1 >= -2);
   int srcToken = x_s[yI];
   int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
   int tgtToken = x_t[i];

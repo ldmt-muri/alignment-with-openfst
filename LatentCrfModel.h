@@ -161,6 +161,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // SUBSENT LEVEL
   ////////////////
 
+  // given a sentId and the value of y, find the conditioning context of the relevant multinomial
+  // in word alignment, this should return the corresponding src word.
+  // in pos tagging, this should return y itself.
+  virtual int GetContextOfTheta(unsigned sentId, int y) = 0;
+
   // fire features in this sentence
   void FireFeatures(unsigned sentId,
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
@@ -181,6 +186,14 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // SENT LEVEL
   ///////////
 
+  double UpdateThetaMleForSent(const unsigned sentId, 
+			       MultinomialParams::ConditionalMultinomialParam<pair<int,int> > &mle, 
+			       std::map< pair<int, int> , double> &mleMarginals);
+    
+  double UpdateThetaMleForSent(const unsigned sentId, 
+			       MultinomialParams::ConditionalMultinomialParam< int > &mle, 
+			       std::map< int , double> &mleMarginals);
+    
   // adds l2 reguarlization term (for lambdas) to both the objective and the gradient
   double AddL2Term(const std::vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective);
 

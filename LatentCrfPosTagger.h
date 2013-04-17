@@ -22,6 +22,8 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   std::vector<int>& GetObservableContext(int exampleId) { /* do nothing */ return empty; }
 
+  int GetContextOfTheta(unsigned sentId, int y) { return y; }
+
  public:
 
   static LatentCrfModel* GetInstance();

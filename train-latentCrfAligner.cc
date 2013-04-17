@@ -100,7 +100,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 5;
+  learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
@@ -112,7 +112,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   cerr << "rank #" << world.rank() << ": training finished!" << endl;
   
   // only override theta params if initialThetaParamsFilename is not specified
-  if(initialThetaParamsFilename.size() == 0) {
+  if(initialThetaParamsFilename.size() == 0 && learningInfo.initializeThetasWithModel1) {
     // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
     cerr << "rank #" << world.rank() << ": now update the multinomial params of the latentCrfALigner model." << endl;
     for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
@@ -186,13 +186,13 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = false;
-  learningInfo.persistParamsAfterNIteration = 5;
+  learningInfo.persistParamsAfterNIteration = 1;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
@@ -204,15 +204,22 @@ int main(int argc, char **argv) {
   // thetas
   learningInfo.thetaOptMethod = new OptMethod();
   learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
-  learningInfo.thetaOptMethod->learningRate = 0.01;
+  //  learningInfo.thetaOptMethod->learningRate = 0.01;
   // general
   learningInfo.supervisedTraining = false;
-  learningInfo.firstKExamplesToLabel = 90; //447;
+  learningInfo.firstKExamplesToLabel = 3; // 90; //447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
   learningInfo.fixDOverC = false;
   learningInfo.nSentsPerDot = 10;
-  learningInfo.emIterationsCount = 1;
+  learningInfo.emIterationsCount = 3;
+  learningInfo.initializeThetasWithGaussian = true;
+  learningInfo.initializeThetasWithUniform = false;
+  learningInfo.initializeLambdasWithGaussian = true;
+  learningInfo.initializeLambdasWithZero = false;
+  // word alignment specific
+  learningInfo.initializeThetasWithModel1 = true;
+  learningInfo.allowNullAlignments = true;
 
   // add constraints
   learningInfo.constraints.clear();

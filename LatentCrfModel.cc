@@ -254,8 +254,9 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
     lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
   } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
+    int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
     lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), GetObservableContext(sentId), i, 
-			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, NULL_POSITION, 
+			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, firstPos, 
 			 enabledFeatureTypes, activeFeatures);
     assert(GetObservableSequence(sentId).size() > 0);
   } else {
@@ -524,8 +525,9 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
     vector<int> &srcSent = GetObservableContext(exampleId);
     vector<int> &tgtSent = GetObservableSequence(exampleId);
     assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
-    yi -= NULL_POSITION;
-    yim1 -= NULL_POSITION;
+    unsigned FIRST_POSITION = learningInfo.allowNullAlignments? NULL_POSITION: NULL_POSITION+1;
+    yi -= FIRST_POSITION;
+    yim1 -= FIRST_POSITION;
     assert(yi < (int)srcSent.size());
     assert(yim1 < (int)srcSent.size());
     if(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) == 0) {
@@ -1184,7 +1186,9 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   
   double nll = -1;
   if(learningInfo.zIDependsOnYIM1) {
-    nll = UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+    // no longer works :-/
+    assert(false);
+    //    nll = UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
   } else {
     nll = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel);
   }
@@ -1196,8 +1200,10 @@ void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(MultinomialParams::Conditio
 						     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
 						     map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
   if(learningInfo.zIDependsOnYIM1) {
-    NormalizeThetaMle(mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-    nLogThetaGivenTwoLabels = mleGivenTwoLabels;
+    // no longer works :-/
+    assert(false);
+    //NormalizeThetaMle(mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+    //    nLogThetaGivenTwoLabels = mleGivenTwoLabels;
   } else {
     NormalizeThetaMle(mleGivenOneLabel, mleMarginalsGivenOneLabel);
     // update nLogThetaGivenOneLabel
@@ -1389,7 +1395,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	  } else { 
 	    cerr << "unregularized objective = " << unregularizedObjective << endl;
 	  }
-	}
+	}	
 	
 	// normalize mle and update nLogTheta on master
 	if(learningInfo.mpiWorld->rank() == 0) {
@@ -1814,4 +1820,85 @@ void LatentCrfModel::InitLambda() {
   if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH){
     cerr << "|lambda| = " << lambda->GetParamsCount() << endl;
   }
+}
+
+// returns -log p(z|x)
+double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
+					     MultinomialParams::ConditionalMultinomialParam<int> &mle, 
+					     std::map<int, double> &mleMarginals) {
+  if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+    std::cerr << "sentId = " << sentId << endl;
+  }
+  assert(sentId < examplesCount);
+  // build the FSTs
+  fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
+  fst::VectorFst<FstUtils::LogArc> lambdaFst;
+  std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+  BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
+  // compute the B matrix for this sentence
+  std::map< int, std::map< int, LogVal<double> > > B;
+  B.clear();
+  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
+  // compute the C value for this sentence
+  double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+  double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+  double nLogP_ZGivenX = nLogC - nLogZ;
+  //cerr << "nloglikelihood += " << nLogC << endl;
+  // update mle for each z^*|y^* fired
+  for(typename std::map< int, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    int context = GetContextOfTheta(sentId, yIter->first);
+    for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double nLogb = -log<double>(zIter->second);
+      assert(zIter->second.s_ == false); //  all B values are supposed to be positive
+      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+      double bOverZ = MultinomialParams::nExp(nLogb - nLogZ);
+      assert(bOverC > -0.001);
+      mle[context][z_] += bOverC;
+      mleMarginals[context] += bOverC;
+    }
+  }
+  return nLogP_ZGivenX;
+}
+
+// returns -log p(z|x)
+double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
+					     MultinomialParams::ConditionalMultinomialParam<pair<int,int> > &mle, 
+					     std::map< pair<int, int> , double> &mleMarginals) {
+  if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
+    std::cerr << "sentId = " << sentId << endl;
+  }
+  assert(sentId < examplesCount);
+  // build the FSTs
+  fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
+  fst::VectorFst<FstUtils::LogArc> lambdaFst;
+  std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+  BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
+  // compute the B matrix for this sentence
+  std::map< pair<int, int>, std::map< int, LogVal<double> > > B;
+  B.clear();
+  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
+  // compute the C value for this sentence
+  double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+  cerr << "C = " << MultinomialParams::nExp(nLogC) << endl;
+  double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+  double nLogP_ZGivenX = nLogC - nLogZ;
+  //cerr << "nloglikelihood += " << nLogC << endl;
+  // update mle for each z^*|y^* fired
+  for(typename std::map< pair<int, int>, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+  const pair<int, int> &y_ = yIter->first;
+    for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      int z_ = zIter->first;
+      double nLogb = -log<double>(zIter->second);
+      assert(zIter->second.s_ == false); //  all B values are supposed to be positive
+      double bOverC = MultinomialParams::nExp(nLogb - nLogC);
+      double bOverZ = MultinomialParams::nExp(nLogb - nLogZ);
+      assert(bOverC > -0.001);
+      mle[y_][z_] += bOverC;
+      mleMarginals[y_] += bOverC;
+    }
+  }
+  return nLogP_ZGivenX;
 }

@@ -215,6 +215,10 @@ class LearningInfo {
     nSentsPerDot = 1;
     emIterationsCount = 1;
     thetaOptMethod = 0;
+    initializeThetasWithModel1 = false;
+    initializeThetasWithGaussian = true;
+    initializeThetasWithUniform = false;
+    allowNullAlignments = true;
   }
 
   bool IsModelConverged() {
@@ -376,6 +380,18 @@ class LearningInfo {
   unsigned emIterationsCount;
 
   OptMethod *thetaOptMethod;
+  
+  bool initializeThetasWithModel1;
+
+  bool initializeThetasWithGaussian;
+
+  bool initializeThetasWithUniform;
+
+  bool initializeLambdasWithGaussian;
+  
+  bool initializeLambdasWithZero;
+
+  bool allowNullAlignments;
 };
 
 

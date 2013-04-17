@@ -288,4 +288,3 @@ void LatentCrfPosTagger::Label(vector<int> &tokens, vector<int> &labels) {
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);
   assert(labels.size() == tokens.size());
 }
-
