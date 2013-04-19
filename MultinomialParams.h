@@ -268,7 +268,7 @@ namespace MultinomialParams {
   inline double nLog(double prob) {
     if(prob <= 0) {
       //      std::cerr << "ERROR: MultinomialParams::nLog(" << prob << ") is undefined. instead, I returned " << NLOG_ZERO << " and continued." << std::endl;
-      std::cerr << "$";
+      //      std::cerr << "$";
       return NLOG_ZERO;
     }
     return -1.0 * log(prob);
@@ -277,7 +277,7 @@ namespace MultinomialParams {
   inline double nExp(double exponent) {
     if(exponent <= NLOG_INF) {
       //      std::cerr << "ERROR: MultinomialParams::nExp(" << exponent << ") is infinity. returned I returned exp(" << NLOG_INF << ") and continued." << std::endl;
-      std::cerr << "#";
+      //      std::cerr << "#";
       exponent = NLOG_INF;
     }
     return exp(-1.0 * exponent);

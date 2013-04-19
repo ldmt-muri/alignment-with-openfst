@@ -178,7 +178,6 @@ int main(int argc, char **argv) {
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 50;
   learningInfo.mpiWorld = &world;
   //  learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.minLikelihoodDiff = 10;
@@ -192,7 +191,7 @@ int main(int argc, char **argv) {
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
@@ -207,19 +206,24 @@ int main(int argc, char **argv) {
   //  learningInfo.thetaOptMethod->learningRate = 0.01;
   // general
   learningInfo.supervisedTraining = false;
-  learningInfo.firstKExamplesToLabel = 3; // 90; //447;
   learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
   learningInfo.fixDOverC = false;
-  learningInfo.nSentsPerDot = 10;
-  learningInfo.emIterationsCount = 3;
-  learningInfo.initializeThetasWithGaussian = true;
-  learningInfo.initializeThetasWithUniform = false;
-  learningInfo.initializeLambdasWithGaussian = true;
-  learningInfo.initializeLambdasWithZero = false;
-  // word alignment specific
-  learningInfo.initializeThetasWithModel1 = true;
+
+  // hot configs
   learningInfo.allowNullAlignments = true;
+  learningInfo.firstKExamplesToLabel = 447;
+  learningInfo.emIterationsCount = 2;
+  learningInfo.nSentsPerDot = 25;
+  learningInfo.maxIterationsCount = 50;
+
+  learningInfo.initializeThetasWithGaussian = false;
+  learningInfo.initializeThetasWithUniform = false;
+  learningInfo.initializeThetasWithModel1 = true;
+
+  learningInfo.initializeLambdasWithGaussian = false;
+  learningInfo.initializeLambdasWithZero = true;
+  learningInfo.initializeLambdasWithOne = false;
 
   // add constraints
   learningInfo.constraints.clear();

@@ -25,9 +25,8 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDe
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
 void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue) {
   precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
-  AddParam(featureId);
+  //  AddParam(featureId);
 }
-
 
 // by two inputs, i mean that a precomputed feature value is a function of two strings
 // example line in the precomputed features file:
@@ -86,12 +85,23 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 // initializes the parameter weight by drawing from a gaussian
 bool LogLinearParams::AddParam(const string &paramId) {
   // does the parameter already exist?
-  if(paramIndexes.count(paramId) > 1) {
+  if(paramIndexes.count(paramId) > 0) {
     return false;
   }
 
+  //  cerr << "_" << paramId << "_";
+
   // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
-  double paramWeight = this->learningInfo->initializeLambdasWithGaussian? gaussianSampler->Draw() : 0.0;
+  double paramWeight = 0;
+  if(this->learningInfo->initializeLambdasWithGaussian) {
+    paramWeight = -1.0 * fabs(gaussianSampler->Draw());
+  } else if (this->learningInfo->initializeLambdasWithOne) { 
+    paramWeight = -0.01;
+  } else if (this->learningInfo->initializeLambdasWithZero) {
+    paramWeight = 0.0;
+  } else {
+    assert(false);
+  }
   
   // add param
   return AddParam(paramId, paramWeight);
@@ -218,7 +228,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   if(enabledFeatureTypes.size() > 107 && enabledFeatureTypes[107] && (yI + yIM1 > 0)) {
     string diagonalDeviation = "F107:diag-dev";
     AddParam(diagonalDeviation);
-    double deviation = (yI == 0)?
+    double deviation = (yI > 0)?
       fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
       fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
     activeFeatures[paramIndexes[diagonalDeviation]] += deviation;
@@ -237,8 +247,13 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
       activeFeatures[paramIndexes[theEndingAligns]] += 1.0;
     }
   }
-}
 
+  // F109: dummy feature for debugging purposes
+  if(enabledFeatureTypes.size() > 109 && enabledFeatureTypes[109]) {
+    AddParam("F109");
+    activeFeatures[paramIndexes["F109"]] += i;
+  }
+}
 
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 

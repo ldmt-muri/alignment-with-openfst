@@ -382,14 +382,12 @@ class LearningInfo {
   OptMethod *thetaOptMethod;
   
   bool initializeThetasWithModel1;
-
   bool initializeThetasWithGaussian;
-
   bool initializeThetasWithUniform;
 
-  bool initializeLambdasWithGaussian;
-  
+  bool initializeLambdasWithGaussian;  
   bool initializeLambdasWithZero;
+  bool initializeLambdasWithOne;
 
   bool allowNullAlignments;
 };

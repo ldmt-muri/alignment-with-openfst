@@ -102,6 +102,8 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   assert(fst.NumStates() == 0);
   int startState = fst.AddState();
   fst.SetStart(startState);
+  int finalState = fst.AddState();
+  fst.SetFinal(finalState, FstUtils::LogWeight::One());
 
   // map values of y_{i-1} and y_i to fst states
    map<int, int> yIM1ToState, yIToState;
@@ -146,7 +148,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, FstUtils::LogWeight::One());
+	    fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
 	  }
 	} else {
 	  toState = yIToState[yI];
@@ -168,6 +170,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
   // first, build the fst
   BuildLambdaFst(sentId, fst);
+  //  cerr << FstUtils::PrintFstSummary(fst);
 
   // then, compute potentials
   assert(alphas.size() == 0);
@@ -552,16 +555,24 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 					 vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
   clock_t timestamp = clock();
-
+  //  cerr << "starting LatentCrfModel::BuildThetaLambdaFst" << endl;
   PrepareExample(sentId);
 
   const vector<int> &x = GetObservableSequence(sentId);
+
+  //  debug info
+    //  cerr << "lambdas:\n=======\n";
+  //  lambda->PrintParams();
+  //  cerr << "\nthetas:\n=========\n";
+  //  nLogThetaGivenOneLabel.PrintParams();
 
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
   int startState = fst.AddState();
   fst.SetStart(startState);
+  int finalState = fst.AddState();
+  fst.SetFinal(finalState, FstUtils::LogWeight::One());
   
   // map values of y_{i-1} and y_i to fst states
   map<int, int> yIM1ToState, yIToState;
@@ -571,7 +582,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++){
+  for(int i = 0; i < x.size(); i++) {
 
     // timestep i hasn't reached any states yet
     yIToState.clear();
@@ -617,15 +628,17 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 	  yIToState[yI] = toState;
 	  // is it a final state?
 	  if(i == x.size() - 1) {
-	    fst.SetFinal(toState, FstUtils::LogWeight::One());
+	    fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
 	  }
 	} else {
 	  toState = yIToState[yI];
 	}
 	// now add the arc
 	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));
+	//	cerr << "from " << fromState << " to " << toState << " nLambdaH = " << nLambdaH << ", nLogTheta_zI_y = " << nLogTheta_zI_y << endl;
       }
     }
+  
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
     yIM1ToState = yIToState;
   }
@@ -633,12 +646,24 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   // compute forward/backward state potentials
   assert(alphas.size() == 0);
   assert(betas.size() == 0);
+  //cerr << FstUtils::PrintFstSummary(fst);
   ShortestDistance(fst, &alphas, false);
-  ShortestDistance(fst, &betas, true);
+  ShortestDistance(fst, &betas, true);  
+  for(unsigned i = 0; i < alphas.size(); ++i) {
+    if(i==1) continue;
+    //    cerr << "alphas[" << i << "]="<< alphas[i] <<", betas[" << i << "]=" << betas[i] <<endl;
+  }
+  //  cerr << "alphas[" << 1 << "]="<< alphas[1] <<", betas[" << 1 << "]=" << betas[1] <<endl;
 
   if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << " BuildThetaLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
+    //    cerr << " BuildThetaLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
   }
+
+  if(sentId == 0) {
+    //    cerr << "theta-lambda-fst of sent0" << endl << "===========================" << endl;
+    //    cerr << FstUtils::PrintFstSummary(fst) << endl; 
+  }
+  //  cerr << "ending LatentCrfModel::BuildThetaLambdaFst" << endl;
 }
 
 void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
@@ -962,7 +987,7 @@ double LatentCrfModel::AddL2Term(double unregularizedObjective) {
 double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentId,
 							      const double *lambdasArray,
 							      double *gradient,
-							      const int lambdasCount,
+  							      const int lambdasCount,
 							      const double step) {
   
   LatentCrfModel &model = LatentCrfModel::GetInstance();
@@ -974,7 +999,6 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   // the master tells the slaves that he needs their help to collectively compute the gradient
   bool NEED_HELP = true;
   mpi::broadcast<bool>(*model.learningInfo.mpiWorld, NEED_HELP, 0);
-
   // the master broadcasts its lambda parameters so that all processes are on the same page while 
   // collectively computing the gradient
   mpi::broadcast<vector<double> >( (*model.learningInfo.mpiWorld), (model.lambda->paramWeights), 0);
@@ -1017,6 +1041,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 // -loglikelihood is the return value
 double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda) {
 
+  //  cerr << "starting LatentCrfModel::ComputeNllZGivenXAndLambdaGradient" << endl;
   // for each sentence in this mini batch, aggregate the Nll and its derivatives across sentences
   double Nll = 0;
 
@@ -1120,6 +1145,8 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
 
   cerr << learningInfo.mpiWorld->rank() << "|";
 
+  //  cerr << "ending LatentCrfModel::ComputeNllZGivenXAndLambdaGradient" << endl;
+
   return Nll;  
 }
 
@@ -1134,6 +1161,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 					int k,
 					int ls) {
   
+  //  cerr << "starting LatentCrfModel::LbfgsProgressReport" << endl;
   LatentCrfModel &model = LatentCrfModel::GetInstance();
 
   int index = *((int*)ptrFromSentId), from, to;
@@ -1175,6 +1203,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     cerr << "done" << endl;
   }
 
+  //  cerr << "ending LatentCrfModel::LbfgsProgressReport" << endl;
   return 0;
 }
 
@@ -1426,7 +1455,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
       // debug. 
-      if(learningInfo.mpiWorld->rank() == 0) {
+      /*      if(learningInfo.mpiWorld->rank() == 0) {
 	cerr << "compute the objective after updating theta...";
       }
       double objectiveAfterUpdatingTheta = EvaluateNll();
@@ -1437,6 +1466,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	  cerr << "unregularized objective = " << objectiveAfterUpdatingTheta << endl;
 	}
       } 
+      */
+
       // end of if(thetaOptMethod->algorithm == EM)
     } else if (learningInfo.thetaOptMethod->algorithm == GRADIENT_DESCENT) {
       assert(learningInfo.mpiWorld->size() == 1); // this method is only supported for single-threaded runs
@@ -1847,9 +1878,9 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+  //  cerr << "nLogC=" << nLogC << endl;
   double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
   double nLogP_ZGivenX = nLogC - nLogZ;
-  //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
   for(typename std::map< int, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
     int context = GetContextOfTheta(sentId, yIter->first);
@@ -1861,6 +1892,8 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
       assert(bOverC > -0.001);
       mle[context][z_] += bOverC;
       mleMarginals[context] += bOverC;
+      //      cerr << "-log(b[" << vocabEncoder.Decode(context) << "][" << vocabEncoder.Decode(z_) << "]) = -log(b[" << yIter->first << "][" << z_  << "]) = " << nLogb << endl;
+      //      cerr << "bOverC[" << context << "][" << z_ << "] += " << bOverC << endl;
     }
   }
   return nLogP_ZGivenX;
@@ -1887,7 +1920,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
-  cerr << "C = " << MultinomialParams::nExp(nLogC) << endl;
+  //  cerr << "C = " << MultinomialParams::nExp(nLogC) << endl;
   double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
   double nLogP_ZGivenX = nLogC - nLogZ;
   //cerr << "nloglikelihood += " << nLogC << endl;

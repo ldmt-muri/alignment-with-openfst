@@ -32,7 +32,7 @@ class LogLinearParams {
   LogLinearParams(const VocabEncoder &types, 
 		  const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
 		  const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
-		  double gaussianStdDev = 1);
+		  double gaussianStdDev = 0.01);
 
   // for the latent CRF model
   LogLinearParams(const VocabEncoder &types, double gaussianStdDev = 1);
