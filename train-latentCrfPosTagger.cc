@@ -37,7 +37,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 100;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
@@ -182,6 +182,9 @@ int main(int argc, char **argv) {
   learningInfo.useMaxIterationsCount = false;
   learningInfo.maxIterationsCount = 50;
   learningInfo.mpiWorld = &world;
+  learningInfo.initializeLambdasWithGaussian = false;
+  learningInfo.initializeLambdasWithZero = true;
+  learningInfo.initializeLambdasWithOne = false;
   //  learningInfo.useMinLikelihoodDiff = true;
   //  learningInfo.minLikelihoodDiff = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;

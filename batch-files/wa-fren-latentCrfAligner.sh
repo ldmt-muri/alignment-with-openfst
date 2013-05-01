@@ -4,7 +4,7 @@ make
 
 # train the latent CRF word aligner on some fr-en data such that the first 447 sentences are the manually aligned test set
 mpirun -np $2 ./train-latentCrfAligner     \
-    example/1k.fr-en \
+    example/10k.fr-en \
     none none \
     talign/grammars/wordpair-features  \
     example/run.latent-crf-aligner.fr-en.$1 \

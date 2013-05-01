@@ -1,5 +1,22 @@
-all:
+CC=mpiCC
+SINGLE=-c
+BEFORE=-x c++ -std=c++11
+LIBS=-lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system
+OPT=-O3
 
-#	echo #compile the hmm model
-	mpiCC -x c++ -std=c++11 IAlignmentModel.h Samplers.h MultinomialParams.h LearningInfo.h StringUtils.h FstUtils.h FstUtils.cc HmmModel.h HmmModel.cc train-hmm.cc  -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -O3 -I/usr/include/x86_64-linux-gnu/c++/4.7/ -o train-hmm
+all: train-hmm2
 
+train-hmm2: FstUtils.o HmmModel2.o train-hmm2.o
+	     $(CC) FstUtils.o HmmModel2.o train-hmm2.o  $(LIBS) -o train-hmm2
+
+train-hmm2.o: FstUtils.o HmmModel2.o train-hmm2.cc ClustersComparer.h StringUtils.h
+	    $(CC) $(BEFORE) $(SINGLE) train-hmm2.cc $(OPT)
+
+HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
+	     $(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
+
+FstUtils.o: FstUtils.cc FstUtils.h
+	   $(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
+
+clean:
+	rm -rf train-hmm2 FstUtils.o HmmModel2.o train-hmm2.o

@@ -3,8 +3,12 @@
 
 #include <ctime>
 #include <cstdlib>
-#include <fst/fstlib.h>
 #include <typeinfo>
+
+#include <fst/fstlib.h>
+#include <fst/weight.h>
+#include <fst/util.h>
+
 
 #include "Samplers.h"
 

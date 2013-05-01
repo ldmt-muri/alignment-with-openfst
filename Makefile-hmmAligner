@@ -1,0 +1,28 @@
+CC=mpiCC
+SINGLE=-c
+BEFORE=-x c++ -std=c++11
+LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lcmph
+OPT=-O3
+INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
+DEBUG=-g -ggdb
+
+all: train-hmmAligner
+
+# specific to the word alignment hmm model
+train-hmmAligner: train-hmmAligner.o
+	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o $(LIBS) -o train-latentCrfAligner
+
+train-hmmAligner.o: FstUtils.o HmmAligner.o train-hmmAligner.cc LearningInfo.h StringUtils.h
+	$(CC) $(BEFORE) $(SINGLE) train-hmmAligner.cc $(OPT)
+
+HmmAligner.o: FstUtils.o HmmAligner.cc HmmAligner.h LearningInfo.h StringUtils.h MultinomialParams.h
+	$(CC) $(BEFORE) $(SINGLE) HmmAligner.cc $(OPT)
+
+IbmModel1.o: FstUtils.o IbmModel1.cc IbmModel1.h LearningInfo.h StringUtils.h IAlignmentModel.h MultinomialParams.h VocabEncoder.h
+	$(CC) $(BEFORE) $(SINGLE) IbmModel1.cc $(OPT)
+
+FstUtils.o: FstUtils.cc FstUtils.h
+	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
+
+clean:
+	rm -rf FstUtils.o IbmModel1.o HmmAligner.o train-hmmAligner.o train-hmmAligner

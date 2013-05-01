@@ -219,6 +219,7 @@ class LearningInfo {
     initializeThetasWithGaussian = true;
     initializeThetasWithUniform = false;
     allowNullAlignments = true;
+    maxSequenceLength = 40;
   }
 
   bool IsModelConverged() {
@@ -390,6 +391,8 @@ class LearningInfo {
   bool initializeLambdasWithOne;
 
   bool allowNullAlignments;
+
+  unsigned maxSequenceLength;
 };
 
 

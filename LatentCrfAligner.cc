@@ -270,6 +270,7 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   // run viterbi (and write alignments in giza format)
   ofstream labelsFile(labelsFilename.c_str());
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
+  cerr << "labeling the first " << examplesCount << " in the corpus" << endl;
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
     std::vector<int> &srcSent = GetObservableContext(exampleId);
     std::vector<int> &tgtSent = GetObservableSequence(exampleId);

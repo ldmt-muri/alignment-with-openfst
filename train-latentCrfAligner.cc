@@ -95,12 +95,12 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
 
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 15;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 1;
+  learningInfo.persistParamsAfterNIteration = 10;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
@@ -206,15 +206,15 @@ int main(int argc, char **argv) {
   //  learningInfo.thetaOptMethod->learningRate = 0.01;
   // general
   learningInfo.supervisedTraining = false;
-  learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+  learningInfo.invokeCallbackFunctionEveryKIterations = 5;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
   learningInfo.fixDOverC = false;
 
   // hot configs
   learningInfo.allowNullAlignments = true;
-  learningInfo.firstKExamplesToLabel = 447;
+  learningInfo.firstKExamplesToLabel = 515;//447;
   learningInfo.emIterationsCount = 2;
-  learningInfo.nSentsPerDot = 25;
+  learningInfo.nSentsPerDot = 250;
   learningInfo.maxIterationsCount = 50;
 
   learningInfo.initializeThetasWithGaussian = false;

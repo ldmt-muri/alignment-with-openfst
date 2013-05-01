@@ -835,6 +835,9 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     // Make |y| = |x|
     assert(model.GetObservableSequence(sentId).size() == model.labels[sentId].size());
     const vector<int> &x = model.GetObservableSequence(sentId);
+    if(x.size() > model.learningInfo.maxSequenceLength) {
+      continue;
+    }
     vector<int> &y = model.labels[sentId];
 
     // build the FSTs
@@ -1056,6 +1059,11 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
     
     // sentId is assigned to the process with rank = sentId % world.size()
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      continue;
+    }
+
+    // prune long sequences
+    if( GetObservableSequence(sentId).size() > learningInfo.maxSequenceLength ) {
       continue;
     }
     
@@ -1404,6 +1412,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
 	    continue;
 	  }
 	  
+    // prune long sequences
+    if( GetObservableSequence(sentId).size() > learningInfo.maxSequenceLength ) {
+      continue;
+    }
+
+
 	  double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
 	  unregularizedObjective += sentLoglikelihood;
 

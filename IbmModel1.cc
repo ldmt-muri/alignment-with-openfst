@@ -1,5 +1,9 @@
 #include "IbmModel1.h"
 
+#include <iostream>
+#include <fstream>
+#include <math.h>
+
 using namespace std;
 using namespace fst;
 

@@ -19,7 +19,7 @@ HmmAligner::HmmAligner(const string& bitextFilename,
 
   // encode training data
   vocabEncoder.useUnk = false;
-  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_TOKEN);
+  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN_STRING);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
   // initialize the model parameters
@@ -572,11 +572,8 @@ string HmmAligner::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   static int sentCounter = 0;
   
-  // insert the null token
-  assert(srcTokens.size() > 0);
-  if(srcTokens[0] != NULL_SRC_TOKEN_ID){
-    srcTokens.insert(srcTokens.begin(), 1, NULL_SRC_TOKEN_ID);
-  }
+  // make sure the source sentnece is sane
+  assert(srcTokens.size() > 0 && srcTokens[0] == NULL_SRC_TOKEN_ID);
   
   // build aGivenTS
   VectorFst<FstUtils::LogQuadArc> tgtFst, srcFst, alignmentFst, perSentGrammarFst;
@@ -593,11 +590,11 @@ string HmmAligner::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   return FstUtils::PrintAlignment(bestAlignment);
 }
 
-void HmmAligner::AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
+void HmmAligner::AlignTestSet(const string &testBitextFilename, const string &outputAlignmentsFilename) {
+  //const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
 
   vector< vector<int> > srcTestSents, tgtTestSents;
-  vocabEncoder.Read(srcTestSetFilename, srcTestSents);
-  vocabEncoder.Read(tgtTestSetFilename, tgtTestSents);
+  vocabEncoder.ReadParallelCorpus(testBitextFilename, srcTestSents, tgtTestSents, NULL_SRC_TOKEN_STRING);
   assert(srcTestSents.size() == tgtTestSents.size());
   
   ofstream outputAlignments(outputAlignmentsFilename.c_str(), ios::out);
