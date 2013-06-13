@@ -277,7 +277,7 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
       if(learningInfo.mpiWorld->rank() == 0){
         string labelSequence;
         learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
-        labelsFile.write(labelSequence);
+        labelsFile << labelSequence;
       }
       continue;
     }
@@ -300,7 +300,7 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
     }
     ss << endl;
     if(learningInfo.mpiWorld->rank() == 0){
-      labelsFile.write(ss.str());
+      labelsFile << ss.str();
     }else{
       learningInfo.mpiWorld->send(0, 0, ss.str());
     }
