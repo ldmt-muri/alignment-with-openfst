@@ -272,23 +272,38 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   cerr << "labeling the first " << examplesCount << " in the corpus" << endl;
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    // if this example does not belong to this process, skip it (except for the master who receives its output)
+    if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      if(learningInfo.mpiWorld->rank() == 0){
+        string labelSequence;
+        learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
+        labelsFile.write(labelSequence);
+      }
+      continue;
+    }
     std::vector<int> &srcSent = GetObservableContext(exampleId);
     std::vector<int> &tgtSent = GetObservableSequence(exampleId);
     std::vector<int> labels;
     // run viterbi
     Label(tgtSent, srcSent, labels);
-    // 
+    //
+    stringstream ss;
     for(unsigned i = 0; i < labels.size(); ++i) {
       // dont write null alignments
       if(labels[i] == NULL_POSITION) {
-	continue;
+        continue;
       }
       // determine the alignment (i.e. src position) for this tgt position (i)
       int alignment = labels[i] - FIRST_SRC_POSITION;
       assert(alignment >= 0);
-      labelsFile << alignment << "-" << i << " ";
+      ss << alignment << "-" << i << " ";
     }
-    labelsFile << endl;
+    ss << endl;
+    if(learningInfo.mpiWorld->rank() == 0){
+      labelsFile.write(ss.str());
+    }else{
+      learningInfo.mpiWorld->send(0, 0, ss.str());
+    }
   }
   labelsFile.close();
 }
