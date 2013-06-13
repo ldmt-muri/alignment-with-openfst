@@ -4,19 +4,19 @@ BEFORE=-x c++ -std=c++11
 LIBS=-lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system
 OPT=-O3
 
-all: train-hmm2
+all: train-hmm
 
-train-hmm2: FstUtils.o HmmModel2.o train-hmm2.o
-	     $(CC) FstUtils.o HmmModel2.o train-hmm2.o  $(LIBS) -o train-hmm2
+train-hmm: FstUtils.o HmmModel.o train-hmm.o
+	     $(CC) FstUtils.o HmmModel2.o train-hmm.o  $(LIBS) -o train-hmm
 
-train-hmm2.o: FstUtils.o HmmModel2.o train-hmm2.cc ClustersComparer.h StringUtils.h
-	    $(CC) $(BEFORE) $(SINGLE) train-hmm2.cc $(OPT)
+train-hmm.o: FstUtils.o HmmModel.o train-hmm.cc ClustersComparer.h StringUtils.h
+	    $(CC) $(BEFORE) $(SINGLE) train-hmm.cc $(OPT)
 
-HmmModel2.o: FstUtils.o HmmModel2.cc HmmModel2.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
-	     $(CC) $(BEFORE) $(SINGLE) HmmModel2.cc $(OPT)
+HmmModel.o: FstUtils.o HmmModel.cc HmmModel.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
+	     $(CC) $(BEFORE) $(SINGLE) HmmModel.cc $(OPT)
 
 FstUtils.o: FstUtils.cc FstUtils.h
 	   $(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
 
 clean:
-	rm -rf train-hmm2 FstUtils.o HmmModel2.o train-hmm2.o
+	rm -rf train-hmm FstUtils.o HmmModel.o train-hmm.o

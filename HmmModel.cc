@@ -1,4 +1,4 @@
-#include "HmmModel2.h"
+#include "HmmModel.h"
 
 using namespace std;
 using namespace fst;

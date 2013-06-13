@@ -10,7 +10,7 @@ all: train-hmmAligner
 
 # specific to the word alignment hmm model
 train-hmmAligner: train-hmmAligner.o
-	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o $(LIBS) -o train-latentCrfAligner
+	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o $(LIBS) -o train-hmmAligner
 
 train-hmmAligner.o: FstUtils.o HmmAligner.o train-hmmAligner.cc LearningInfo.h StringUtils.h
 	$(CC) $(BEFORE) $(SINGLE) train-hmmAligner.cc $(OPT)

@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
   learningInfo.minLikelihoodDiff = 100.0;
   learningInfo.useMinLikelihoodDiff = false;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
-  learningInfo.useMinLikelihoodRelativeDiff = 0.00001;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.useEarlyStopping = false;
   learningInfo.mpiWorld = &world;

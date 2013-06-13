@@ -59,8 +59,8 @@ void register_my_handler() {
   sigaction(SIGUSR2, &sigIntHandler, NULL);
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix) {
-  assert(argc >= 5);
+void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix, unsigned &testsetSize) {
+  assert(argc == 7);
   textFilename = argv[1];
   initialLambdaParamsFilename = argv[2];
   if(initialLambdaParamsFilename == "none") {
@@ -75,6 +75,10 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &initia
     wordPairFeaturesFilename.clear();
   }
   outputFilenamePrefix = argv[5];
+
+  stringstream testsetSizeSS;
+  testsetSizeSS << argv[6];
+  testsetSizeSS >> testsetSize;
 }
 
 // returns the rank of the process which have found the best HMM parameters
@@ -158,7 +162,8 @@ int main(int argc, char **argv) {
     cerr << "master" << world.rank() << ": parsing arguments...";
   }
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
-  ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix);
+  unsigned testsetSize;
+  ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, testsetSize);
   if(world.rank() == 0) {
     cerr << "done." << endl;
   }
@@ -212,7 +217,7 @@ int main(int argc, char **argv) {
 
   // hot configs
   learningInfo.allowNullAlignments = true;
-  learningInfo.firstKExamplesToLabel = 515;//447;
+  learningInfo.firstKExamplesToLabel = testsetSize; // deen=150 // czen=515 // fren=447;
   learningInfo.emIterationsCount = 2;
   learningInfo.nSentsPerDot = 250;
   learningInfo.maxIterationsCount = 50;

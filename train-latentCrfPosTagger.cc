@@ -3,7 +3,7 @@
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
 #include "LatentCrfPosTagger.h"
-#include "HmmModel2.h"
+#include "HmmModel.h"
 
 using namespace fst;
 using namespace std;

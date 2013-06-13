@@ -1,7 +1,13 @@
 #!/bin/bash
 
-make
-mpirun -np $2 ./train-latentCrfPosTagger example/tb3-pos-wsj-1000.eng example/run.latent-crf-pos-tagger.$1 example/tb3-pos-wsj-1000.pos
+make -f Makefile-latentCrfPosTagger
+
+mpirun -np $2 \
+    ./train-latentCrfPosTagger \
+    example/tb3-pos-wsj-1000.eng \
+    example/out.$1 \
+    example/tb3-pos-wsj-1000.pos \
+    2> batch-files/wa-czen-latentCrfAligner-dir/out.$1.err
 
 # USEFUL HISTORY OF COMMANDS/EXPERMINTS I RAN
 

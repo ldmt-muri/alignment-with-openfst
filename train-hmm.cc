@@ -1,7 +1,7 @@
 #include "LearningInfo.h"
 #include "FstUtils.h"
 #include "StringUtils.h"
-#include "HmmModel2.h"
+#include "HmmModel.h"
 
 using namespace fst;
 using namespace std;
