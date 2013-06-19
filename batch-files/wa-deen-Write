@@ -1,0 +1,19 @@
+/usr0/home/wammar/alignment-with-openfst/example/aren-manual-alignments
+The following results assume correct file formats.
+Make sure you have previously checked the file format
+using wa_check_submission.pl
+
+
+    Word Alignment Evaluation   
+----------------------------------
+   Evaluation of SURE alignments 
+   Precision = 0.0000  
+   Recall    = 0.0000
+   F-measure = 0.0000
+-----------------------------------
+   Evaluation of PROBABLE alignments
+   Precision = 0.0000
+   Recall    = 0.0000
+   F-measure = 0.0000
+-----------------------------------
+   AER       = 0.0000
