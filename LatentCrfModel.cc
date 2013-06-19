@@ -1663,8 +1663,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     // label the first K examples from the training set (i.e. the test set)
     if(learningInfo.iterationsCount % learningInfo.invokeCallbackFunctionEveryKIterations == 0 &&      \
-       learningInfo.endOfKIterationsCallbackFunction != 0  &&        \
-       learningInfo.mpiWorld->rank() == 0) {
+       learningInfo.endOfKIterationsCallbackFunction != 0 /* &&        \
+       learningInfo.mpiWorld->rank() == 0*/) {
       // call the call back function
       (*learningInfo.endOfKIterationsCallbackFunction)();
     }
@@ -1678,7 +1678,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     mpi::broadcast<double>(*learningInfo.mpiWorld, Nll, 0);
     learningInfo.logLikelihood.push_back(Nll);
     learningInfo.iterationsCount++;
-
+    
     // check convergence
     if(learningInfo.mpiWorld->rank() == 0) {
       converged = learningInfo.IsModelConverged();

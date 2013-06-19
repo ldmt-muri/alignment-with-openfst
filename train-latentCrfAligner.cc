@@ -26,7 +26,7 @@ void my_handler(int s) {
     cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": running viterbi..." << endl;
   } else {
     cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": will exit." << endl;
-    exit(0);
+    //exit(0);
   }
   string suffix = ".interrupted-labels";
   string labelsFilename = aligner.outputPrefix + suffix;
@@ -138,8 +138,8 @@ void endOfKIterationsCallbackFunction() {
   // get hold of the model
   LatentCrfModel *model = LatentCrfAligner::GetInstance();
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
-  if(aligner.learningInfo.mpiWorld->rank() != 0) {
-    return;
+  if(aligner.learningInfo.mpiWorld->rank() == 0) {
+    //  return;
   } 
 
   // find viterbi alignment for the top K examples of the training set (i.e. our test set)
@@ -274,7 +274,7 @@ int main(int argc, char **argv) {
 
   // we don't need the slaves anymore
   if(world.rank() > 0) {
-    return 0;
+    //return 0;
   }
     
   // run viterbi (and write alignments in giza format)

@@ -2,3 +2,29 @@
 THERE'S A PROBLEM WITH THE EM OPTIMIZATION. SOMETIKMES THE LIKELIHOOD DEGRADES. THERE MIGHT BE  A SYNCHRONIZATION PROBLEM. THE TINY DATASET WOKRSK FINE. THE 10 SENT FR DATASET BREAKS. ALLOW_NULLL COULD BE A TRIGGER. NUMBER OF EPROCESSES COULD BE A TRIGGER.
 
 EVEN THE TINY DATASET DOES NOT STEADILY IMPROVE WITH EM, WHEN LAMBDAS != 0
+
+
+
+Paper writing:
+
+phase 1: convince yourself that the model performs well with at least two tasks
+DUE 6/17
+
++ make sure the script wa-aren-latentCrfAligner.sh works well (with small training data).
+- use netbeans remote dev features https://netbeans.org/kb/docs/cnd/remotedev-tutorial.html
+- use ducttape
+- currently, it takes about 7 iterations over the dataset in order to make one step in coordinate descent
+- currently, when you initialize with features and weights from a different data set (even for the same language), the program breaks. we need to be able to do that to jumpstart large-scale experiments.
+- "labeling the first 13263 in the corpus" takes for ever. it seems to be using a single process.
+- use a command line library for the options
+- use a 100K training set for aren, and evaluate WER of fastalign.
+- regenerate word-pair features for the largest dataset
+- use a 100K training set for aren, and evaluate WER of latentCRF.
+- run controlled word alignment experiments with a medium dataset. compare to hmm aligner and ibm model 4 (initialized with model 1), and fastalign.
+- use the learnt word alignments to train translation models and see how they compare to models trained with giza++ or fastalign
+- run controlled POS tagging experiments without a tagging dictionary. compare to berg-kirkpatrick and my hmm implementation.
+- find two state-of-the-art POS tagging results and replicate the experimental setup and try to beat them.
+
+phase 2: run large scale experiments to convince the reviewers, in coordination with Chris
+
+phase 3: in parallel with phase 2, write a draft

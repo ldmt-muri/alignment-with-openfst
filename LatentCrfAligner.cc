@@ -272,13 +272,17 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   cerr << "labeling the first " << examplesCount << " in the corpus" << endl;
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    cerr << "rank" << learningInfo.mpiWorld->rank() << ": started processing exampleId " << exampleId << endl;
     // if this example does not belong to this process, skip it (except for the master who receives its output)
     if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       if(learningInfo.mpiWorld->rank() == 0){
         string labelSequence;
+        cerr << "master is waiting for the result of exampleId " << exampleId << " from rank " << exampleId % learningInfo.mpiWorld->size() << endl;
         learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
         labelsFile << labelSequence;
+        cerr << "master received the reuslt of exampleId " << exampleId << " and printed it to disk" << endl;
       }
+      cerr << "rank" << learningInfo.mpiWorld->rank() << " is done with exampleId" << endl;
       continue;
     }
     std::vector<int> &srcSent = GetObservableContext(exampleId);
@@ -302,8 +306,11 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
     if(learningInfo.mpiWorld->rank() == 0){
       labelsFile << ss.str();
     }else{
+      cerr << "rank" << learningInfo.mpiWorld->rank() << " will send exampleId " << exampleId << " to master" << endl; 
       learningInfo.mpiWorld->send(0, 0, ss.str());
+      cerr << "rank" << learningInfo.mpiWorld->rank() << " sending done." << endl;
     }
+    
   }
   labelsFile.close();
 }
