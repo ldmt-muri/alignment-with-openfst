@@ -8,25 +8,25 @@ using namespace std;
 using namespace fst;
 
 IbmModel1::IbmModel1(const string& bitextFilename, 
-		     const string& outputFilenamePrefix, 
-		     const LearningInfo& learningInfo,
-		     const string &NULL_SRC_TOKEN,
-		     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder) {
+                     const string& outputFilenamePrefix, 
+                     const LearningInfo& learningInfo,
+                     const string &NULL_SRC_TOKEN,
+                     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder) {
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN);
 }
 
 IbmModel1::IbmModel1(const string& bitextFilename, 
-		     const string& outputFilenamePrefix, 
-		     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename) {
+                     const string& outputFilenamePrefix, 
+                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename) {
   
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__token__");
 }
 
 // initialize model 1 scores
 void IbmModel1::CoreConstructor(const string& bitextFilename, 
-				const string& outputFilenamePrefix, 
-				const LearningInfo& learningInfo,
-				const string &NULL_SRC_TOKEN) {
+                                const string& outputFilenamePrefix, 
+                                const LearningInfo& learningInfo,
+                                const string &NULL_SRC_TOKEN) {
   // set member variables
   this->bitextFilename = bitextFilename;
   this->outputPrefix = outputFilenamePrefix;
@@ -217,8 +217,8 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
     // iterate over sentences
     int sentsCounter = 0;
     for( vector< VectorFst< FstUtils::LogArc > >::const_iterator tgtIter = tgtFsts.begin(), grammarIter = perSentGrammarFsts.begin(); 
-	 tgtIter != tgtFsts.end() && grammarIter != perSentGrammarFsts.end(); 
-	 tgtIter++, grammarIter++) {
+         tgtIter != tgtFsts.end() && grammarIter != perSentGrammarFsts.end(); 
+         tgtIter++, grammarIter++) {
       
       // build the alignment fst
       clock_t t20 = clock();
@@ -246,56 +246,56 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       // compute and accumulate fractional counts for model parameters
       clock_t t40 = clock();
       bool excludeFractionalCountsInThisSent = 
-	learningInfo.useEarlyStopping && 
-	sentsCounter % learningInfo.trainToDevDataSize == 0;
+        learningInfo.useEarlyStopping && 
+        sentsCounter % learningInfo.trainToDevDataSize == 0;
       for (int stateId = 0; !excludeFractionalCountsInThisSent && stateId < alignmentFst.NumStates() ;stateId++) {
-	for (ArcIterator<VectorFst< FstUtils::LogArc > > arcIter(alignmentFst, stateId);
-	     !arcIter.Done();
-	     arcIter.Next()) {
-	  int srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
-	  int fromState = stateId, toState = arcIter.Value().nextstate;
-	  
-	  // probability of using this parameter given this sentence pair and the previous model
-	  FstUtils::LogWeight currentParamLogProb = arcIter.Value().weight;
-	  FstUtils::LogWeight unnormalizedPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]);
-	  //float fUnnormalizedPosteriorProb = exp(-1.0 * unnormalizedPosteriorLogProb.Value());
-	  //float fNormalizedPosteriorProb = (fUnnormalizedPosteriorProb / alignmentsCount) / fSentLikelihood;
-	  //float fNormalizedPosteriorLogProb = -1.0 * log(fNormalizedPosteriorProb);
-	  float fNormalizedPosteriorLogProb = unnormalizedPosteriorLogProb.Value() - fSentLogLikelihood;
-	  
-	  // logging
-	  /*
-	    if(srcToken == 2 && tgtToken == 2){
-	    
-	    cout << "The alignment FST looks like this: " << endl;
-	    cout << "================================== " << endl;
-	    PrintFstSummary(alignmentFst);
-	    
-	    cout << endl << "Updates on prob(2|2): " << endl;
-	    cout << "===================== " << endl;
-	    cout << " before: " << params[srcToken][tgtToken] << endl;
-	    cout << " before: logProb(2|2) = " << currentParamLogProb.Value() << endl;
-	    cout << " alpha[fromState] = " << alphas[fromState] << endl;
-	    cout << " beta[toState] = " << betas[toState] << endl;
-	    cout << " unnormalized logProb(2-2|sent) = alpha[fromState] logTimes logProb(2|2) logTimes beta[toState] = " << unnormalizedPosteriorLogProb.Value() << endl;
-	    cout << " unnormalized prob(2-2|sent) = " << fUnnormalizedPosteriorProb << endl;
-	    cout << " prob(2-2|sent) = " << fNormalizedPosteriorProb << endl;
-	    cout << " logProb(2-2|sent) = " << fNormalizedPosteriorLogProb << endl;
-	    cout << " adding: " << fNormalizedPosteriorLogProb << endl;
-	    }
-	  */
-	    
-	  // append the fractional count for this parameter
-	  params[srcToken][tgtToken] = Plus(FstUtils::LogWeight(params[srcToken][tgtToken]), FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
-	  
-	  // logging
-	  /*
-	    if(srcToken == 2 && tgtToken == 2){
-	    cout << " after: " << params[srcToken][tgtToken] << endl << endl;
-	    }
-	  */
-	  
-	}
+        for (ArcIterator<VectorFst< FstUtils::LogArc > > arcIter(alignmentFst, stateId);
+             !arcIter.Done();
+             arcIter.Next()) {
+          int srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
+          int fromState = stateId, toState = arcIter.Value().nextstate;
+          
+          // probability of using this parameter given this sentence pair and the previous model
+          FstUtils::LogWeight currentParamLogProb = arcIter.Value().weight;
+          FstUtils::LogWeight unnormalizedPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]);
+          //float fUnnormalizedPosteriorProb = exp(-1.0 * unnormalizedPosteriorLogProb.Value());
+          //float fNormalizedPosteriorProb = (fUnnormalizedPosteriorProb / alignmentsCount) / fSentLikelihood;
+          //float fNormalizedPosteriorLogProb = -1.0 * log(fNormalizedPosteriorProb);
+          float fNormalizedPosteriorLogProb = unnormalizedPosteriorLogProb.Value() - fSentLogLikelihood;
+          
+          // logging
+          /*
+            if(srcToken == 2 && tgtToken == 2){
+            
+            cout << "The alignment FST looks like this: " << endl;
+            cout << "================================== " << endl;
+            PrintFstSummary(alignmentFst);
+            
+            cout << endl << "Updates on prob(2|2): " << endl;
+            cout << "===================== " << endl;
+            cout << " before: " << params[srcToken][tgtToken] << endl;
+            cout << " before: logProb(2|2) = " << currentParamLogProb.Value() << endl;
+            cout << " alpha[fromState] = " << alphas[fromState] << endl;
+            cout << " beta[toState] = " << betas[toState] << endl;
+            cout << " unnormalized logProb(2-2|sent) = alpha[fromState] logTimes logProb(2|2) logTimes beta[toState] = " << unnormalizedPosteriorLogProb.Value() << endl;
+            cout << " unnormalized prob(2-2|sent) = " << fUnnormalizedPosteriorProb << endl;
+            cout << " prob(2-2|sent) = " << fNormalizedPosteriorProb << endl;
+            cout << " logProb(2-2|sent) = " << fNormalizedPosteriorLogProb << endl;
+            cout << " adding: " << fNormalizedPosteriorLogProb << endl;
+            }
+          */
+          
+          // append the fractional count for this parameter
+          params[srcToken][tgtToken] = Plus(FstUtils::LogWeight(params[srcToken][tgtToken]), FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
+          
+          // logging
+          /*
+            if(srcToken == 2 && tgtToken == 2){
+            cout << " after: " << params[srcToken][tgtToken] << endl << endl;
+            }
+          */
+          
+        }
       }
       updatingFractionalCountsClocks += clock() - t40;
       
@@ -336,7 +336,6 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
     learningInfo.logLikelihood.push_back(logLikelihood);
     learningInfo.validationLogLikelihood.push_back(validationLogLikelihood);
     learningInfo.iterationsCount++;
-    
     // check for convergence
   } while(!learningInfo.IsModelConverged());
 

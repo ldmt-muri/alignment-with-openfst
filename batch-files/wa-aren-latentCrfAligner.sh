@@ -16,7 +16,7 @@ make -f Makefile-latentCrfAligner
 # the latent-CRF word alignment model
 mpirun -np $2 ./train-latentCrfAligner \
     example/13k.ar-en \
-    batch-files/wa-aren-latentCrfAligner-dir/out.13k.10.lambda batch-files/wa-aren-latentCrfAligner-dir/out.13k.10.theta \
+    batch-files/wa-aren-latentCrfAligner-dir/out.13k.11.lambda batch-files/wa-aren-latentCrfAligner-dir/out.13k.11.theta \
     batch-files/wa-aren-latentCrfAligner-dir/ar-en-talign/grammars/wordpairs.f-e.features \
     batch-files/wa-aren-latentCrfAligner-dir/out.$1 \
     13263 \

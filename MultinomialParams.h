@@ -292,24 +292,29 @@ namespace MultinomialParams {
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
   template <typename ContextType>
   void NormalizeParams(ConditionalMultinomialParam<ContextType> &params) {
+    // symmetric dirichlet prior concentration params
+    double alpha =0.0;
+
     // iterate over src tokens in the model
     for(typename map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       MultinomialParam &translations = (*srcIter).second;
       double fTotalProb = 0.0;
       // iterate over tgt tokens logsumming over the logprob(tgt|src) 
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	double temp = (*tgtIter).second;
-	fTotalProb += nExp(temp);
+        double temp = (*tgtIter).second;
+        // add a dirichlet prior with concentration param = 1
+        fTotalProb += nExp(temp) + alpha;
+       
       }
       // exponentiate to find p(*|src) before normalization
       // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
       double fVerifyTotalProb = 0.0;
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	double fUnnormalized = nExp((*tgtIter).second);
-	double fNormalized = fUnnormalized / fTotalProb;
-	fVerifyTotalProb += fNormalized;
-	double fLogNormalized = nLog(fNormalized);
-	(*tgtIter).second = fLogNormalized;
+        double fUnnormalized = nExp((*tgtIter).second) + alpha;
+        double fNormalized = fUnnormalized / fTotalProb;
+        fVerifyTotalProb += fNormalized;
+        double fLogNormalized = nLog(fNormalized);
+        (*tgtIter).second = fLogNormalized;
       }
     }
   }

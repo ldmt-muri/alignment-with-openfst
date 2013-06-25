@@ -5,21 +5,21 @@
 
 using namespace fst;
 using namespace std;
+using namespace boost;
 
 typedef ProductArc<LogWeight, LogWeight> ProductLogArc;
 
-void ParseParameters(int argc, char **argv, string& srcCorpusFilename, string &tgtCorpusFilename, string &outputFilepathPrefix) {
-  assert(argc == 4);
-  srcCorpusFilename = argv[1];
-  tgtCorpusFilename = argv[2];
-  outputFilepathPrefix = argv[3];
+void ParseParameters(int argc, char **argv, string& bitextFilename, string &outputFilepathPrefix) {
+  assert(argc == 3);
+  bitextFilename = argv[1];
+  outputFilepathPrefix = argv[2];
 }
 
 void Experimental() {
   cout << "nLog(1.0) = " << FstUtils::nLog(1.0) << endl;
   cout << "nLog(0.5) = " << FstUtils::nLog(0.5) << endl;
   cout << "nLog(0.25) = " << FstUtils::nLog(0.25) << endl;
-
+  /*
   ProductWeight<LogWeight, LogWeight> x;
   VectorFst< ProductArc<LogWeight, LogWeight> > fst1;
   int state0 = fst1.AddState();
@@ -82,28 +82,35 @@ void Experimental() {
   //  FstUtils::PrintFstSummary(temp);
   cout << "===================FINAL=============" << endl;  
   //  FstUtils::PrintFstSummary(final);
-
+  */
 }
 
 int main(int argc, char **argv) {
+  // boost mpi initialization
+  mpi::environment env(argc, argv);
+  mpi::communicator world;
+
   //  Experimental();
   //  return 0;
 
   // parse arguments
   cout << "parsing arguments" << endl;
-  string srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix;
-  ParseParameters(argc, argv, srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix);
+  string bitextFilename, outputFilenamePrefix;
+  ParseParameters(argc, argv, bitextFilename, outputFilenamePrefix);
 
   // specify stopping criteria
   LearningInfo learningInfo;
-  learningInfo.maxIterationsCount = 3;
+  learningInfo.maxIterationsCount = 100;
   learningInfo.useMaxIterationsCount = true;
   //  learningInfo.useEarlyStopping = true;
   learningInfo.minLikelihoodDiff = 100.0;
-  learningInfo.useMinLikelihoodDiff = true;
-
+  learningInfo.useMinLikelihoodDiff = false;
+  learningInfo.minLikelihoodRelativeDiff = 0.01;
+  learningInfo.useMinLikelihoodRelativeDiff = true;
+  learningInfo.mpiWorld = &world;
+  
   // initialize the model
-  IbmModel1 model(srcCorpusFilename, tgtCorpusFilename, outputFilenamePrefix, learningInfo);
+  IbmModel1 model(bitextFilename, outputFilenamePrefix, learningInfo);
 
   // train model parameters
   model.Train();

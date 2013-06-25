@@ -19,6 +19,7 @@ HmmAligner::HmmAligner(const string& bitextFilename,
 
   // encode training data
   vocabEncoder.useUnk = false;
+  NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN_STRING, false);
   vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN_STRING);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
@@ -94,6 +95,7 @@ void HmmAligner::CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tg
 
   // allow null alignments
   assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
+  assert(srcTokens[1] != NULL_SRC_TOKEN_ID);
     
   // create the fst
   int stateId = perSentGrammarFst.AddState();
@@ -566,8 +568,6 @@ void HmmAligner::SampleAGivenST(const std::vector<int> &srcTokens,
 }
 
 // given the current model, align a test sentence
-// assumptions: 
-// - the null token has *NOT* been inserted yet
 string HmmAligner::AlignSent(vector<int> srcTokens, vector<int> tgtTokens) {
   
   static int sentCounter = 0;
@@ -603,7 +603,7 @@ void HmmAligner::AlignTestSet(const string &testBitextFilename, const string &ou
   for(unsigned sentId = 0; sentId < srcTestSents.size(); sentId++) {
     string alignmentsLine;
     vector< int > &srcTokens = srcTestSents[sentId], &tgtTokens = tgtTestSents[sentId];
-    cout << "sent #" << sentId << " |srcTokens| = " << srcTokens.size() << endl;
+    //cerr << "sent #" << sentId << " |srcTokens| = " << srcTokens.size() << endl;
     alignmentsLine = AlignSent(srcTokens, tgtTokens);
     outputAlignments << alignmentsLine;
   }

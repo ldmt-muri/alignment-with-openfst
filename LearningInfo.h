@@ -224,7 +224,7 @@ class LearningInfo {
 
   bool IsModelConverged() {
     assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping || useMinLikelihoodRelativeDiff);
-    
+    cerr << mpiWorld->rank() << endl;
     // logging
     if(useMaxIterationsCount) {
       cerr << "rank #" << mpiWorld->rank() << ": iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl;
@@ -240,7 +240,7 @@ class LearningInfo {
       cerr << "rank #" << mpiWorld->rank() << ": validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
       cerr << "rank #" << mpiWorld->rank() << ": convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl;
     }
-
+    
     double absoluteDiff = 0.0, relativeDiff = 0.0;
     if(useMinLikelihoodRelativeDiff &&
        iterationsCount > 1) {

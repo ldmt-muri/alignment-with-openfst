@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.useEarlyStopping = false;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.persistFinalParams = false;
 
   // initialize the model

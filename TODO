@@ -10,12 +10,14 @@ Paper writing:
 phase 1: convince yourself that the model performs well with at least two tasks
 DUE 6/17
 
+- cache the features and rescore when the weights change
+- write a report on where we are so that i can continue after going back to school
 + make sure the script wa-aren-latentCrfAligner.sh works well (with small training data).
-- use netbeans remote dev features https://netbeans.org/kb/docs/cnd/remotedev-tutorial.html
++ use netbeans remote dev features https://netbeans.org/kb/docs/cnd/remotedev-tutorial.html
 - use ducttape
 - currently, it takes about 7 iterations over the dataset in order to make one step in coordinate descent
 - currently, when you initialize with features and weights from a different data set (even for the same language), the program breaks. we need to be able to do that to jumpstart large-scale experiments.
-- "labeling the first 13263 in the corpus" takes for ever. it seems to be using a single process.
++ "labeling the first 13263 in the corpus" takes for ever. it seems to be using a single process.
 - use a command line library for the options
 - use a 100K training set for aren, and evaluate WER of fastalign.
 - regenerate word-pair features for the largest dataset

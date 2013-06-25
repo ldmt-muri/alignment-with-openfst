@@ -28,8 +28,6 @@ using namespace fst;
 using namespace std;
 using namespace MultinomialParams;
 
-// this id is reserved for the unique source word (NULL). no other source word is allowed to take this id.
-#define NULL_SRC_TOKEN_ID 1
 #define NULL_SRC_TOKEN_STRING "__null__"
 // this is the src position of the null src word in any src sentence
 #define NULL_SRC_TOKEN_POS 0
@@ -125,6 +123,9 @@ class HmmAligner {
 
   // gaussian sampler
   GaussianSampler gaussianSampler;
+
+  // this id is reserved for the unique source word (NULL). no other source word is allowed to take this id.
+  int NULL_SRC_TOKEN_ID;
   
 };
 
