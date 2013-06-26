@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
   
   // initialize the model
   IbmModel1 model(bitextFilename, outputFilenamePrefix, learningInfo);
-
+  
   // train model parameters
   model.Train();
   model.Align();

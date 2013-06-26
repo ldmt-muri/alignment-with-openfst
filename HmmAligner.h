@@ -52,7 +52,6 @@ class HmmAligner {
 
   // create a grammar
   void CreateGrammarFst(); // deprecated
-  void CreatePerSentGrammarFsts();
   void CreatePerSentGrammarFst(vector<int> &srcTokens, vector<int> &tgtTokens, VectorFst< FstUtils::LogQuadArc >& perSentGrammarFst);
   
   // zero all parameters
@@ -99,11 +98,14 @@ class HmmAligner {
 			      const std::vector<int> &tgtTokens,
 			      std::vector<int> &alignments,
 			      double &logProb);
+
+  // if you decide to modify the parameters, you need to recreate the grammar in order to put the new
+  // parameters in effect.
+  void CreatePerSentGrammarFsts();
+
   private:
   string outputPrefix;
 
-  // tFractionalCounts are used (when normalized) to describe p(tgt_word|src_word). first key is the context (i.e. src_word) and nested key is the tgt_word.
-  ConditionalMultinomialParam<int> tFractionalCounts;
   // aParams are used to describe p(a_i|a_{i-1}). first key is the context (i.e. previous alignment a_{i-1}) and nested key is the current alignment a_i.
   ConditionalMultinomialParam<int> aFractionalCounts, aParams;
 
@@ -115,9 +117,6 @@ class HmmAligner {
   // configurations
   LearningInfo learningInfo;
   
-  // vocab encoders
-  VocabEncoder vocabEncoder;
-
   // training data (src, tgt)
   vector< vector<int> > srcSents, tgtSents;
 
@@ -127,6 +126,13 @@ class HmmAligner {
   // this id is reserved for the unique source word (NULL). no other source word is allowed to take this id.
   int NULL_SRC_TOKEN_ID;
   
+ public:
+
+  // vocab encoders
+  VocabEncoder vocabEncoder;
+
+  // tFractionalCounts are used (when normalized) to describe p(tgt_word|src_word). first key is the context (i.e. src_word) and nested key is the tgt_word.
+  ConditionalMultinomialParam<int> tFractionalCounts;
 };
 
 #endif

@@ -5,7 +5,7 @@ using namespace fst;
 using namespace MultinomialParams;
 using namespace boost;
 
-HmmModel2::HmmModel2(const string &textFilename, 
+HmmModel::HmmModel(const string &textFilename, 
 		     const string &outputPrefix, 
 		     LearningInfo &learningInfo,
 		     unsigned numberOfLabels,
@@ -45,7 +45,7 @@ HmmModel2::HmmModel2(const string &textFilename,
 }
 
 // gaussian initialization of the multinomial params
-void HmmModel2::InitParams(){
+void HmmModel::InitParams(){
   for(set<int>::const_iterator toYIter = yDomain.begin(); toYIter != yDomain.end(); toYIter++) {
     if(*toYIter == START_OF_SENTENCE_Y_VALUE) {
       continue;
@@ -68,7 +68,7 @@ void HmmModel2::InitParams(){
   }
 }
 
-void HmmModel2::PersistParams(string &prefix) {
+void HmmModel::PersistParams(string &prefix) {
   if(prefix.size() == 0) {
     prefix = outputPrefix + ".hmm2.final";
   }
@@ -77,7 +77,7 @@ void HmmModel2::PersistParams(string &prefix) {
 }
 
 // builds the lattice of all possible label sequences
-void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &fst) {
+void HmmModel::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &fst) {
   // arcs represent a particular choice of y_i at time step i
   // arc weights are - log \theta_{x_i|y_i} - log \gamma_{y_i|y_{i-1}}
   assert(fst.NumStates() == 0);
@@ -141,7 +141,7 @@ void HmmModel2::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &
 }
 
 // builds the lattice of all possible label sequences, also computes potentials
-void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
+void HmmModel::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
   // first, build the lattice
   BuildThetaGammaFst(observations[sentId], fst);
@@ -153,7 +153,7 @@ void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> 
   ShortestDistance(fst, &betas, true);
 }
 
-void HmmModel2::UpdateMle(const unsigned sentId,
+void HmmModel::UpdateMle(const unsigned sentId,
 			  const VectorFst<FstUtils::LogArc> &fst, 
 			  const vector<FstUtils::LogWeight> &alphas, 
 			  const vector<FstUtils::LogWeight> &betas, 
@@ -211,7 +211,7 @@ void HmmModel2::UpdateMle(const unsigned sentId,
 }
 
 // EM training of the HMM
-void HmmModel2::Train(){
+void HmmModel::Train(){
   do {
     
     // expectation
@@ -253,7 +253,7 @@ void HmmModel2::Train(){
   } while(!learningInfo->IsModelConverged());
 }
 
-void HmmModel2::Label(vector<int> &tokens, vector<int> &labels) {
+void HmmModel::Label(vector<int> &tokens, vector<int> &labels) {
   VectorFst<FstUtils::LogArc> fst;
   BuildThetaGammaFst(tokens, fst);
 

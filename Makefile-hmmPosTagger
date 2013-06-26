@@ -4,13 +4,13 @@ BEFORE=-x c++ -std=c++11
 LIBS=-lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system
 OPT=-O3
 
-all: train-hmm
+all: train-hmmPosTagger
 
-train-hmm: FstUtils.o HmmModel.o train-hmm.o
-	     $(CC) FstUtils.o HmmModel2.o train-hmm.o  $(LIBS) -o train-hmm
+train-hmmPosTagger: FstUtils.o HmmModel.o train-hmmPosTagger.o
+	     $(CC) FstUtils.o HmmModel.o train-hmmPosTagger.o  $(LIBS) -o train-hmmPosTagger
 
-train-hmm.o: FstUtils.o HmmModel.o train-hmm.cc ClustersComparer.h StringUtils.h
-	    $(CC) $(BEFORE) $(SINGLE) train-hmm.cc $(OPT)
+train-hmmPosTagger.o: FstUtils.o HmmModel.o train-hmmPosTagger.cc ClustersComparer.h StringUtils.h
+	    $(CC) $(BEFORE) $(SINGLE) train-hmmPosTagger.cc $(OPT)
 
 HmmModel.o: FstUtils.o HmmModel.cc HmmModel.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h
 	     $(CC) $(BEFORE) $(SINGLE) HmmModel.cc $(OPT)

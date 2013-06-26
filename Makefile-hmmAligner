@@ -10,9 +10,9 @@ all: train-hmmAligner
 
 # specific to the word alignment hmm model
 train-hmmAligner: train-hmmAligner.o
-	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o $(LIBS) -o train-hmmAligner
+	$(CC) train-hmmAligner.o HmmAligner.o FstUtils.o IbmModel1.o $(LIBS) -o train-hmmAligner
 
-train-hmmAligner.o: FstUtils.o HmmAligner.o train-hmmAligner.cc LearningInfo.h StringUtils.h
+train-hmmAligner.o: IbmModel1.o FstUtils.o HmmAligner.o train-hmmAligner.cc LearningInfo.h StringUtils.h
 	$(CC) $(BEFORE) $(SINGLE) train-hmmAligner.cc $(OPT)
 
 HmmAligner.o: FstUtils.o HmmAligner.cc HmmAligner.h LearningInfo.h StringUtils.h MultinomialParams.h

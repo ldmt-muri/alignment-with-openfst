@@ -2,6 +2,7 @@
 #include "FstUtils.h"
 #include "StringUtils.h"
 #include "HmmAligner.h"
+#include "IbmModel1.h"
 
 using namespace fst;
 using namespace std;
@@ -46,6 +47,19 @@ int main(int argc, char **argv) {
 
   // initialize the model
   HmmAligner model(bitextFilename, outputFilenamePrefix, learningInfo);
+
+  // initialize lexical translation probabilities with ibm model1
+  IbmModel1 model1(bitextFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN_STRING, model.vocabEncoder);
+  model1.Train();
+  MultinomialParams::ConditionalMultinomialParam<int>& model1Params = model1.params;
+  for(auto context = model1Params.params.begin(); context != model1Params.params.end(); context++){
+    for(auto decision = context->second.begin(); decision != context->second.end(); decision++){
+      // now update the hmmAligner translation params
+      model.tFractionalCounts[context->first][decision->first] = decision->second;
+    }
+  }
+  model.CreatePerSentGrammarFsts();
+  cerr << "ibm model1 initialization finished" << endl;
 
   // train model parameters
   model.Train();

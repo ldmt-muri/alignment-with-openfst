@@ -170,9 +170,7 @@ void HmmAligner::InitParams() {
     vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
     
     // we want to allow target words to align to NULL (which has srcTokenId = 1).
-    if(srcTokens[0] != NULL_SRC_TOKEN_ID) {
-      srcTokens.insert(srcTokens.begin(), NULL_SRC_TOKEN_ID);
-    }
+    assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
     
     // for each srcToken
     for(int i=0; i<srcTokens.size(); i++) {
@@ -183,35 +181,35 @@ void HmmAligner::InitParams() {
       map<int, double> &tParamsGivenS_i = tFractionalCounts[srcToken];
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
-	int tgtToken = tgtTokens[j];
-	// TODO: consider initializing these parameters with a uniform distribution instead of reflecting co-occurences. EM should figure it out on its own.
-	// if this the first time the pair(tgtToken, srcToken) is experienced, give it a value of 1 (i.e. prob = exp(-1) ~= 1/3)
-	if( tParamsGivenS_i.count(tgtToken) == 0) {
-	  tParamsGivenS_i[tgtToken] = FstUtils::nLog(1/3.0);
-	} else {
-	  // otherwise, add nLog(1/3) to the original value, effectively counting the number of times 
-	  // this srcToken-tgtToken pair appears in the corpus
-	  tParamsGivenS_i[tgtToken] = Plus( FstUtils::LogWeight(tParamsGivenS_i[tgtToken]), FstUtils::LogWeight(FstUtils::nLog(1/3.0)) ).Value();
-	}
-	tParamsGivenS_i[tgtToken] = fabs(gaussianSampler.Draw());
+        int tgtToken = tgtTokens[j];
+        // TODO: consider initializing these parameters with a uniform distribution instead of reflecting co-occurences. EM should figure it out on its own.
+        // if this the first time the pair(tgtToken, srcToken) is experienced, give it a value of 1 (i.e. prob = exp(-1) ~= 1/3)
+        if( tParamsGivenS_i.count(tgtToken) == 0) {
+          tParamsGivenS_i[tgtToken] = FstUtils::nLog(1/3.0);
+        } else {
+          // otherwise, add nLog(1/3) to the original value, effectively counting the number of times 
+          // this srcToken-tgtToken pair appears in the corpus
+          tParamsGivenS_i[tgtToken] = Plus( FstUtils::LogWeight(tParamsGivenS_i[tgtToken]), FstUtils::LogWeight(FstUtils::nLog(1/3.0)) ).Value();
+        }
+        tParamsGivenS_i[tgtToken] = fabs(gaussianSampler.Draw());
       }
-
+      
       // INITIALIZE ALIGNMENT PARAMETERS
       // TODO: It *might* be a good idea to initialize those parameters reflecting co-occurence statistics such that p(a=50|prev_a=30) < p(a=10|prev_a=30).
       //       EM should be able to figure it out on its own, though.
-      for(int k=-1; k<srcTokens.size(); k++) {
-      // assume that previous alignment = k, initialize p(i|k)
-	aFractionalCounts[k][i] = FstUtils::nLog(1/3.0);
-	aFractionalCounts[k][i] = gaussianSampler.Draw();
+      
+      for(int k=-1; k < (int)srcTokens.size(); k++) {
+        // assume that previous alignment = k, initialize p(i|k) ~ 1/(i-k-1)^2
+        double squaredDiff = (i-k-1)*(i-k-1)+0.1;
+        aFractionalCounts[k][i] = FstUtils::nLog(1.0/squaredDiff);
+
       }
-      // also initialize aFractionalCounts[-1][i]
-      aFractionalCounts[INITIAL_SRC_POS][i] = FstUtils::nLog(1/3.0);
-      aFractionalCounts[INITIAL_SRC_POS][i] = gaussianSampler.Draw();
     }
   }
-    
+  
   NormalizeFractionalCounts();
   DeepCopy(aFractionalCounts, aParams);
+
 }
 
 // make a deep copy of parameters
@@ -342,12 +340,12 @@ void HmmAligner::LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tg
     clock_t t05 = clock();
 
     // create src fsts (these encode the aParams as weights on their arcs)
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": create src fsts" << endl;
     }
     vector< VectorFst <FstUtils::LogQuadArc> > srcFsts;
     CreateSrcFsts(srcFsts);
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": created src fsts" << endl;
     }
 
@@ -356,7 +354,7 @@ void HmmAligner::LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tg
     
     // this vector will be used to accumulate fractional counts of parameter usages
     ClearFractionalCounts();
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.debugLevel >= DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": cleared fractional counts vector" << endl;
     }
     
@@ -459,7 +457,7 @@ void HmmAligner::LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tg
       }
     }
 
-    if(learningInfo.debugLevel == DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.debugLevel == DebugLevel::REDICULOUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": fractional counts collected from relevant sentences for this iteration." << endl;
     }
     
@@ -484,8 +482,8 @@ void HmmAligner::LearnParameters(vector< VectorFst< FstUtils::LogQuadArc > >& tg
 
     // persist parameters, if need be
     if( learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && 
-	learningInfo.iterationsCount != 0 &&
-	learningInfo.mpiWorld->rank() == 0) {
+        learningInfo.iterationsCount != 0 &&
+        learningInfo.mpiWorld->rank() == 0) {
       cerr << "persisting params:" << endl;
       stringstream filename;
       filename << outputPrefix << ".param." << learningInfo.iterationsCount;
@@ -603,7 +601,6 @@ void HmmAligner::AlignTestSet(const string &testBitextFilename, const string &ou
   for(unsigned sentId = 0; sentId < srcTestSents.size(); sentId++) {
     string alignmentsLine;
     vector< int > &srcTokens = srcTestSents[sentId], &tgtTokens = tgtTestSents[sentId];
-    //cerr << "sent #" << sentId << " |srcTokens| = " << srcTokens.size() << endl;
     alignmentsLine = AlignSent(srcTokens, tgtTokens);
     outputAlignments << alignmentsLine;
   }

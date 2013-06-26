@@ -57,47 +57,47 @@ namespace MultinomialParams {
       // y is the context (the thing we condition on). z is the multinomial variable whose values should sum to one. 
       // for each context
       for(typename map<ContextType, MultinomialParams::MultinomialParam >::iterator yIter = params.begin(); yIter != params.end(); yIter++) {
-	ContextType y_ = yIter->first;
-	double unnormalizedMarginalProbz_giveny_ = 0.0;
-	for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	  int z_ = zIter->first;
-	  double unnormalizedProbz_giveny_ = zIter->second;
-	  unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
-	}
-	if(unnormalizedMarginalProbz_giveny_ == 0 || std::isnan(unnormalizedMarginalProbz_giveny_) || std::isinf(unnormalizedMarginalProbz_giveny_)) {
-	  cerr << "Unable to normalize this multinomial distribution, with context " << y_ << ". The unnormalized marginal probability = " << unnormalizedMarginalProbz_giveny_ << endl;
-	} 
+        ContextType y_ = yIter->first;
+        double unnormalizedMarginalProbz_giveny_ = 0.0;
+        for(MultinomialParams::MultinomialParam::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+          int z_ = zIter->first;
+          double unnormalizedProbz_giveny_ = zIter->second;
+          unnormalizedMarginalProbz_giveny_ += unnormalizedProbz_giveny_;
+        }
+        if(unnormalizedMarginalProbz_giveny_ == 0 || std::isnan(unnormalizedMarginalProbz_giveny_) || std::isinf(unnormalizedMarginalProbz_giveny_)) {
+          cerr << "Unable to normalize this multinomial distribution, with context " << y_ << ". The unnormalized marginal probability = " << unnormalizedMarginalProbz_giveny_ << endl;
+        } 
 	// normalize the params with the same context to sum to one
-	for(MultinomialParams::MultinomialParam::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
-	  int z_ = zIter->first;
-	  // normalize prob(z|y)
-	  double normalizedProbz_giveny_ = zIter->second / unnormalizedMarginalProbz_giveny_;
-	  // take the nlog
-	  zIter->second =  nLog(normalizedProbz_giveny_);
-	}
+        for(MultinomialParams::MultinomialParam::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+          int z_ = zIter->first;
+          // normalize prob(z|y)
+          double normalizedProbz_giveny_ = zIter->second / unnormalizedMarginalProbz_giveny_;
+          // take the nlog
+          zIter->second =  nLog(normalizedProbz_giveny_);
+        }
       }
     }
-
+    
     void GaussianInit(double mean = 0.0, double std = 1.0) {
       GaussianSampler sampler(mean, std);
       for(typename std::map<ContextType, MultinomialParam>::iterator cIter = params.begin(); cIter != params.end(); cIter++) {
-	for(MultinomialParam::iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
-	  mIter->second = nExp(sampler.Draw());
-	}
+        for(MultinomialParam::iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
+          mIter->second = nExp(sampler.Draw());
+        }
       }
       ConvertUnnormalizedParamsIntoNormalizedNlogParams();
     }
-  
+    
     // refactor variable names here (e.g. translations)
     void PrintParams() {
       // iterate over src tokens in the model
       int counter = 0;
       for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-	const MultinomialParam &translations = (*srcIter).second;
-	// iterate over tgt tokens 
-	for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	  std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
-	}
+        const MultinomialParam &translations = (*srcIter).second;
+        // iterate over tgt tokens 
+        for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+          std::cerr << "-logp(" << (*tgtIter).first << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+        }
       } 
     }
     
@@ -106,18 +106,18 @@ namespace MultinomialParams {
       // iterate over src tokens in the model
       int counter = 0;
       for(typename std::map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
-	const MultinomialParam &translations = (*srcIter).second;
-	// iterate over tgt tokens 
-	for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-	  std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
-	}
+        const MultinomialParam &translations = (*srcIter).second;
+        // iterate over tgt tokens 
+        for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+          std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+        }
       } 
     }
     
   public:
     std::map<ContextType, MultinomialParam> params;
   };
-
+  
   static const int NLOG_SMOOTHING_CONSTANT = 1;
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
@@ -267,7 +267,7 @@ namespace MultinomialParams {
 
   inline double nLog(double prob) {
     if(prob <= 0) {
-      //      std::cerr << "ERROR: MultinomialParams::nLog(" << prob << ") is undefined. instead, I returned " << NLOG_ZERO << " and continued." << std::endl;
+      //std::cerr << "ERROR: MultinomialParams::nLog(" << prob << ") is undefined. instead, I returned " << NLOG_ZERO << " and continued." << std::endl;
       //      std::cerr << "$";
       return NLOG_ZERO;
     }
@@ -276,7 +276,7 @@ namespace MultinomialParams {
   
   inline double nExp(double exponent) {
     if(exponent <= NLOG_INF) {
-      //      std::cerr << "ERROR: MultinomialParams::nExp(" << exponent << ") is infinity. returned I returned exp(" << NLOG_INF << ") and continued." << std::endl;
+      //std::cerr << "ERROR: MultinomialParams::nExp(" << exponent << ") is infinity. returned I returned exp(" << NLOG_INF << ") and continued." << std::endl;
       //      std::cerr << "#";
       exponent = NLOG_INF;
     }
@@ -286,15 +286,16 @@ namespace MultinomialParams {
   // refactor variable names here (e.g. translations)
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
   template <typename ContextType>
-  void NormalizeParams(ConditionalMultinomialParam<ContextType>& params);
+    void NormalizeParams(ConditionalMultinomialParam<ContextType>& params, double symDirichletAlpha=1.0);
   
   // refactor variable names here (e.g. translations)
   // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
+  // for smoothing, use alpha > 1.0
+  // for sparsity, use alpha < 1.0
+  // for MLE, use alpha = 1.0
   template <typename ContextType>
-  void NormalizeParams(ConditionalMultinomialParam<ContextType> &params) {
-    // symmetric dirichlet prior concentration params
-    double alpha =0.0;
-
+    void NormalizeParams(ConditionalMultinomialParam<ContextType> &params, double symDirichletAlpha = 1.0) {
+    assert(symDirichletAlpha >= 1.0); // for smaller values, we should use variational bayes
     // iterate over src tokens in the model
     for(typename map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       MultinomialParam &translations = (*srcIter).second;
@@ -302,15 +303,19 @@ namespace MultinomialParams {
       // iterate over tgt tokens logsumming over the logprob(tgt|src) 
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
         double temp = (*tgtIter).second;
-        // add a dirichlet prior with concentration param = 1
-        fTotalProb += nExp(temp) + alpha;
-       
+        // MAP inference with dirichlet prior
+        fTotalProb += nExp(temp) + symDirichletAlpha - 1;
+      }
+      // hack to avoid nans
+      if(fTotalProb == 0.0){
+        fTotalProb = 1.0;
       }
       // exponentiate to find p(*|src) before normalization
       // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
       double fVerifyTotalProb = 0.0;
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-        double fUnnormalized = nExp((*tgtIter).second) + alpha;
+        // MAP inference with dirichlet prior
+        double fUnnormalized = nExp((*tgtIter).second) + symDirichletAlpha - 1;
         double fNormalized = fUnnormalized / fTotalProb;
         fVerifyTotalProb += fNormalized;
         double fLogNormalized = nLog(fNormalized);

@@ -106,18 +106,18 @@ class VocabEncoder {
   int Encode(const string& token, bool explicitUseUnk) {
     if(tokenToInt.count(token) == 0) {
       if(explicitUseUnk) {
-	return tokenToInt[UNK];
+        return tokenToInt[UNK];
       }	else {
-	tokenToInt[token] = nextId;
-	intToToken[nextId++] = token;
-	assert(nextId != INT_MAX);
-	return tokenToInt[token];
+        tokenToInt[token] = nextId;
+        intToToken[nextId++] = token;
+        assert(nextId != INT_MAX);
+        return tokenToInt[token];
       }
     } else {
       return tokenToInt[token];
     }
   }
-
+  
   int Encode(const string& token) {
     return Encode(token, useUnk);
   }

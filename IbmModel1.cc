@@ -19,7 +19,7 @@ IbmModel1::IbmModel1(const string& bitextFilename,
                      const string& outputFilenamePrefix, 
                      const LearningInfo& learningInfo) : vocabEncoder(bitextFilename) {
   
-  CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__token__");
+  CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__");
 }
 
 // initialize model 1 scores
@@ -32,13 +32,12 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
   this->outputPrefix = outputFilenamePrefix;
   this->learningInfo = learningInfo;
   
-  // read encoded training data 
+  // read encoded training data
+  vocabEncoder.useUnk = false;
+  NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN, false);
   vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());  
   assert(vocabEncoder.ConstEncode(NULL_SRC_TOKEN) != vocabEncoder.UnkInt());
-  
-  // at this point, you would expect NULL_SRC_TOKEN to already have an encoding in vocabEncoder
-  NULL_SRC_TOKEN_ID = vocabEncoder.ConstEncode(NULL_SRC_TOKEN);
   
   // initialize the model parameters
   cerr << "init model1 params" << endl;
