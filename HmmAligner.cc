@@ -144,8 +144,8 @@ void HmmAligner::CreateTgtFsts(vector< VectorFst< FstUtils::LogQuadArc > >& targ
   }
 }
 
-void HmmAligner::NormalizeFractionalCounts() {
-  MultinomialParams::NormalizeParams(aFractionalCounts);
+void HmmAligner::NormalizeFractionalCounts(double symDirichletAlpha = 1.0) {
+  MultinomialParams::NormalizeParams(aFractionalCounts, symDirichletAlpha);
   MultinomialParams::NormalizeParams(tFractionalCounts);
 }
 
