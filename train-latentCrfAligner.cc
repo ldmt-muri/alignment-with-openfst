@@ -64,7 +64,7 @@ void register_my_handler() {
 bool ParseParameters(int argc, char **argv, string &textFilename, 
   string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
   string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
-  unsigned &testsetSize, LearningInfo &learningInfo) {
+  LearningInfo &learningInfo) {
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -84,50 +84,51 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
-    (HELP, "produce help message")
-    (TRAIN_DATA, po::value<string>(&textFilename), "(filename) parallel data used for training the model")
-    (INIT_LAMBDA, po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
-    (INIT_THETA, po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
-    (WORDPAIR_FEATS, po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
-    (OUTPUT_PREFIX, po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
-    (TEST_SIZE, po::value<int>(&testsetSize), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
-    (FEAT, po::value< vector< int > >(&learningInfo.featureTemplates), "(multiple ints) specifies feature templates to be fired")
-    (L2_STRENGTH, po::value<double>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
-    (L1_STRENGTH, po::value<double>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
-    (MAX_ITER_COUNT, po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
-    (MIN_RELATIVE_DIFF, po::value<double>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.01), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
-    (MAX_LBFGS_ITER_COUNT, po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
-    (MAX_EM_ITER_COUNT, po::value<int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
+    (HELP.c_str(), "produce help message")
+    (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
+    (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
+    (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
+    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
+    (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
+     // deen=150 // czen=515 // fren=447;
+    (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
+    (FEAT.c_str(), po::value< vector< int > >(&learningInfo.featureTemplates), "(multiple ints) specifies feature templates to be fired")
+    (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
+    (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
+    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.01), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
+    (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     ;
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);    
+  po::notify(vm);
 
-  if (vm.count(HELP)) {
+  if (vm.count(HELP.c_str())) {
     cerr << desc << endl;
     return false;
   }
 
-  if (vm.count(TRAIN_DATA) == 0) {
+  if (vm.count(TRAIN_DATA.c_str()) == 0) {
     cerr << TRAIN_DATA << " option is mandatory" << endl;
     cerr << desc << endl;
     return false;
   }
   
-  if(vm[L2_STRENGTH].as<double>() > 0.0) {
+  if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
-  } else if (vm[L1_STRENGTH].as<double>() > 0.0) {
+  } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   }
   
   // validation
-  if(vm[L2_STRENGTH] < 0.0 || vm[L1_STRENGTH] < 0.0) {
-    cerr << "you can't give " << L2_STRENGTH << " nor " << L1_STRENGTH << 
+  if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || vm[L1_STRENGTH.c_str()].as<float>() < 0.0) {
+    cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 
       " negative values" << endl;
     cerr << desc << endl;
     return false;
-  } else if(vm[L2_STRENGTH] > 0.0 && vm[L1_STRENGTH] > 0.0) {
+  } else if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
     cerr << "you can't set both " << L2_STRENGTH << " AND " << L1_STRENGTH  << 
       ". sorry :-/" << endl;
     cerr << desc << endl;
@@ -267,7 +268,7 @@ int main(int argc, char **argv) {
 
   // hot configs
   learningInfo.allowNullAlignments = true;
-  learningInfo.firstKExamplesToLabel = testsetSize; // deen=150 // czen=515 // fren=447;
+  // learningInfo.firstKExamplesToLabel set by ParseParameters
   // learningInfo.emIterationsCount set by ParseParameters;
   learningInfo.nSentsPerDot = 250;
   //learningInfo.maxIterationsCount set by ParseParameters
@@ -282,10 +283,9 @@ int main(int argc, char **argv) {
 
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
-  unsigned testsetSize;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
-      testsetSize, learningInfo)){
+      learningInfo)){
     exit(1);
   }
 

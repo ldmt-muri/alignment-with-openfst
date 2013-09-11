@@ -11,7 +11,7 @@ train-latentCrfAligner: train-latentCrfAligner.o
 	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
 
 train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
-	$(CC) $(BEFORE) $(SINGLE) -I/opt/tools/boost_1_54_0/include/ train-latentCrfAligner.cc $(OPT)
+	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT)
 
 LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h LatentCrfAligner.cc
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfAligner.cc $(OPT)
