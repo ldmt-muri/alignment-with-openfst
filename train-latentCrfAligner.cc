@@ -61,21 +61,43 @@ void register_my_handler() {
   sigaction(SIGUSR2, &sigIntHandler, NULL);
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix, unsigned &testsetSize) {
+bool ParseParameters(int argc, char **argv, string &textFilename, 
+  string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
+  string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
+  unsigned &testsetSize, LearningInfo &learningInfo) {
   
-  string HELP = "help", TRAIN_DATA = "train-data", INIT_LAMBDA = "init-lambda", INIT_THETA = "init-theta", 
-    WORDPAIR_FEATS = "wordpair-feats", OUTPUT_PREFIX = "output-prefix", TEST_SIZE = "test_size";
-
+  string HELP = "help",
+    TRAIN_DATA = "train-data", 
+    INIT_LAMBDA = "init-lambda",
+    INIT_THETA = "init-theta", 
+    WORDPAIR_FEATS = "wordpair-feats",
+    OUTPUT_PREFIX = "output-prefix", 
+    TEST_SIZE = "test-size",
+    FEAT = "feat",
+    L2_STRENGTH = "l2-strength",
+    L1_STRENGTH = "l1-strength",
+    MAX_ITER_COUNT = "max-iter-count",
+    MIN_RELATIVE_DIFF = "min-relative-diff",
+    MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
+    MAX_EM_ITER_COUNT = "max-em-iter-count";
+    
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
-    ("help", "produce help message")
-    ("train-data", po::value<string>(), "(filename) parallel data used for training the model")
-    ("init-lambda", po::value<string>(), "(filename) initial weights of lambda parameters")
-    ("init-theta", po::value<string>(), "(filename) initial weights of theta parameters")
-    ("wordpair-feats", po::value<string>(), "(filename) features defined for pairs of source-target word pairs")
-    ("output-prefix", po::value<string>(), "(filename prefix) all filenames written by this program will have this prefix")
-    ("test-size", po::value<int>(), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
+    (HELP, "produce help message")
+    (TRAIN_DATA, po::value<string>(&textFilename), "(filename) parallel data used for training the model")
+    (INIT_LAMBDA, po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
+    (INIT_THETA, po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
+    (WORDPAIR_FEATS, po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
+    (OUTPUT_PREFIX, po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
+    (TEST_SIZE, po::value<int>(&testsetSize), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
+    (FEAT, po::value< vector< int > >(&learningInfo.featureTemplates), "(multiple ints) specifies feature templates to be fired")
+    (L2_STRENGTH, po::value<double>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
+    (L1_STRENGTH, po::value<double>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
+    (MAX_ITER_COUNT, po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MIN_RELATIVE_DIFF, po::value<double>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.01), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (MAX_LBFGS_ITER_COUNT, po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
+    (MAX_EM_ITER_COUNT, po::value<int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     ;
 
   po::variables_map vm;
@@ -83,34 +105,36 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &initia
   po::notify(vm);    
 
   if (vm.count(HELP)) {
-    cout << desc << "\n";
-    return;
+    cerr << desc << endl;
+    return false;
   }
 
   if (vm.count(TRAIN_DATA) == 0) {
     cerr << TRAIN_DATA << " option is mandatory" << endl;
     cerr << desc << endl;
-    return;
+    return false;
   }
-
-  if(vm.count(TRAIN_DATA) == 1) {
-    textFilename = vm[TRAIN_DATA].as<string>();
+  
+  if(vm[L2_STRENGTH].as<double>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
+  } else if (vm[L1_STRENGTH].as<double>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   }
-  if(vm.count(INIT_LAMBDA) == 1) {
-    initialLambdaParamsFilename = vm[INIT_LAMBDA].as<string>();
+  
+  // validation
+  if(vm[L2_STRENGTH] < 0.0 || vm[L1_STRENGTH] < 0.0) {
+    cerr << "you can't give " << L2_STRENGTH << " nor " << L1_STRENGTH << 
+      " negative values" << endl;
+    cerr << desc << endl;
+    return false;
+  } else if(vm[L2_STRENGTH] > 0.0 && vm[L1_STRENGTH] > 0.0) {
+    cerr << "you can't set both " << L2_STRENGTH << " AND " << L1_STRENGTH  << 
+      ". sorry :-/" << endl;
+    cerr << desc << endl;
+    return false;
   }
-  if(vm.count(INIT_THETA) == 1) {
-    initialThetaParamsFilename = vm[INIT_THETA].as<string>();
-  }
-  if(vm.count(WORDPAIR_FEATS) == 1){
-    wordPairFeaturesFilename = vm[WORDPAIR_FEATS].as<string>();
-  }
-  if(vm.count(OUTPUT_PREFIX) == 1) {
-    outputFilenamePrefix = vm[OUTPUT_PREFIX].as<string>();
-  }
-  if(vm.count(TEST_SIZE) == 1){
-    testsetSize = vm[TEST_SIZE].as<int>();
-  }
+  
+  return true;
 }
 
 // returns the rank of the process which have found the best HMM parameters
@@ -133,7 +157,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 15;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.01;
+  // learningInfo.minLikelihoodRelativeDiff set by ParseParameters;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterNIteration = 10;
@@ -193,17 +217,11 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": parsing arguments...";
   }
-  string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
-  unsigned testsetSize;
-  ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, testsetSize);
-  if(textFilename.empty()){
-    return 1;
-  }
+  LearningInfo learningInfo;
   if(world.rank() == 0) {
     cerr << "done." << endl;
   }
 
-  unsigned NUMBER_OF_LABELS = 45;
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -214,15 +232,14 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": setting configurations...";
   }
-  LearningInfo learningInfo;
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.mpiWorld = &world;
-  learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.useMinLikelihoodDiff = false;
   learningInfo.minLikelihoodDiff = 2;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.01;
+  //learningInfo.minLikelihoodRelativeDiff set by ParseParameters
   learningInfo.useSparseVectors = true;
   learningInfo.zIDependsOnYIM1 = false;
   learningInfo.persistParamsAfterNIteration = 1;
@@ -231,10 +248,8 @@ int main(int argc, char **argv) {
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
-  learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 1.0;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 4;
+  // learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations set by ParseParameters
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
   //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
@@ -253,9 +268,9 @@ int main(int argc, char **argv) {
   // hot configs
   learningInfo.allowNullAlignments = true;
   learningInfo.firstKExamplesToLabel = testsetSize; // deen=150 // czen=515 // fren=447;
-  learningInfo.emIterationsCount = 2;
+  // learningInfo.emIterationsCount set by ParseParameters;
   learningInfo.nSentsPerDot = 250;
-  learningInfo.maxIterationsCount = 50;
+  //learningInfo.maxIterationsCount set by ParseParameters
 
   learningInfo.initializeThetasWithGaussian = false;
   learningInfo.initializeThetasWithUniform = false;
@@ -264,6 +279,15 @@ int main(int argc, char **argv) {
   learningInfo.initializeLambdasWithGaussian = false;
   learningInfo.initializeLambdasWithZero = true;
   learningInfo.initializeLambdasWithOne = false;
+
+  // parse cmd params
+  string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
+  unsigned testsetSize;
+  if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
+      initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
+      testsetSize, learningInfo)){
+    exit(1);
+  }
 
   // add constraints
   learningInfo.constraints.clear();

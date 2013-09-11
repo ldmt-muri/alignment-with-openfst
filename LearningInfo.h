@@ -334,6 +334,9 @@ class LearningInfo {
   // [tgtToken][srcToken]
   std::map<int, std::map<int, float> > *ibm1BackwardLogProbs;
 
+  // list of feature templates to be fired
+  std::vector<int> featureTemplates;
+  
   // 0 = no debug info. 
   // 1 = corpus level debug info.
   // 2 = mini-batch level debug info.

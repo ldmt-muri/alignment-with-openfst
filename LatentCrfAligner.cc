@@ -119,17 +119,26 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   for(int i = 51; i < 100; i++) {
     enabledFeatureTypes.push_back(false);
   }
+  for(auto templateId = learningInfo.featureTemplates.begin();
+      templateId != learningInfo.featureTemplates.end();
+      templateId++) {
+    enabledFeatureTypes[*templateId] = true;
+  }
+   
+  // TODO-REFACTOR: use indicative strings to refer to feature templates instead of those cryptic int ids
+  /*
   enabledFeatureTypes[101] = true;  // (bool) // id = y_i-y_{i-1} 
   enabledFeatureTypes[102] = true;  // (bool) // id = floor( ln(y_i - y_{i-1}) )
   enabledFeatureTypes[103] = true;  // (bool) // id = tgt[i] aligns_to src[y_i]
-  enabledFeatureTypes[104] = true;  // precomputed features (src-tgt word pair), including model1.   this is the features chris used in his 2011 paper with Gimpel
+  enabledFeatureTypes[104] = false;  // precomputed features (src-tgt word pair), including model1.   this is the features chris used in his 2011 paper with Gimpel
   enabledFeatureTypes[105] = true;  // (bool) // id = y_i - y_{i-1} captures the intuition that certain jump distances are more common than others
   enabledFeatureTypes[106] = true;  // (bool) // id = src[y_{i-1}]:src[y_{i}]  captures the intuition that certain src side transitions are more common than others
   enabledFeatureTypes[107] = true;  // (real) // value = |y_i/len(src) - i/len(tgt)| the positional features used by dyer in several WA papers
   enabledFeatureTypes[108] = true;  // (bool) // value = I( i==0 && y_i==0 )
-                                    // (bool) // value = I( i==len(tgt) && y_i==len(src) ) captures the intuition that the first and last word in the target sentence usually aligns to the first and last word in the src sentence, respectively.
+                                    // (bool) // value = I( i==len(tgt) && y_i==len(src) ) captures the intuition that the first and last word in the target sentence usually aligns to the first and last word in the src sentence, respectively.  
   enabledFeatureTypes[109] = true;
-
+  */
+  
   // initialize (and normalize) the log theta params to gaussians
   if(initialThetaParamsFilename.size() == 0) {
     InitTheta();
