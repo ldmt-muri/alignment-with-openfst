@@ -1,9 +1,8 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lcmph
+LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lboost_program_options -lcmph
 OPT=-O3 -g
-INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
 
 all: train-latentCrfAligner
 
@@ -12,7 +11,7 @@ train-latentCrfAligner: train-latentCrfAligner.o
 	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfAligner
 
 train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
-	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT)
+	$(CC) $(BEFORE) $(SINGLE) -I/opt/tools/boost_1_54_0/include/ train-latentCrfAligner.cc $(OPT)
 
 LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h LatentCrfAligner.cc
 	$(CC) $(BEFORE) $(SINGLE) LatentCrfAligner.cc $(OPT)

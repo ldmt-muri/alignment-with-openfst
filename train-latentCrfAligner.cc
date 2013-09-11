@@ -6,6 +6,7 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
+#include <boost/program_options.hpp>
 
 #include "LatentCrfAligner.h"
 #include "IbmModel1.h"
@@ -13,6 +14,7 @@
 using namespace fst;
 using namespace std;
 namespace mpi = boost::mpi;
+namespace po = boost::program_options;
 
 typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
 
@@ -60,25 +62,55 @@ void register_my_handler() {
 }
 
 void ParseParameters(int argc, char **argv, string &textFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, string &wordPairFeaturesFilename, string &outputFilenamePrefix, unsigned &testsetSize) {
-  assert(argc == 7);
-  textFilename = argv[1];
-  initialLambdaParamsFilename = argv[2];
-  if(initialLambdaParamsFilename == "none") {
-    initialLambdaParamsFilename.clear();
-  }
-  initialThetaParamsFilename = argv[3];
-  if(initialThetaParamsFilename == "none") {
-    initialThetaParamsFilename.clear();
-  }
-  wordPairFeaturesFilename = argv[4];
-  if(wordPairFeaturesFilename == "none") {
-    wordPairFeaturesFilename.clear();
-  }
-  outputFilenamePrefix = argv[5];
+  
+  string HELP = "help", TRAIN_DATA = "train-data", INIT_LAMBDA = "init-lambda", INIT_THETA = "init-theta", 
+    WORDPAIR_FEATS = "wordpair-feats", OUTPUT_PREFIX = "output-prefix", TEST_SIZE = "test_size";
 
-  stringstream testsetSizeSS;
-  testsetSizeSS << argv[6];
-  testsetSizeSS >> testsetSize;
+  // Declare the supported options.
+  po::options_description desc("train-latentCrfAligner options");
+  desc.add_options()
+    ("help", "produce help message")
+    ("train-data", po::value<string>(), "(filename) parallel data used for training the model")
+    ("init-lambda", po::value<string>(), "(filename) initial weights of lambda parameters")
+    ("init-theta", po::value<string>(), "(filename) initial weights of theta parameters")
+    ("wordpair-feats", po::value<string>(), "(filename) features defined for pairs of source-target word pairs")
+    ("output-prefix", po::value<string>(), "(filename prefix) all filenames written by this program will have this prefix")
+    ("test-size", po::value<int>(), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
+    ;
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);    
+
+  if (vm.count(HELP)) {
+    cout << desc << "\n";
+    return;
+  }
+
+  if (vm.count(TRAIN_DATA) == 0) {
+    cerr << TRAIN_DATA << " option is mandatory" << endl;
+    cerr << desc << endl;
+    return;
+  }
+
+  if(vm.count(TRAIN_DATA) == 1) {
+    textFilename = vm[TRAIN_DATA].as<string>();
+  }
+  if(vm.count(INIT_LAMBDA) == 1) {
+    initialLambdaParamsFilename = vm[INIT_LAMBDA].as<string>();
+  }
+  if(vm.count(INIT_THETA) == 1) {
+    initialThetaParamsFilename = vm[INIT_THETA].as<string>();
+  }
+  if(vm.count(WORDPAIR_FEATS) == 1){
+    wordPairFeaturesFilename = vm[WORDPAIR_FEATS].as<string>();
+  }
+  if(vm.count(OUTPUT_PREFIX) == 1) {
+    outputFilenamePrefix = vm[OUTPUT_PREFIX].as<string>();
+  }
+  if(vm.count(TEST_SIZE) == 1){
+    testsetSize = vm[TEST_SIZE].as<int>();
+  }
 }
 
 // returns the rank of the process which have found the best HMM parameters
@@ -164,6 +196,9 @@ int main(int argc, char **argv) {
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
   unsigned testsetSize;
   ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, testsetSize);
+  if(textFilename.empty()){
+    return 1;
+  }
   if(world.rank() == 0) {
     cerr << "done." << endl;
   }
@@ -184,8 +219,8 @@ int main(int argc, char **argv) {
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.mpiWorld = &world;
-  //  learningInfo.useMinLikelihoodDiff = true;
-  //  learningInfo.minLikelihoodDiff = 10;
+  learningInfo.useMinLikelihoodDiff = true;
+  learningInfo.minLikelihoodDiff = 2;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
