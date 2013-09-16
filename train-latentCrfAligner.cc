@@ -116,6 +116,12 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     return false;
   }
   
+  if (vm.count(FEAT.c_str()) == 0) {
+    cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
+    int srcTgtWordPairIdentitiesFeatureTemplateId = 103;
+    vm[FEAT.c_str()].as< vector< int > >().push_back(srcTgtWordPairIdentitiesFeatureTemplateId);
+  }
+
   if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
