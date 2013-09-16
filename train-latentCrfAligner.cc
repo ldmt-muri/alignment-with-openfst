@@ -79,7 +79,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MAX_ITER_COUNT = "max-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
-    MAX_EM_ITER_COUNT = "max-em-iter-count";
+    MAX_EM_ITER_COUNT = "max-em-iter-count",
+    NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels";
     
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -99,7 +100,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.01), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
-    ;
+    (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
+  ;
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -126,6 +128,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  }
+
+  if(vm.count(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str())) {
+    learningInfo.hiddenSequenceIsMarkovian = false;
   }
   
   // validation
