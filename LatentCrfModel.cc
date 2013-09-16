@@ -118,45 +118,60 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
     yIToState.clear();
     // from each state reached in the previous timestep
     for(map<int, int>::const_iterator prevStateIter = yIM1ToState.begin();
-	prevStateIter != yIM1ToState.end();
-	prevStateIter++) {
+        prevStateIter != yIM1ToState.end();
+        prevStateIter++) {
 
       int fromState = prevStateIter->second;
       int yIM1 = prevStateIter->first;
       // to each possible value of y_i
       for(set<int>::const_iterator yDomainIter = yDomain.begin();
-	  yDomainIter != yDomain.end();
-	  yDomainIter++) {
+          yDomainIter != yDomain.end();
+          yDomainIter++) {
 
-	int yI = *yDomainIter;
+        int yI = *yDomainIter;
 	
-	// skip special classes
-	if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == LatentCrfModel::END_OF_SENTENCE_Y_VALUE) {
-	  continue;
-	}
+        // skip special classes
+        if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == LatentCrfModel::END_OF_SENTENCE_Y_VALUE) {
+          continue;
+      	}
 
-	// compute h(y_i, y_{i-1}, x, i)
-	FastSparseVector<double> h;
-	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
-	// compute the weight of this transition:
-	// \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
-	double nLambdaH = -1.0 * lambda->DotProduct(h);
-	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
-	int toState;
-	if(yIToState.count(yI) == 0) {
-	  toState = fst.AddState();
-	  yIToState[yI] = toState;
-	  // is it a final state?
-	  if(i == x.size() - 1) {
-	    fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
-	  }
-	} else {
-	  toState = yIToState[yI];
-	}
-	// now add the arc
-	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, nLambdaH, toState));
+        // compute h(y_i, y_{i-1}, x, i)
+        FastSparseVector<double> h;
+      	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+        // compute the weight of this transition:
+        // \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
+        double nLambdaH = -1.0 * lambda->DotProduct(h);
+        // determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
+        int toState;
+        if(yIToState.count(yI) == 0) {
+          toState = fst.AddState();
+          // separate state for each previous label?
+          if(learningInfo.hiddenSequenceIsMarkovian) {
+            yIToState[yI] = toState;
+          } else {
+            // same state for all labels used for previous observation
+            for(set<int>::const_iterator yDomainIter2 = yDomain.begin();
+                yDomainIter2 != yDomain.end();
+                yDomainIter2++) {
+              yIToState[*yDomainIter2] = toState;
+            }
+          }
+          // is it a final state?
+          if(i == x.size() - 1) {
+            fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
+          }
+        } else {
+      	  toState = yIToState[yI];
+        }
+        
+        // now add the arc
+        fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, nLambdaH, toState));
       } 
-   }
+   
+      if(!learningInfo.hiddenSequenceIsMarkovian) {
+        break;
+      }
+    }
     // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
     yIM1ToState = yIToState;
   }  
@@ -588,54 +603,70 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
     yIToState.clear();
     // from each state reached in the previous timestep
     for(map<int, int>::const_iterator prevStateIter = yIM1ToState.begin();
-	prevStateIter != yIM1ToState.end();
-	prevStateIter++) {
+      	prevStateIter != yIM1ToState.end();
+        prevStateIter++) {
 
       int fromState = prevStateIter->second;
       int yIM1 = prevStateIter->first;
       // to each possible value of y_i
       for(set<int>::const_iterator yDomainIter = yDomain.begin();
-	  yDomainIter != yDomain.end();
-	  yDomainIter++) {
+          yDomainIter != yDomain.end();
+          yDomainIter++) {
 
-	int yI = *yDomainIter;
+        int yI = *yDomainIter;
 
-	// skip special classes
-	if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
-	  continue;
-	}
+        // skip special classes
+        if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+          continue;
+        }
 
-	// compute h(y_i, y_{i-1}, x, i)
-	FastSparseVector<double> h;
-	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+      	// compute h(y_i, y_{i-1}, x, i)
+        FastSparseVector<double> h;
+        FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
 
-	// prepare -log \theta_{z_i|y_i}
-	int zI = z[i];
+        // prepare -log \theta_{z_i|y_i}
+        int zI = z[i];
 	
-	double nLogTheta_zI_y = GetNLogTheta(yIM1, yI, zI, sentId);
-	assert(!std::isnan(nLogTheta_zI_y) && !std::isinf(nLogTheta_zI_y));
+        double nLogTheta_zI_y = GetNLogTheta(yIM1, yI, zI, sentId);
+        assert(!std::isnan(nLogTheta_zI_y) && !std::isinf(nLogTheta_zI_y));
 
-	// compute the weight of this transition: \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representatio
-	double nLambdaH = -1.0 * lambda->DotProduct(h);
-	assert(!std::isnan(nLambdaH) && !std::isinf(nLambdaH));
-	double weight = nLambdaH + nLogTheta_zI_y;
-	assert(!std::isnan(weight) && !std::isinf(weight));
+        // compute the weight of this transition: \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representatio
+        double nLambdaH = -1.0 * lambda->DotProduct(h);
+        assert(!std::isnan(nLambdaH) && !std::isinf(nLambdaH));
+        double weight = nLambdaH + nLogTheta_zI_y;
+      	assert(!std::isnan(weight) && !std::isinf(weight));
 
-	// determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
-	int toState;	
-	if(yIToState.count(yI) == 0) {
-	  toState = fst.AddState();
-	  yIToState[yI] = toState;
-	  // is it a final state?
-	  if(i == x.size() - 1) {
-	    fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
-	  }
-	} else {
-	  toState = yIToState[yI];
-	}
-	// now add the arc
-	fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));
-	//	cerr << "from " << fromState << " to " << toState << " nLambdaH = " << nLambdaH << ", nLogTheta_zI_y = " << nLogTheta_zI_y << endl;
+        // determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
+        int toState;
+        if(yIToState.count(yI) == 0) {
+          toState = fst.AddState();
+          // when each variable in the hidden sequence directly depends on the previous one:
+          if(learningInfo.hiddenSequenceIsMarkovian) {
+            yIToState[yI] = toState;
+          } else {
+            // when variables in the hidden sequence are independent given observed sequence x:
+            for(set<int>::const_iterator yDomainIter2 = yDomain.begin();
+                yDomainIter2 != yDomain.end();
+                yDomainIter2++) {
+              yIToState[*yDomainIter2] = toState;
+            }
+          }
+          // is it a final state?
+          if(i == x.size() - 1) {
+            fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
+          }
+      	} else {
+          toState = yIToState[yI];
+        }
+        // now add the arc
+        fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));
+        //	cerr << "from " << fromState << " to " << toState << " nLambdaH = " << nLambdaH << ", nLogTheta_zI_y = " << nLogTheta_zI_y << endl;
+     
+      }
+      
+      // if hidden labels are independent given observation, then there's only one unique state in the previous timestamp
+      if(!learningInfo.hiddenSequenceIsMarkovian) {
+        break;
       }
     }
   

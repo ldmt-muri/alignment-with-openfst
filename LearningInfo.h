@@ -220,6 +220,7 @@ class LearningInfo {
     initializeThetasWithUniform = false;
     allowNullAlignments = true;
     maxSequenceLength = 40;
+    hiddenSequenceIsMarkovian = true;
   }
 
   bool IsModelConverged() {
@@ -396,6 +397,8 @@ class LearningInfo {
   bool allowNullAlignments;
 
   unsigned maxSequenceLength;
+  
+  bool hiddenSequenceIsMarkovian;
 };
 
 
