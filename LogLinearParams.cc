@@ -114,6 +114,13 @@ bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
     if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank #" << learningInfo->mpiWorld->rank() << ": paramId is new.\n";
     }
+    
+    // 
+    if(learningInfo->iterationsCount > 0) {
+      cerr << "ERRORRRRRRRRR " << learningInfo->mpiWorld->rank() << ": adding feature id " << paramId << " in iteration # " << learningInfo->iterationsCount << endl;
+      exit(1);
+    }
+
     // check class's integrity
     assert(paramIndexes.size() == paramWeights.size());
     assert(paramIndexes.size() == oldParamWeights.size());
@@ -139,9 +146,9 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   // debug info
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "executing FireFeatures(yI=" << yI << ", yIM1=" << yIM1 << ", x_t.size()=" << x_t.size() \
-	 << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE \
-	 << ", FIRST_POS=" << FIRST_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
-	 << ", activeFeatures.size()=" << activeFeatures.size() << endl;
+         << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE \
+         << ", FIRST_POS=" << FIRST_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
+         << ", activeFeatures.size()=" << activeFeatures.size() << endl;
   }
 
   stringstream temp;
@@ -149,10 +156,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   // first, yI and yIM1 are not zero-based. LatentCrfAligner::FIRST_POS maps to the first position in the src sentence (this means the null token, if null alignments are enabled, or the first token in the src sent). 
   yI -= FIRST_POS;
   yIM1 -= FIRST_POS;
-  
-  // the encoder/decoder used for referencing precomputed feature
-  
-  
+      
   // find the src token aligned according to x_t_i
   assert(yI < (int)x_s.size());
   assert(yIM1 < (int)x_s.size()); 
@@ -161,7 +165,25 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   int srcToken = x_s[yI];
   int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
   int tgtToken = x_t[i];
+  int prevTgtToken = i > 0? x_t[i-1] : -1;
+  int nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : -1;
 
+  AlignerFactorId factorId;
+  if(learningInfo->cacheActiveFeatures) {
+    factorId.yI = yI;
+    factorId.yIM1 = yIM1;
+    factorId.i = i;
+    factorId.srcWord = srcToken;
+    factorId.prevSrcWord = prevSrcToken;
+    factorId.tgtWord = tgtToken;
+    factorId.prevTgtWord = prevTgtToken;
+    factorId.nextTgtWord = nextTgtToken;
+    if(factorIdToFeatures.count(factorId) == 1) {
+      activeFeatures = factorIdToFeatures[factorId];
+      return;
+    }
+  }
+      
   // F101: I( y_i-y_{i-1} == 0 )
   if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
     temp.str("");
@@ -252,6 +274,28 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   if(enabledFeatureTypes.size() > 109 && enabledFeatureTypes[109]) {
     AddParam("F109");
     activeFeatures[paramIndexes["F109"]] += i;
+  }
+
+  // F110: I( tgt[i-1] aligns_to src[y_i] ) 
+  if(enabledFeatureTypes.size() > 110 && enabledFeatureTypes[110]) {
+    temp.str("");
+    temp << "F110:" << srcToken << ":" << prevTgtToken;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
+  
+  // F111: I( tgt[i+1] aligns_to src[y_i] ) 
+  if(enabledFeatureTypes.size() > 111 && enabledFeatureTypes[111]) {
+    temp.str("");
+    temp << "F111:" << srcToken << ":" << nextTgtToken;
+    AddParam(temp.str());
+    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+  }
+
+  // save the active features in the cache
+  if(learningInfo->cacheActiveFeatures) {
+    assert(factorIdToFeatures.count(factorId) == 0);
+    factorIdToFeatures[factorId] = activeFeatures;
   }
 }
 

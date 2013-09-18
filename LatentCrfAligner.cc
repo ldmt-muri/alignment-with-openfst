@@ -136,8 +136,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   enabledFeatureTypes[107] = true;  // (real) // value = |y_i/len(src) - i/len(tgt)| the positional features used by dyer in several WA papers
   enabledFeatureTypes[108] = true;  // (bool) // value = I( i==0 && y_i==0 )
                                     // (bool) // value = I( i==len(tgt) && y_i==len(src) ) captures the intuition that the first and last word in the target sentence usually aligns to the first and last word in the src sentence, respectively.  
-  enabledFeatureTypes[109] = true;
-  */
+  enabledFeatureTypes[109] = true; // dummy features for debugging purposes
+   */
   
   // initialize (and normalize) the log theta params to gaussians
   if(initialThetaParamsFilename.size() == 0) {
@@ -261,7 +261,7 @@ void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<i
   fst::VectorFst<FstUtils::LogArc> fst;
   std::vector<FstUtils::LogWeight> alphas, betas;
   BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
-  
+
   // map to the tropical semiring which enjoys the path property (in order to find the best alignment)
   fst::VectorFst<FstUtils::StdArc> pathFst, shortestPathFst;
   fst::ArcMap(fst, &pathFst, FstUtils::LogToTropicalMapper());

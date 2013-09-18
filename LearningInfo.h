@@ -221,6 +221,7 @@ class LearningInfo {
     allowNullAlignments = true;
     maxSequenceLength = 40;
     hiddenSequenceIsMarkovian = true;
+    cacheActiveFeatures = false;
   }
 
   bool IsModelConverged() {
@@ -399,6 +400,8 @@ class LearningInfo {
   unsigned maxSequenceLength;
   
   bool hiddenSequenceIsMarkovian;
+
+  bool cacheActiveFeatures;
 };
 
 

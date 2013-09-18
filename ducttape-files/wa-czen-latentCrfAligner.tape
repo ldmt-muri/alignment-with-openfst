@@ -1,37 +1,35 @@
-
-task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix procs=$procs data_file=$data_file dir=$fwd > fwd_align out_err="fwd-out.err" {
-  pushd /usr0/home/wammar/alignment-with-openfst/
-  # compile
-  make -f Makefile-latentCrfAligner
-  popd
-
-  # use cdec to generate word pair features for a partiu7clar test set
+task wordpair_feats_fwd :: data_file=$data_file dir=$fwd > wordpair_feats_file {
+  # use cdec to generate word pair features for a partiuclar test set
   ~/cdec/word-aligner/aligner.pl --mkcls=/mal0/tools/mosesdecoder/bin/mkcls $data_file
   pushd talign
   make generate-wordpair-features
   gzip -d grammars/wordpairs.f-e.features.gz
   popd
-  echo "$dir-talign"
   mv talign "$dir-talign"
 
+  cp "$dir-talign/grammars/wordpairs.f-e.features" wordpair_feats_file
+} 
+
+task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix procs=$procs data_file=$data_file dir=$fwd < wordpair_feats_file=$wordpair_feats_file@wordpair_feats_fwd > fwd_align out_err="fwd-out.err" {
+
+  pushd /usr0/home/wammar/alignment-with-openfst/
+  # compile
+  make -f Makefile-latentCrfAligner
+  popd
+
   # the latent-CRF word alignment model
-  echo "$dir-talign/grammars/wordpairs.f-e.features"
-  echo "$prefix-fwd"
   mpirun -np $procs /usr0/home/wammar/alignment-with-openfst/train-latentCrfAligner \
-    $data_file \
-    none none \
-    "$dir-talign/grammars/wordpairs.f-e.features" \
-    "$prefix-fwd" \
-    $test_sents_count \
-    2> $out_err
+  --train-data $data_file \
+  --output-prefix "$prefix-fwd" \
+  --feat 101 --feat 102 --feat 103 --feat 104 --feat 105 --feat 106 --feat 107 --feat 108 \
+  --wordpair-feats $wordpair_feats_file \
+  --test-size $test_sents_count \
+  2> $out_err
 
-  echo "$prefix-fwd.labels"
   cp "$prefix-fwd.labels" $fwd_align
-
-  # example/wa-czen-latentCrfAligner-1k-lambda example/wa-czen-latentCrfAligner-1k-theta
 }
 
-task autoencoder_bwd_align :: test_sents_count=$test_sents_count prefix=$prefix procs=$procs data_file=$bwd_data_file dir=$bwd > bwd_align out_err="bwd-out.err" {
+task autoencoder_zbwd_align :: test_sents_count=$test_sents_count prefix=$prefix procs=$procs data_file=$bwd_data_file dir=$bwd > bwd_align out_err="bwd-out.err" {
   pushd /usr0/home/wammar/alignment-with-openfst/
   # compile
   make -f Makefile-latentCrfAligner
@@ -47,19 +45,20 @@ task autoencoder_bwd_align :: test_sents_count=$test_sents_count prefix=$prefix 
 
   # the latent-CRF word alignment model
   mpirun -np $procs /usr0/home/wammar/alignment-with-openfst/train-latentCrfAligner \
-    $data_file \
-    none none \
-    "$dir-talign/grammars/wordpairs.f-e.features" \
-    "$prefix-bwd" \
-    $test_sents_count \
-    2> $out_err
+  --train-data $data_file \
+  --output-prefix "$prefix-bwd" \
+  --feat 102 --feat 103 --feat 104 --feat 105 --feat 106 --feat 107 --feat 108 --feat 109 \
+  --wordpair-feats "$dir-talign/grammars/wordpairs.f-e.features" \
+  --test-size $test_sents_count \
+  --no-direct-dep-btw-hidden-labels \
+  2> $out_err
 
   cp "$prefix-bwd.labels" $bwd_align
 
   # example/wa-czen-latentCrfAligner-1k-lambda example/wa-czen-latentCrfAligner-1k-theta
 }
 
-task autoencoder_align :: data_file=$data_file < fwd_align=$fwd_align@autoencoder_fwd_align bwd_align=$bwd_align@autoencoder_bwd_align > sym_align {
+task autoencoder_align :: data_file=$data_file < fwd_align=$fwd_align@autoencoder_fwd_align bwd_align=$bwd_align@autoencoder_zbwd_align > sym_align {
   /usr0/home/wammar/cdec/utils/atools -i $fwd_align -j $bwd_align -c grow-diag-final-and > $sym_align
 }
 
@@ -103,14 +102,14 @@ task tune_mira :: procs=$procs < dev_sgm=$dev_sgm@train_cdec test_sgm=$test_sgm@
 global {
   eval_script=/usr0/home/wammar/alignment-with-openfst/data/czen-manual-alignments/eval-czen.pl
   gold_file=/usr0/home/wammar/alignment-with-openfst/data/czen-manual-alignments/czen.wal
-  mono_file=/usr0/home/wammar/alignment-with-openfst/data/10k.cz-en.en
-  data_file=/usr0/home/wammar/alignment-with-openfst/data/10k.cz-en
-  bwd_data_file=/usr0/home/wammar/alignment-with-openfst/data/10k.en-cz
-  dev_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en
-  test_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en
-  prefix=10k
+  mono_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en.en
+  data_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en
+  bwd_data_file=/usr0/home/wammar/alignment-with-openfst/data/1k.en-cz
+  dev_file=/usr0/home/wammar/alignment-with-openfst/data/dev.cz-en
+  test_file=/usr0/home/wammar/alignment-with-openfst/data/test.cz-en
+  prefix=1k
   cdec_ini_file=/usr0/home/wammar/alignment-with-openfst/ducttape-files/cdec.ini
-  procs=32
+  procs=22
   src=cz
   tgt=en
   fwd=cz-en

@@ -80,8 +80,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
-    NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels";
-    
+    NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
+    CACHE_FEATS = "cache-feats";
+
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
@@ -101,6 +102,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
+    (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(true), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
   ;
 
   po::variables_map vm;
@@ -121,7 +123,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   if (vm.count(FEAT.c_str()) == 0) {
     cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
     int srcTgtWordPairIdentitiesFeatureTemplateId = 103;
-    vm[FEAT.c_str()].as< vector< int > >().push_back(srcTgtWordPairIdentitiesFeatureTemplateId);
+    learningInfo.featureTemplates.push_back(srcTgtWordPairIdentitiesFeatureTemplateId);
   }
 
   if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
@@ -323,6 +325,7 @@ int main(int argc, char **argv) {
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);
 
+  /*
   string ibm1PrecomputedFeatureId = "_ibm1";
   for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
       contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
@@ -333,6 +336,7 @@ int main(int argc, char **argv) {
       latentCrfAligner.lambda->AddToPrecomputedFeaturesWith2Inputs(contextIter->first, probIter->first, ibm1PrecomputedFeatureId, probIter->second);
     }
   }
+  */
 
   // unsupervised training of the model
   model->Train();

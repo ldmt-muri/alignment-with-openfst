@@ -94,6 +94,10 @@ public:
   }
 
   inline int GetParamsCount() {
+    if(paramWeights.size() != paramIndexes.size()) {
+      cerr << "paramWeights.size() = " << paramWeights.size() << endl;
+      cerr << "paramIndexes.size() = " << paramIndexes.size() << endl;
+    }
     assert(paramWeights.size() == paramIndexes.size());
     return paramWeights.size();
   }

@@ -21,6 +21,16 @@
 #include "VocabEncoder.h"
 #include "Samplers.h"
 
+struct AlignerFactorId 
+{ 
+public:
+  int yI, yIM1, i, srcWord, prevSrcWord, tgtWord, prevTgtWord, nextTgtWord; 
+  int Signature() const { return yI + yIM1 + i + srcWord + prevSrcWord + tgtWord + prevTgtWord + nextTgtWord;}
+  inline bool operator < (const AlignerFactorId &other) const {
+    return Signature() < other.Signature();
+  }
+};
+
 class LogLinearParams {
 
   // inline and template member functions
@@ -143,6 +153,9 @@ class LogLinearParams {
   const std::set< int > *englishClosedClassTypes;
   
   std::map< int, std::map< int, std::map<std::string, double> > > precomputedFeaturesWithTwoInputs;
+
+  std::map< AlignerFactorId, FastSparseVector<double> > factorIdToFeatures;
+
 };
 
 #endif
