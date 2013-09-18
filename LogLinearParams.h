@@ -25,9 +25,26 @@ struct AlignerFactorId
 { 
 public:
   int yI, yIM1, i, srcWord, prevSrcWord, tgtWord, prevTgtWord, nextTgtWord; 
-  int Signature() const { return yI + yIM1 + i + srcWord + prevSrcWord + tgtWord + prevTgtWord + nextTgtWord;}
   inline bool operator < (const AlignerFactorId &other) const {
-    return Signature() < other.Signature();
+    if(yI != other.yI) {
+      return yI < other.yI;
+    } else if(yIM1 != other.yIM1) {
+      return yIM1 < other.yIM1;
+    } else if(i != other.i){
+      return i < other.i;
+    } else if(srcWord != other.srcWord) {
+      return srcWord < other.srcWord;
+    } else if(prevSrcWord != other.prevSrcWord) {
+      return prevSrcWord < other.prevSrcWord;
+    } else if(tgtWord != other.tgtWord) {
+      return tgtWord < other.tgtWord;
+    } else if(prevTgtWord != other.prevTgtWord) {
+      return prevTgtWord < other.prevTgtWord;
+    } else if(nextTgtWord != other.nextTgtWord){ 
+      return nextTgtWord < other.nextTgtWord;
+    } else {
+      return false;
+    }
   }
 };
 
