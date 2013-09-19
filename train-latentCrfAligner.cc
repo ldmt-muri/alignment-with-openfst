@@ -325,19 +325,15 @@ int main(int argc, char **argv) {
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);
 
-  /*
   string ibm1PrecomputedFeatureId = "_ibm1";
-  for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
-      contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
-      contextIter++) {
-    
-    for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-
-      latentCrfAligner.lambda->AddToPrecomputedFeaturesWith2Inputs(contextIter->first, probIter->first, ibm1PrecomputedFeatureId, probIter->second);
-    }
+  model->lambda->AddParam(ibm1PrecomputedFeatureId, 1.0);
+  int ibm1FeatureId = model->lambda->paramIndexes[ibm1PrecomputedFeatureId];
+  for(auto factorId = model->lambda->factorIdToFeatures.begin();
+      factorId != model->lambda->factorIdToFeatures.end();
+      factorId++) {
+    factorId->second[ibm1FeatureId] = model->nLogThetaGivenOneLabel.params[factorId->first.srcWord][factorId->first.tgtWord];
   }
-  */
-
+  
   // unsupervised training of the model
   model->Train();
 
