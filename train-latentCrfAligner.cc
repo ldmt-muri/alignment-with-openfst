@@ -325,15 +325,6 @@ int main(int argc, char **argv) {
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);
 
-  string ibm1PrecomputedFeatureId = "_ibm1";
-  model->lambda->AddParam(ibm1PrecomputedFeatureId, 1.0);
-  int ibm1FeatureId = model->lambda->paramIndexes[ibm1PrecomputedFeatureId];
-  for(auto factorId = model->lambda->factorIdToFeatures.begin();
-      factorId != model->lambda->factorIdToFeatures.end();
-      factorId++) {
-    factorId->second[ibm1FeatureId] = model->nLogThetaGivenOneLabel.params[factorId->first.srcWord][factorId->first.tgtWord];
-  }
-  
   // unsupervised training of the model
   model->Train();
 
