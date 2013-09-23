@@ -138,6 +138,15 @@ bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
   return returnValue;
 }
 
+void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
+  cerr << "active features are: " << endl;
+  for(auto feat = feats.begin();
+      feat != feats.end();
+      ++feat) {
+    cerr << "  index=" << feat->first << ", id=" << paramIds[feat->first] << ", val=" << feat->second << endl;
+  }
+}
+
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
 				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
@@ -180,10 +189,14 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
     factorId.nextTgtWord = nextTgtToken;
     if(factorIdToFeatures.count(factorId) == 1) {
       activeFeatures = factorIdToFeatures[factorId];
+      // logging
+      //factorId.Print();
+      //PrintFeatureValues(activeFeatures);
+      //cerr << endl;
       return;
     }
   }
-      
+  
   // F101: I( y_i-y_{i-1} == 0 )
   if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
     temp.str("");
@@ -296,6 +309,10 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   if(learningInfo->cacheActiveFeatures) {
     assert(factorIdToFeatures.count(factorId) == 0);
     factorIdToFeatures[factorId] = activeFeatures;
+    // logging
+    //factorId.Print();
+    //PrintFeatureValues(activeFeatures);
+    //cerr << endl;
   }
 }
 

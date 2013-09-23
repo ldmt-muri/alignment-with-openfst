@@ -25,6 +25,9 @@ struct AlignerFactorId
 { 
 public:
   int yI, yIM1, i, srcWord, prevSrcWord, tgtWord, prevTgtWord, nextTgtWord; 
+  inline void Print() const {
+    std::cerr << "(yI=" << yI << ",yIM1=" << yIM1 << ",i=" << i << ",srcWord="  << srcWord << ",prevSrcWord=" << prevSrcWord << ",tgtWord=" <<  tgtWord << ",prevTgtWord=" << prevTgtWord << ",nextTgtWord=" << nextTgtWord << ")" << endl;
+  }
   inline bool operator < (const AlignerFactorId &other) const {
     if(yI != other.yI) {
       return yI < other.yI;
@@ -131,6 +134,8 @@ class LogLinearParams {
   
   static void PrintParams(std::map<std::string, double> tempParams); 
   
+  void PrintFeatureValues(FastSparseVector<double> &feats);
+
   // writes the features to a text file formatted one feature per line.  
   void PersistParams(const std::string& outputFilename); 
 
