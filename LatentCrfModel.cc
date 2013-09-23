@@ -1000,9 +1000,10 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   return Nll;
 }
 
-// adds the l2 term to both the objective and the gradient (obviously, the term actually is different). return value is the 
+// adds l2 terms to both the objective and the gradient). return value is the 
 // the objective after adding the l2 term.
-double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective) {
+double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient, 
+  double *regularizedGradient, double unregularizedObjective) {
   double l2RegularizedObjective = unregularizedObjective;
   // this is where the L2 term is added to both the gradient and objective function
   assert(lambda->GetParamsCount() == unregularizedGradient.size());
@@ -1671,6 +1672,77 @@ void LatentCrfModel::BlockCoordinateDescent() {
         simulatedAnnealer.current(simulatedAnnealingArray);
         for(int i = 0; i < lambdasArrayLength; i++) {
           lambdasArray[i] = simulatedAnnealingArray[i];
+        }
+      } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
+        bool adagradConverged = false;
+        // instantiate and initialize three double arrays: gradient, u and h
+        vector<double> gradient(lambda->GetParamsCount(), 0.0);
+        double *u = new double[lambda->GetParamsCount()],
+          *h = new double[lambda->GetParamsCount()];
+        for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+          gradient[paramId] = u[paramId] = h[paramId] = 0;
+        }
+        
+        // in each adagrad iter
+        for(int adagradIter = 1; !adagradConverged; ++adagradIter) {
+          int fromSentId = 0;
+          // reset the gradient when necessary
+          if(adagradIter > 1) for(int pi=0;pi<lambda->GetParamsCount();pi++) gradient[pi] = 0;
+          // compute the loss and its gradient
+          double* lambdasArray = lambda->GetParamWeightsArray();
+
+          // process your share of examples
+          vector<double> gradientPiece(lambda->GetParamsCount(), 0.0);
+          double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+
+          // merge your gradient with other slaves
+          mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, gradient, 
+                                        AggregateVectors2(), 0);
+
+          // aggregate the loglikelihood computation as well
+          mpi::reduce<double>(*learningInfo.mpiWorld, nllPiece, optimizedMiniBatchNll, std::plus<double>(), 0);
+
+          // add l2 regularization terms to objective and gradient
+          if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+            optimizedMiniBatchNll = this->AddL2Term(gradient, gradient.data(), optimizedMiniBatchNll);
+          }
+
+          // log
+          if(learningInfo.mpiWorld->rank() == 0) { cerr << " -- nll = " << optimizedMiniBatchNll << endl; }
+          
+          // l1 strength?
+          double l1 = 0.0;
+          if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1) {
+            l1 = learningInfo.optimizationMethod.subOptMethod->regularizationStrength; 
+          }
+
+          // core of adagrad algorithm
+          // loop over params
+          for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+            // the u array accumulates the gradient across iterations
+            u[paramId] += gradient[paramId];
+            // the h array accumulates the squared gradient across iterations
+            h[paramId] += gradient[paramId] * gradient[paramId];
+            // absolute (average derivative value) of this parameter minus l1 strength
+            double z = (fabs(u[paramId]) / adagradIter) - l1;
+            // sign of accumulated derivative value of this parameter
+            double s = u[paramId] > 0? -1 : 1;
+            // update param weight
+            double eta = 1.0;
+            if (z > 0 && h[paramId]) {
+              lambdasArray[paramId] = eta * s * z * adagradIter / sqrt(h[paramId]); 
+            } else {
+              lambdasArray[paramId] = 0;
+            }
+          }
+          
+          // receive the latest parameter weights from the master
+          // TODO-opt: can we assume that slaves already have the latest lambda parameter weights at this point?)
+          mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
+
+          // convergence criterion for adagrad 
+          // TODO: configure the number of iterations required for adagrad to converge
+          adagradConverged = adagradIter > 10;
         }
       } else {
         assert(false);

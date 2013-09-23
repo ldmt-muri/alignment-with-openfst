@@ -81,7 +81,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
-    CACHE_FEATS = "cache-feats";
+    CACHE_FEATS = "cache-feats",
+    OPTIMIZER = "optimizer";
+    
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -103,6 +105,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(true), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
+    (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
   ;
 
   po::variables_map vm;
@@ -134,6 +137,15 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 
   if(vm.count(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str())) {
     learningInfo.hiddenSequenceIsMarkovian = false;
+  }
+  
+  if(vm.count(OPTIMIZER.c_str())) {
+    if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
+    } else {
+      cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
+      return false;
+    }
   }
   
   // validation

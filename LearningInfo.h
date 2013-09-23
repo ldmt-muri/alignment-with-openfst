@@ -36,7 +36,9 @@ namespace Regularizer {
 }
 
 namespace OptAlgorithm {
-  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION};
+  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, 
+    BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION,
+    ADAGRAD};
 }
 
 namespace DebugLevel {
@@ -207,7 +209,7 @@ class LearningInfo {
     supervisedTraining = false;
     unspecified = 0;
     unspecified2 = 0;
-    firstKExamplesToLabel = 100;
+    firstKExamplesToLabel = 1;
     invokeCallbackFunctionEveryKIterations = 10;
     endOfKIterationsCallbackFunction = 0;
     smoothMultinomialParams = false;
