@@ -26,8 +26,6 @@ task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix 
   --test-size $test_sents_count \
   --optimizer adagrad \
   --l2-strength 0.0 \
-  --l1-strength 1.0 \
-  --minibatch-size 200 \
   2> $out_err
 
   cp "$prefix-fwd.labels" $fwd_align
