@@ -1083,20 +1083,17 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 }
 
 // -loglikelihood is the return value
-double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda) {
+double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
+  vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) {
 
   //  cerr << "starting LatentCrfModel::ComputeNllZGivenXAndLambdaGradient" << endl;
   // for each sentence in this mini batch, aggregate the Nll and its derivatives across sentences
   double Nll = 0;
 
-  // mini batch is not supported
-  assert(learningInfo.optimizationMethod.subOptMethod->miniBatchSize == 0 || 
-	 learningInfo.optimizationMethod.subOptMethod->miniBatchSize == examplesCount);
-  
   assert(derivativeWRTLambda.size() == lambda->GetParamsCount());
   
   // for each training example
-  for(int sentId = 0; sentId < examplesCount; sentId++) {
+  for(int sentId = fromSentId; sentId < toSentId; sentId++) {
     
     // sentId is assigned to the process with rank = sentId % world.size()
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -1575,12 +1572,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
     // note: batch == minibatch with size equals to data.size()
     for(int sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
       
+      int fromSentId = sentId;
+      int toSentId = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)examplesCount);
+        
       // debug info
       double optimizedMiniBatchNll = 0;
       if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH && learningInfo.mpiWorld->rank() == 0) {
-        int to = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)examplesCount);
         cerr << "master" << learningInfo.mpiWorld->rank() << ": optimizing lambda weights to max likelihood(z|x) for sents " \
-             << sentId << "-" << to << endl;
+             << fromSentId << "-" << toSentId << endl;
       }
       
       // use LBFGS to update lambdas
@@ -1632,7 +1631,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
             
             // process your share of examples
             vector<double> gradientPiece(lambda->GetParamsCount(), 0.0), dummy;
-            double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+            double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
             
             // merge your gradient with other slaves
             mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, dummy, 
@@ -1693,7 +1692,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
           // process your share of examples
           vector<double> gradientPiece(lambda->GetParamsCount(), 0.0);
-          double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+          double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
 
           // merge your gradient with other slaves
           mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, gradient, 

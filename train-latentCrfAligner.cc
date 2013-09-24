@@ -82,7 +82,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
     CACHE_FEATS = "cache-feats",
-    OPTIMIZER = "optimizer";
+    OPTIMIZER = "optimizer",
+    MINIBATCH_SIZE = "minibatch-size";
+    
     
 
   // Declare the supported options.
@@ -106,6 +108,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(true), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
     (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
+    (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
   ;
 
   po::variables_map vm;
