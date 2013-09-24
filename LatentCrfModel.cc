@@ -805,7 +805,7 @@ void LatentCrfModel::Train() {
 // when l2 is specified, the regularized objective is returned. when l1 or none is specified, the unregualrized objective is returned
 double LatentCrfModel::EvaluateNll() {  
   vector<double> gradientPiece(lambda->GetParamsCount(), 0.0);
-  double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+  double nllPiece = ComputeNllZGivenXAndLambdaGradient(gradientPiece, 0, examplesCount);
   double nllTotal = -1;
   mpi::all_reduce<double>(*learningInfo.mpiWorld, nllPiece, nllTotal, std::plus<double>());
   assert(nllTotal != -1);
@@ -1049,7 +1049,11 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 
   // even the master needs to process its share of sentences
   vector<double> gradientPiece(model.lambda->GetParamsCount(), 0.0), reducedGradient;
-  double NllPiece = model.ComputeNllZGivenXAndLambdaGradient(gradientPiece);
+  int fromSentId = *( (int*)ptrFromSentId );
+  int toSentId = min(fromSentId + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize, 
+                     (int)model.examplesCount);
+      
+  double NllPiece = model.ComputeNllZGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
   double reducedNll = -1;
 
   // now, the master aggregates gradient pieces computed by the slaves
@@ -1417,6 +1421,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // set lbfgs configurations
   lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
   
+  // variables used for adagrad
+  vector<double> gradient(lambda->GetParamsCount());
+  double *u = new double[lambda->GetParamsCount()],
+    *h = new double[lambda->GetParamsCount()];
+  for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+    u[paramId] = h[paramId] = 0;
+  }
+  int adagradIter = 1;
+
   // TRAINING ITERATIONS
   bool converged = false;
   do {
@@ -1603,7 +1616,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           // only the master executes lbfgs
           int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNll, 
                                   LbfgsCallbackEvalZGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
-
+          
           bool NEED_HELP = false;
           mpi::broadcast<bool>(*learningInfo.mpiWorld, NEED_HELP, 0);
           
@@ -1674,19 +1687,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
         }
       } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
         bool adagradConverged = false;
-        // instantiate and initialize three double arrays: gradient, u and h
-        vector<double> gradient(lambda->GetParamsCount(), 0.0);
-        double *u = new double[lambda->GetParamsCount()],
-          *h = new double[lambda->GetParamsCount()];
-        for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
-          gradient[paramId] = u[paramId] = h[paramId] = 0;
-        }
         
         // in each adagrad iter
-        for(int adagradIter = 1; !adagradConverged; ++adagradIter) {
+        while(!adagradConverged) {
           int fromSentId = 0;
-          // reset the gradient when necessary
-          if(adagradIter > 1) for(int pi=0;pi<lambda->GetParamsCount();pi++) gradient[pi] = 0;
+          
           // compute the loss and its gradient
           double* lambdasArray = lambda->GetParamWeightsArray();
 
@@ -1728,7 +1733,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
             double s = u[paramId] > 0? -1 : 1;
             // update param weight
             double eta = 1.0;
-            if (z > 0 && h[paramId]) {
+            if (z > 0 && h[paramId] && gradient[paramId]) {
               lambdasArray[paramId] = eta * s * z * adagradIter / sqrt(h[paramId]); 
             } else {
               lambdasArray[paramId] = 0;
@@ -1741,8 +1746,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
           // convergence criterion for adagrad 
           // TODO: configure the number of iterations required for adagrad to converge
-          adagradConverged = adagradIter > 10;
+          adagradConverged = (adagradIter++ % 10 == 0);
         }
+        
+        // clear h and u, reset adagradIter
+        for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+          h[paramId] = u[paramId] = 0.0;
+        }  
+        adagradIter = 1;
+
       } else {
         assert(false);
       }

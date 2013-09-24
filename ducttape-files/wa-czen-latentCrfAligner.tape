@@ -24,6 +24,10 @@ task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix 
   --feat 101 --feat 102 --feat 103 --feat 104 --feat 105 --feat 106 --feat 107 --feat 108 \
   --wordpair-feats $wordpair_feats_file \
   --test-size $test_sents_count \
+  --optimizer adagrad \
+  --l2-strength 0.0 \
+  --l1-strength 1.0 \
+  --minibatch-size 200 \
   2> $out_err
 
   cp "$prefix-fwd.labels" $fwd_align
@@ -68,14 +72,14 @@ task fast_align :: data_file=$data_file > fwd_align bwd_align sym_align {
   /usr0/home/wammar/cdec/utils/atools -i $fwd_align -j $bwd_align -c grow-diag-final-and > $sym_align
 }
 
-task eval_align :: eval_script=$eval_script gold_file=$gold_file < fwd_align=$fwd_align@fast_align > aer_file="aer" {
+task eval_align :: eval_script=$eval_script gold_file=$gold_file < fwd_align=$fwd_align@autoencoder_fwd_align > aer_file="aer" {
   # compute aer
   $eval_script \
     $fwd_align \
     $gold_file \
     > $aer_file  
 }
-
+  
 task train_cdec :: procs=$procs data_file=$data_file dev_file=$dev_file test_file=$test_file mono_file=$mono_file cdec_ini_file=$cdec_ini_file < sym_align=$sym_align@autoencoder_align > extract_ini_file klm_file="klm" dev_sgm test_sgm lm_file suffix_array dev_grammar test_grammar cdec_ini_ofile {
   export PYTHONPATH=`echo ~/cdec/python/build/lib.*`
   echo "create extract ini file and suffix array from training data $data_file and alignments $sym_align"
@@ -109,7 +113,7 @@ global {
   test_file=/usr0/home/wammar/alignment-with-openfst/data/test.cz-en
   prefix=1k
   cdec_ini_file=/usr0/home/wammar/alignment-with-openfst/ducttape-files/cdec.ini
-  procs=22
+  procs=28
   src=cz
   tgt=en
   fwd=cz-en
