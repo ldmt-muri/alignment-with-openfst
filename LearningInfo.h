@@ -75,7 +75,7 @@ struct OptMethod {
   // if algorithm = LBFGS, use these LBFGS hyper parameters
   LbfgsParams lbfgsParams;
   // if algorithm = ADAGRAD, use these ADAGRAD hyper params
-  AdagradParams adagradParams;
+  //AdagradParams adagradParams;
   // some optimization algorithms require specifying a learning rate (e.g. gradient descent)
   float learningRate;
   // stochastic = 0 means batch optimization
@@ -192,6 +192,8 @@ struct Constraint {
 
 class LearningInfo {
  public:
+ 
+
   LearningInfo() {
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
@@ -221,13 +223,18 @@ class LearningInfo {
     invokeCallbackFunctionEveryKIterations = 10;
     endOfKIterationsCallbackFunction = 0;
     smoothMultinomialParams = false;
-    fixDOverC = false;
+    //fixDOverC = false;
     nSentsPerDot = 1;
     emIterationsCount = 1;
     thetaOptMethod = 0;
+    // theta init
     initializeThetasWithModel1 = false;
     initializeThetasWithGaussian = true;
     initializeThetasWithUniform = false;
+    // lambda init
+    initializeLambdasWithZero = true;
+    initializeLambdasWithOne = false;
+    initializeLambdasWithGaussian = false;
     allowNullAlignments = true;
     maxSequenceLength = 40;
     hiddenSequenceIsMarkovian = true;
@@ -389,7 +396,7 @@ class LearningInfo {
   
   bool smoothMultinomialParams;
 
-  bool fixDOverC;
+  //bool fixDOverC;
 
   unsigned nSentsPerDot;
 
@@ -412,6 +419,10 @@ class LearningInfo {
   bool hiddenSequenceIsMarkovian;
 
   bool cacheActiveFeatures;
+  
+  // this makes the optimization problem convex
+  bool fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
+  
 };
 
 

@@ -1053,6 +1053,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   int toSentId = min(fromSentId + model.learningInfo.optimizationMethod.subOptMethod->miniBatchSize, 
                      (int)model.examplesCount);
       
+  
   double NllPiece = model.ComputeNllZGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
   double reducedNll = -1;
 
@@ -1092,8 +1093,11 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
 
   //  cerr << "starting LatentCrfModel::ComputeNllZGivenXAndLambdaGradient" << endl;
   // for each sentence in this mini batch, aggregate the Nll and its derivatives across sentences
-  double Nll = 0;
+  double objective = 0;
 
+  bool ignoreThetaTerms = this->optimizingLambda &&
+    learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
+  
   assert(derivativeWRTLambda.size() == lambda->GetParamsCount());
   
   // for each training example
@@ -1112,44 +1116,54 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-    BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    if(!ignoreThetaTerms) {
+      BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+    }
     BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
 
     // compute the D map for this sentence
     FastSparseVector<LogVal<double> > DSparseVector;
-    ComputeD(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
-
+    if(!ignoreThetaTerms) {
+      ComputeD(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, DSparseVector);
+    }
+    
     // compute the C value for this sentence
-    double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+    double nLogC = 0;
+    if(!ignoreThetaTerms) {
+      nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
+    }
     if(std::isnan(nLogC) || std::isinf(nLogC)) {
       if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogC = " << nLogC << ". my mistake. will halt!" << endl;
-	cerr << "thetaLambdaFst summary:" << endl;
-	cerr << FstUtils::PrintFstSummary(thetaLambdaFst);
+        cerr << "ERROR: nLogC = " << nLogC << ". my mistake. will halt!" << endl;
+        cerr << "thetaLambdaFst summary:" << endl;
+        cerr << FstUtils::PrintFstSummary(thetaLambdaFst);
       }
       assert(false);
-    } 
-
-    // update the loglikelihood
-    Nll += nLogC;
-
-    // add D/C to the gradient
-    for(FastSparseVector<LogVal<double> >::iterator dIter = DSparseVector.begin(); dIter != DSparseVector.end(); ++dIter) {
-      double nLogd = dIter->second.s_? dIter->second.v_ : -dIter->second.v_; // multiply the inner logD representation by -1.
-      double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-      if(std::isnan(dOverC) || std::isinf(dOverC)) {
-	if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ". my mistake. will halt!" << endl;
-	}
-        assert(false);
-      }
-      if(derivativeWRTLambda.size() <= dIter->first) {
-	cerr << "problematic feature index is " << dIter->first << " cuz derivativeWRTLambda.size() = " << derivativeWRTLambda.size() << endl;
-      }
-      assert(derivativeWRTLambda.size() > dIter->first);
-      derivativeWRTLambda[dIter->first] -= dOverC;
     }
+    
+    // update the loglikelihood
+    if(!ignoreThetaTerms) {
+      objective += nLogC;
 
+      // add D/C to the gradient
+      for(FastSparseVector<LogVal<double> >::iterator dIter = DSparseVector.begin(); 
+          dIter != DSparseVector.end(); ++dIter) {
+        double nLogd = dIter->second.s_? dIter->second.v_ : -dIter->second.v_; // multiply the inner logD representation by -1.
+        double dOverC = MultinomialParams::nExp(nLogd - nLogC);
+        if(std::isnan(dOverC) || std::isinf(dOverC)) {
+          if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+            cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ". my mistake. will halt!" << endl;
+          }
+          assert(false);
+        }
+        if(derivativeWRTLambda.size() <= dIter->first) {
+          cerr << "problematic feature index is " << dIter->first << " cuz derivativeWRTLambda.size() = " << derivativeWRTLambda.size() << endl;
+        }
+        assert(derivativeWRTLambda.size() > dIter->first);
+        derivativeWRTLambda[dIter->first] -= dOverC;
+      }
+    }
+    
     // compute the F map fro this sentence
     FastSparseVector<LogVal<double> > FSparseVector;
     ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
@@ -1160,30 +1174,33 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
     // keep an eye on bad numbers
     if(std::isnan(nLogZ) || std::isinf(nLogZ)) {
       if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
+        cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
       }
       assert(false);
     } 
 
     // update the log likelihood
-    Nll -= nLogZ;
+    objective -= nLogZ;
 
     // subtract F/Z from the gradient
-    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); fIter != FSparseVector.end(); ++fIter) {
+    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); 
+        fIter != FSparseVector.end(); ++fIter) {
       double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
       double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
       if(std::isnan(fOverZ) || std::isinf(fOverZ)) {
-	if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	  cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
-	}
-	assert(false);
+        if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+          cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
+        }
+        assert(false);
       }
       assert(fIter->first < derivativeWRTLambda.size());
       derivativeWRTLambda[fIter->first] += fOverZ;
       if(std::isnan(derivativeWRTLambda[fIter->first]) || 
-	 std::isinf(derivativeWRTLambda[fIter->first])) {
-	cerr << "rank #" << learningInfo.mpiWorld->rank() << ": ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
-	assert(false);
+          std::isinf(derivativeWRTLambda[fIter->first])) {
+        cerr << "rank #" << learningInfo.mpiWorld->rank() \
+          << ": ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf \
+          << ". my mistake. will halt!" << endl;
+        assert(false);
       }
     }
 
@@ -1197,7 +1214,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
 
   //  cerr << "ending LatentCrfModel::ComputeNllZGivenXAndLambdaGradient" << endl;
 
-  return Nll;  
+  return objective;
 }
 
 int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
@@ -1576,6 +1593,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
     
     // update the lambdas
+    this->optimizingLambda = true;
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
       cerr << endl << "master" << learningInfo.mpiWorld->rank() << ": ========== second, update lambdas ==========" << endl << endl;
@@ -1787,6 +1805,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
     } // for each minibatch
+    
+    // done optimizing lambdas
+    this->optimizingLambda = false;
     
     // persist updated lambda params
     stringstream lambdaParamsFilename;

@@ -295,6 +295,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // When we use the trained model to predict the labels, we set it to true
   bool testingMode;
   Task task;
+  // this is only set during training while optimizing loglinear parameters
+  bool optimizingLambda;
 };
 
 
