@@ -45,6 +45,12 @@ namespace DebugLevel {
   enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6, TEMP = 4};
 }
 
+// documentation can be found at the paper http://www.cs.berkeley.edu/~jduchi/projects/DuchiHaSi10.pdf
+struct AdagradParams {
+  double eta;
+  int maxIterations;
+};
+
 // documentation can be found at http://www.chokkan.org/software/liblbfgs/structlbfgs__parameter__t.html
 struct LbfgsParams {
   int maxIterations;
@@ -68,6 +74,8 @@ struct OptMethod {
   OptAlgorithm::OptAlgorithm algorithm;
   // if algorithm = LBFGS, use these LBFGS hyper parameters
   LbfgsParams lbfgsParams;
+  // if algorithm = ADAGRAD, use these ADAGRAD hyper params
+  AdagradParams adagradParams;
   // some optimization algorithms require specifying a learning rate (e.g. gradient descent)
   float learningRate;
   // stochastic = 0 means batch optimization

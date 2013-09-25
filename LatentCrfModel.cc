@@ -1581,6 +1581,13 @@ void LatentCrfModel::BlockCoordinateDescent() {
       cerr << endl << "master" << learningInfo.mpiWorld->rank() << ": ========== second, update lambdas ==========" << endl << endl;
     }
     
+    // make a copy of the lambda weights converged to in the previous iteration to use as
+    // an initialization for ADAGRAD
+    vector<double> prevLambdaWeights;
+    if(learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
+      prevLambdaWeights = lambda->paramWeights;
+    }
+    
     double Nll = 0;
     // note: batch == minibatch with size equals to data.size()
     for(int sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
@@ -1687,11 +1694,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
         }
       } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
         bool adagradConverged = false;
-        
         // in each adagrad iter
-        while(!adagradConverged) {
-          int fromSentId = 0;
-          
+        while(!adagradConverged) {    
           // compute the loss and its gradient
           double* lambdasArray = lambda->GetParamWeightsArray();
 
@@ -1732,11 +1736,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
             // sign of accumulated derivative value of this parameter
             double s = u[paramId] > 0? -1 : 1;
             // update param weight
-            double eta = 1.0;
+            double eta = 1000.0 / (learningInfo.iterationsCount+1);
+            int miniBatchSize = toSentId - fromSentId;
             if (z > 0 && h[paramId] && gradient[paramId]) {
-              lambdasArray[paramId] = eta * s * z * adagradIter / sqrt(h[paramId]); 
+              lambdasArray[paramId] = prevLambdaWeights[paramId] + eta * s * z * adagradIter / sqrt(h[paramId]) / miniBatchSize; 
             } else {
-              lambdasArray[paramId] = 0;
+              lambdasArray[paramId] = prevLambdaWeights[paramId];
             }
           }
           
@@ -1745,16 +1750,23 @@ void LatentCrfModel::BlockCoordinateDescent() {
           mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
 
           // convergence criterion for adagrad 
-          // TODO: configure the number of iterations required for adagrad to converge
-          adagradConverged = (adagradIter++ % 10 == 0);
+          int maxAdagradIter = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+          adagradConverged = (adagradIter++ % maxAdagradIter == 0);
         }
         
-        // clear h and u, reset adagradIter
+        // in the next block coordinate descent iteration, theta will change, which means that the function 
+        // you're optimizing with adagrad will change. But the lambda parameter values will have a pretty good
+        // initial value (i.e. the optimal values of the likelihood function from this iteration). when provided
+        // a good initialization, and starts with an empty h,u vectors, adagrad fails to improve the objective
+        // for a few iterations, until h and u aggregate enough gradient values. So, instead of zeroing h,u vectors
+        // at the beginning of each optimization, we intialize them with the average value from the previous run,
+        // and pretend that these gradient values are obtained during the first pass of the new optimization run, 
+        // hence we set adagradIter = 2, h = average(gradient), u = average(gradient^2)
         for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
-          h[paramId] = u[paramId] = 0.0;
-        }  
-        adagradIter = 1;
-
+          h[paramId] /= adagradIter;
+          u[paramId] /= adagradIter;
+        }
+        adagradIter = 2;
       } else {
         assert(false);
       }
