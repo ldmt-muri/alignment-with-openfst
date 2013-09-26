@@ -1096,7 +1096,8 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
   double objective = 0;
 
   bool ignoreThetaTerms = this->optimizingLambda &&
-    learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
+    learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas &&
+    learningInfo.iterationsCount >= 2;
   
   assert(derivativeWRTLambda.size() == lambda->GetParamsCount());
   
@@ -1768,7 +1769,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
 
           // convergence criterion for adagrad 
-          int maxAdagradIter = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+          int maxAdagradIter = 4;//learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
           adagradConverged = (adagradIter++ % maxAdagradIter == 0);
         }
         
