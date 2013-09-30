@@ -141,30 +141,17 @@ void LatentCrfPosTagger::InitTheta() {
   }
 
   // first initialize nlogthetas to unnormalized gaussians
-  if(learningInfo.zIDependsOnYIM1) {
-    nLogThetaGivenTwoLabels.params.clear();
-    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-      for(set<int>::const_iterator yDomainIter2 = yDomain.begin(); yDomainIter2 != yDomain.end(); yDomainIter2++) {
-	for(set<int>::const_iterator zDomainIter = zDomain.begin(); zDomainIter != zDomain.end(); zDomainIter++) {
-	  nLogThetaGivenTwoLabels.params[std::pair<int, int>(*yDomainIter, *yDomainIter2)][*zDomainIter] = fabs(gaussianSampler.Draw());
-	}
-      }
-    }
-  } else {
-    nLogThetaGivenOneLabel.params.clear();
-    for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-      for(set<int>::const_iterator zDomainIter = zDomain.begin(); zDomainIter != zDomain.end(); zDomainIter++) {
-	nLogThetaGivenOneLabel.params[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
-      }
+  nLogThetaGivenOneLabel.params.clear();
+  for(set<int>::const_iterator yDomainIter = yDomain.begin(); 
+      yDomainIter != yDomain.end(); yDomainIter++) {
+    for(set<int>::const_iterator zDomainIter = zDomain.begin(); 
+        zDomainIter != zDomain.end(); zDomainIter++) {
+      nLogThetaGivenOneLabel.params[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
     }
   }
-
+  
   // then normalize them
-  if(learningInfo.zIDependsOnYIM1) {
-    MultinomialParams::NormalizeParams(nLogThetaGivenTwoLabels);
-  } else {
-    MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
-  }
+  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done" << endl;
   }

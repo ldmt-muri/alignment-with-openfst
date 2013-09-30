@@ -215,7 +215,6 @@ class LearningInfo {
     persistParamsAfterNIteration = 100;
     persistFinalParams = true;
     retryLbfgsOnRoundingErrors = true;
-    zIDependsOnYIM1 = false;
     supervisedTraining = false;
     unspecified = 0;
     unspecified2 = 0;
@@ -239,6 +238,7 @@ class LearningInfo {
     maxSequenceLength = 40;
     hiddenSequenceIsMarkovian = true;
     cacheActiveFeatures = false;
+    multinomialSymmetricDirichletAlpha = 1.0;
   }
 
   bool IsModelConverged() {
@@ -381,9 +381,6 @@ class LearningInfo {
   // if lbfgs returns a rounding error. should we retry?
   bool retryLbfgsOnRoundingErrors;
 
-  // in the latent crf model, does the output observations z_i depend on y_{i-1}, or only y_i?
-  bool zIDependsOnYIM1;
-
   bool supervisedTraining;
 
   int unspecified, unspecified2;
@@ -422,6 +419,8 @@ class LearningInfo {
   
   // this makes the optimization problem convex
   bool fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
+  
+  double multinomialSymmetricDirichletAlpha;
   
 };
 

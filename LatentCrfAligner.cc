@@ -170,9 +170,6 @@ void LatentCrfAligner::InitTheta() {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
   }
 
-  // this feature of the model is not supported for the word alignment model yet
-  assert(!learningInfo.zIDependsOnYIM1);
-
   assert(srcSents.size() == tgtSents.size());
 
   // first initialize nlogthetas to unnormalized gaussians

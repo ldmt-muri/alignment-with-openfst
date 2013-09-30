@@ -86,7 +86,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     CACHE_FEATS = "cache-feats",
     OPTIMIZER = "optimizer",
     MINIBATCH_SIZE = "minibatch-size",
-    LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x";
+    LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
+    DIRICHLET_ALPHA = "dirichlet-alpha";
 
     
 
@@ -115,6 +116,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
     (LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
     (MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
+    (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.0), "(double) (defaults to 1.0) alpha of the symmetric dirichlet prior of the multinomial parameters.")
   ;
 
   po::variables_map vm;
@@ -183,9 +185,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
 
   outputFilenamePrefix += ".ibm1";
 
-  // ibm model1 initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
-  assert(latentCrfAligner.learningInfo.zIDependsOnYIM1 == false);
-
+  
   // configurations
   cerr << "rank #" << world.rank() << ": training the ibm model 1 to initialize latentCrfAligner parameters..." << endl;
 
@@ -277,7 +277,6 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodRelativeDiff = true;
   //learningInfo.minLikelihoodRelativeDiff set by ParseParameters
   learningInfo.useSparseVectors = true;
-  learningInfo.zIDependsOnYIM1 = false;
   learningInfo.persistParamsAfterNIteration = 1;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;

@@ -533,13 +533,8 @@ double LatentCrfModel::GetNLogTheta(int context, int event) {
 
 double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId) {
   if(task == Task::POS_TAGGING) {
-    if(learningInfo.zIDependsOnYIM1) {
-      return nLogThetaGivenTwoLabels[pair<int,int>(yim1, yi)][zi];
-    } else {
-      return nLogThetaGivenOneLabel[yi][zi];
-    }
+    return nLogThetaGivenOneLabel[yi][zi]; 
   } else if(task == Task::WORD_ALIGNMENT) {
-    assert(!learningInfo.zIDependsOnYIM1); // not implemented for the word alignment model
     vector<int> &srcSent = GetObservableContext(exampleId);
     vector<int> &tgtSent = GetObservableSequence(exampleId);
     assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
@@ -735,7 +730,6 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   
   // optimize theta (i.e. multinomial) parameters to maximize the likeilhood of the data
   MultinomialParams::ConditionalMultinomialParam<int> thetaMle;
-  MultinomialParams::MultinomialParam thetaMleMarginals;
   // for each sentence
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     // collect number of times each theta parameter has been used
@@ -746,31 +740,28 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
     for(unsigned i = 0; i < z.size(); i++) {
       if(task == Task::POS_TAGGING) {
 	thetaMle[y[i]][z[i]] += 1;
-	thetaMleMarginals[y[i]] += 1;
       } else if(task == Task::WORD_ALIGNMENT) {
 	thetaMle[ x_s[y[i]] ][ z[i] ] += 1;
-	thetaMleMarginals[ x_s[y[i]] ] += 1;
       } else {
 	assert(false);
       }
     }
   }
   // normalize thetas
-  NormalizeThetaMle<int>(thetaMle, thetaMleMarginals);
+  MultinomialParams::NormalizeParams(thetaMle, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
 
   // update nLogThetaGivenOneLabel
   for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = thetaMle.params.begin();
       contextIter != thetaMle.params.end();
       ++contextIter) {
     for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
-	probIter != contextIter->second.end();
-	++probIter) {
+        probIter != contextIter->second.end();
+        ++probIter) {
       nLogThetaGivenOneLabel[contextIter->first][probIter->first] = probIter->second;
     }
   }
 
   // compute likelihood of \theta for z|y
-  assert(!learningInfo.zIDependsOnYIM1); // supervised training does not support this configuration of the model
   double NllZGivenY = 0; 
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     vector<int> &z = GetObservableSequence(sentId);
@@ -1285,39 +1276,20 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   PrepareExample(sentId);
   
   double nll = -1;
-  if(learningInfo.zIDependsOnYIM1) {
-    // no longer works :-/
-    assert(false);
-    //    nll = UpdateThetaMleForSent(sentId, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-  } else {
-    nll = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel);
-  }
+  nll = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel);
   return nll;
 }
 
-void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-						     map<int, double> &mleMarginalsGivenOneLabel,
-						     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
-						     map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
-  if(learningInfo.zIDependsOnYIM1) {
-    // no longer works :-/
-    assert(false);
-    //NormalizeThetaMle(mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
-    //    nLogThetaGivenTwoLabels = mleGivenTwoLabels;
-  } else {
-    NormalizeThetaMle(mleGivenOneLabel, mleMarginalsGivenOneLabel);
-    // update nLogThetaGivenOneLabel
-    for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = mleGivenOneLabel.params.begin();
-	contextIter != mleGivenOneLabel.params.end();
-	++contextIter) {
-      for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
-	  probIter != contextIter->second.end();
-	  ++probIter) {
-	nLogThetaGivenOneLabel[contextIter->first][probIter->first] = probIter->second;
-      }
-    }
-  }
+void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
+    MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
+    map<int, double> &mleMarginalsGivenOneLabel,
+    MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
+    map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+  
+  MultinomialParams::NormalizeParams(mleGivenOneLabel, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
+  nLogThetaGivenOneLabel = mleGivenOneLabel;
 }
+
 
 lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   // lbfgs configurations
@@ -1379,12 +1351,8 @@ void LatentCrfModel::BroadcastTheta(unsigned rankId) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BroadcastTheta()" << endl;
   }
 
-  if(learningInfo.zIDependsOnYIM1) {
-    mpi::broadcast< map< pair<int,int>, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, nLogThetaGivenTwoLabels.params, rankId);
-  } else {
-    mpi::broadcast< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, nLogThetaGivenOneLabel.params, rankId);
-  }
-
+  mpi::broadcast< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, nLogThetaGivenOneLabel.params, rankId);
+  
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BroadcastTheta()" << endl;
   }
@@ -1398,22 +1366,13 @@ void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultino
     cerr << "rank" << learningInfo.mpiWorld->rank() << ": before calling ReduceMleAndMarginals()" << endl;
   }
   
-  if(learningInfo.zIDependsOnYIM1) {
-    mpi::reduce< map< pair<int,int>, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
-									     mleGivenTwoLabels.params, mleGivenTwoLabels.params, 
-									     MultinomialParams::AccumulateConditionalMultinomials< pair<int, int> >, 0);
-    mpi::reduce< map< pair<int, int>, double > >(*learningInfo.mpiWorld, 
-					       mleMarginalsGivenTwoLabels, mleMarginalsGivenTwoLabels, 
-					       MultinomialParams::AccumulateMultinomials< pair<int,int> >, 0);
-  } else {
-    mpi::reduce< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
+  mpi::reduce< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
 								   mleGivenOneLabel.params, mleGivenOneLabel.params, 
 								   MultinomialParams::AccumulateConditionalMultinomials< int >, 0);
-    mpi::reduce< map< int, double > >(*learningInfo.mpiWorld, 
+  mpi::reduce< map< int, double > >(*learningInfo.mpiWorld, 
 				      mleMarginalsGivenOneLabel, mleMarginalsGivenOneLabel, 
 				      MultinomialParams::AccumulateMultinomials<int>, 0);
-  }
-
+  
   // debug info
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank" << learningInfo.mpiWorld->rank() << ": after calling ReduceMleAndMarginals()" << endl;
@@ -1422,11 +1381,8 @@ void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultino
 }
 
 void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
-  if(learningInfo.zIDependsOnYIM1) {
-    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenTwoLabels, vocabEncoder);
-  } else {
-    MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
-  }
+  MultinomialParams::PersistParams(thetaParamsFilename, nLogThetaGivenOneLabel, 
+    vocabEncoder, true, true);
 }
 
 void LatentCrfModel::BlockCoordinateDescent() {  

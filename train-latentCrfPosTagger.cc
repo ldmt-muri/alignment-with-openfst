@@ -27,9 +27,6 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   outputFilenamePrefix += ".hmm";
 
-  // hmm initializer can't initialize the latent crf multinomials when zI dpeends on both y_{i-1} and y_i
-  assert(latentCrfPosTagger.learningInfo.zIDependsOnYIM1 == false);
-
   // configurations
   cerr << "rank #" << world.rank() << ": training the hmm model to initialize latentCrfPosTagger parameters..." << endl;
 
@@ -190,7 +187,6 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
-  learningInfo.zIDependsOnYIM1 = false;
   learningInfo.persistParamsAfterNIteration = 10;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
