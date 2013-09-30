@@ -2,6 +2,7 @@
 #define _LOG_LINEAR_PARAMS_H_
 
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -49,6 +50,22 @@ public:
       return false;
     }
   }
+
+  struct AlignerFactorHash : public std::unary_function<AlignerFactorId, size_t> {
+    size_t operator()(const AlignerFactorId& x) const {
+      // Example hash, can't guarantee that this is any good though...
+      return x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1;
+    }
+  };
+
+  struct AlignerFactorEqual : public std::unary_function<AlignerFactorId, bool> {
+    bool operator()(const AlignerFactorId& left, const AlignerFactorId& right) const {
+      return left.i == right.i && left.nextTgtWord == right.nextTgtWord &&
+              left.prevSrcWord == right.prevSrcWord && left.prevTgtWord == right.prevTgtWord &&
+              left.srcWord == right.srcWord && left.tgtWord == right.tgtWord &&
+              left.yI == right.yI && left.yIM1 == right.yIM1;
+    }
+  };
 };
 
 class LogLinearParams {
@@ -174,9 +191,9 @@ class LogLinearParams {
 
   const std::set< int > *englishClosedClassTypes;
   
-  std::map< int, std::map< int, std::map<std::string, double> > > precomputedFeaturesWithTwoInputs;
-
-  std::map< AlignerFactorId, FastSparseVector<double> > factorIdToFeatures;
+  std::unordered_map< int, std::map< int, std::map<std::string, double> > > precomputedFeaturesWithTwoInputs;
+  
+  std::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
 
 };
 
