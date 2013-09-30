@@ -64,7 +64,7 @@ void register_my_handler() {
 bool ParseParameters(int argc, char **argv, string &textFilename, 
   string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
   string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
-  LearningInfo &learningInfo) {
+                     LearningInfo &learningInfo, int &maxModel1IterCount) {
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -81,12 +81,13 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
     MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
+    MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
     CACHE_FEATS = "cache-feats",
     OPTIMIZER = "optimizer",
     MINIBATCH_SIZE = "minibatch-size",
     LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x";
-  
+
     
 
   // Declare the supported options.
@@ -113,6 +114,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
     (LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
+    (MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
   ;
 
   po::variables_map vm;
@@ -172,7 +174,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 }
 
 // returns the rank of the process which have found the best HMM parameters
-void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename) {
+void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount) {
 
   // only the master does this
   if(world.rank() != 0){
@@ -189,7 +191,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
 
   LearningInfo learningInfo;
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 15;
+  learningInfo.maxIterationsCount = maxIterCount;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   // learningInfo.minLikelihoodRelativeDiff set by ParseParameters;
   learningInfo.debugLevel = DebugLevel::CORPUS;
@@ -316,10 +318,11 @@ int main(int argc, char **argv) {
 
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
+  int ibmModel1MaxIterCount = 15;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
-      initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
-      learningInfo)){
-    exit(1);
+                      initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
+                      learningInfo, ibmModel1MaxIterCount)){
+    assert(false);
   }
 
   // add constraints
@@ -339,7 +342,7 @@ int main(int argc, char **argv) {
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
   // ibm model 1 initialization of theta params. also updates the lambda precomputed features by adding ibm model 1 probs
-  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename);
+  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount);
 
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);
