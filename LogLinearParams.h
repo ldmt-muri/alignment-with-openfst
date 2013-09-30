@@ -1,8 +1,6 @@
 #ifndef _LOG_LINEAR_PARAMS_H_
 #define _LOG_LINEAR_PARAMS_H_
 
-#include <map>
-#include <unordered_map>
 #include <string>
 #include <sstream>
 #include <fstream>
@@ -16,6 +14,10 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <boost/functional/hash.hpp>
+#include <boost/unordered_map.hpp>
+
+#include "unordered_map_serialization.hpp"
+
 #include "cdec-utils/fast_sparse_vector.h"
 
 #include "LearningInfo.h"
@@ -87,8 +89,8 @@ class LogLinearParams {
 
   // for the loglinear word alignment model
   LogLinearParams(const VocabEncoder &types, 
-		  const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
-		  const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
+		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
+		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
 		  double gaussianStdDev = 0.01);
 
   // for the latent CRF model
@@ -108,7 +110,7 @@ class LogLinearParams {
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
-		    const std::vector<bool>& enabledFeatureTypes, std::map<std::string, double>& activeFeatures);
+		    const std::vector<bool>& enabledFeatureTypes, boost::unordered_map<std::string, double>& activeFeatures);
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 		    const std::vector<bool> &enabledFeatureTypes, 
@@ -126,7 +128,7 @@ class LogLinearParams {
   bool AddParam(const std::string &paramId, double paramWeight);
 
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-  double DotProduct(const std::map<std::string, double>& values);
+  double DotProduct(const boost::unordered_map<std::string, double>& values);
 
   double DotProduct(const std::vector<double>& values);
 
@@ -137,7 +139,7 @@ class LogLinearParams {
   double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights);
  
   // updates the model parameters given the gradient and an optimization method
-  void UpdateParams(const std::map<std::string, double> &gradient, const OptMethod &optMethod);
+  void UpdateParams(const boost::unordered_map<std::string, double> &gradient, const OptMethod &optMethod);
   
   // override the member weights vector with this array
   void UpdateParams(const double* array, const int arrayLength);
@@ -145,7 +147,7 @@ class LogLinearParams {
   // converts a map into an array. 
   // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
   // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
-  void ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
+  void ConvertFeatureMapToFeatureArray(boost::unordered_map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
 
   // 1/2 * sum of the squares 
   double ComputeL2Norm();
@@ -159,7 +161,7 @@ class LogLinearParams {
   
   void PrintParams(); 
   
-  static void PrintParams(std::map<std::string, double> tempParams); 
+  static void PrintParams(boost::unordered_map<std::string, double> tempParams); 
   
   void PrintFeatureValues(FastSparseVector<double> &feats);
 
@@ -180,7 +182,7 @@ class LogLinearParams {
 
  public:
   // the actual parameters 
-  std::map< std::string, int > paramIndexes;
+  boost::unordered_map< std::string, int > paramIndexes;
   std::vector< double > paramWeights; 
   std::vector< double > oldParamWeights; 
   std::vector< std::string > paramIds; 
@@ -191,7 +193,7 @@ class LogLinearParams {
   // TODO: inappropriate for this general class. consider adding to a derived class
   // maps [srcTokenId][tgtTokenId] => forward logprob
   // maps [tgtTokenId][srcTokenId] => backward logprob
-  const std::map< int, std::map< int, double > > &ibmModel1ForwardScores, &ibmModel1BackwardScores;
+  const boost::unordered_map< int, boost::unordered_map< int, double > > &ibmModel1ForwardScores, &ibmModel1BackwardScores;
   
   const int COUNT_OF_FEATURE_TYPES;
   
@@ -199,11 +201,11 @@ class LogLinearParams {
 
   const GaussianSampler *gaussianSampler;
 
-  const std::set< int > *englishClosedClassTypes;
+  const set< int > *englishClosedClassTypes;
   
-  std::unordered_map< int, std::map< int, std::map<std::string, double> > > precomputedFeaturesWithTwoInputs;
+  boost::unordered_map< int, boost::unordered_map< int, boost::unordered_map<std::string, double> > > precomputedFeaturesWithTwoInputs;
   
-  std::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
+  boost::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
 
 };
 

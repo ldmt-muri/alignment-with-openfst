@@ -106,7 +106,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   fst.SetFinal(finalState, FstUtils::LogWeight::One());
 
   // map values of y_{i-1} and y_i to fst states
-   map<int, int> yIM1ToState, yIToState;
+   boost::unordered_map<int, int> yIM1ToState, yIToState;
   assert(yIM1ToState.size() == 0);
   assert(yIToState.size() == 0);
   yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
@@ -117,14 +117,14 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
     // timestep i hasn't reached any states yet
     yIToState.clear();
     // from each state reached in the previous timestep
-    for(map<int, int>::const_iterator prevStateIter = yIM1ToState.begin();
+    for(auto prevStateIter = yIM1ToState.begin();
         prevStateIter != yIM1ToState.end();
         prevStateIter++) {
 
       int fromState = prevStateIter->second;
       int yIM1 = prevStateIter->first;
       // to each possible value of y_i
-      for(set<int>::const_iterator yDomainIter = yDomain.begin();
+      for(auto yDomainIter = yDomain.begin();
           yDomainIter != yDomain.end();
           yDomainIter++) {
 
@@ -150,7 +150,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
             yIToState[yI] = toState;
           } else {
             // same state for all labels used for previous observation
-            for(set<int>::const_iterator yDomainIter2 = yDomain.begin();
+            for(auto yDomainIter2 = yDomain.begin();
                 yDomainIter2 != yDomain.end();
                 yDomainIter2++) {
               yIToState[*yDomainIter2] = toState;
@@ -214,7 +214,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
   assert(fst.NumStates() > 0);
   
   // a schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
+  unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -222,7 +222,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
     int xI = x[i];
     
     // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(auto iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -300,7 +300,7 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
     int xI = x[i];
     
     // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(auto iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -345,7 +345,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
   assert(DXZk.size() == 0);
 
   // schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
+  unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -354,7 +354,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
     int zI = z[i];
     
     // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(unordered_set<int>::const_iterator iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -412,14 +412,14 @@ double LatentCrfModel::ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
 void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z, 
 			      const fst::VectorFst<FstUtils::LogArc> &fst, 
 			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas, 
-			      map< int, map< int, LogVal<double> > > &BXZ) {
+			      boost::unordered_map< int, boost::unordered_map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
   const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
+  unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -428,7 +428,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
     int zI = z[i];
     
     // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(auto iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -469,14 +469,14 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
 void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z, 
 			      const fst::VectorFst<FstUtils::LogArc> &fst, 
 			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas, 
-			      map< std::pair<int, int>, map< int, LogVal<double> > > &BXZ) {
+			      boost::unordered_map< std::pair<int, int>, boost::unordered_map< int, LogVal<double> > > &BXZ) {
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
   const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
-  set<int> iStates, iP1States;
+  unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -485,7 +485,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
     int zI = z[i];
     
     // from each state at timestep i
-    for(set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(auto iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -545,7 +545,7 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
     assert(yim1 < (int)srcSent.size());
     if(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) == 0) {
       cerr << "yi = " << yi << ", srcSent[yi] == " << srcSent[yi] << ", nLogThetaGivenOneLabel.params.count(" << srcSent[yi] << ")=0" << " although nLogThetaGivenOneLabel.params.size() = " << nLogThetaGivenOneLabel.params.size() << endl << "keys available are: " << endl;
-      for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = nLogThetaGivenOneLabel.params.begin();
+      for(auto contextIter = nLogThetaGivenOneLabel.params.begin();
 	  contextIter != nLogThetaGivenOneLabel.params.end();
 	  ++contextIter) {
 	cerr << " " << contextIter->first << endl;
@@ -585,7 +585,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   fst.SetFinal(finalState, FstUtils::LogWeight::One());
   
   // map values of y_{i-1} and y_i to fst states
-  map<int, int> yIM1ToState, yIToState;
+  boost::unordered_map<int, int> yIM1ToState, yIToState;
   assert(yIM1ToState.size() == 0);
   assert(yIToState.size() == 0);
 
@@ -597,14 +597,14 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
     // timestep i hasn't reached any states yet
     yIToState.clear();
     // from each state reached in the previous timestep
-    for(map<int, int>::const_iterator prevStateIter = yIM1ToState.begin();
+    for(auto prevStateIter = yIM1ToState.begin();
       	prevStateIter != yIM1ToState.end();
         prevStateIter++) {
 
       int fromState = prevStateIter->second;
       int yIM1 = prevStateIter->first;
       // to each possible value of y_i
-      for(set<int>::const_iterator yDomainIter = yDomain.begin();
+      for(auto yDomainIter = yDomain.begin();
           yDomainIter != yDomain.end();
           yDomainIter++) {
 
@@ -649,7 +649,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
             yIToState[yI] = toState;
           } else {
             // when variables in the hidden sequence are independent given observed sequence x:
-            for(set<int>::const_iterator yDomainIter2 = yDomain.begin();
+            for(auto yDomainIter2 = yDomain.begin();
                 yDomainIter2 != yDomain.end();
                 yDomainIter2++) {
               yIToState[*yDomainIter2] = toState;
@@ -751,7 +751,7 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   MultinomialParams::NormalizeParams(thetaMle, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
 
   // update nLogThetaGivenOneLabel
-  for(map<int, MultinomialParams::MultinomialParam>::const_iterator contextIter = thetaMle.params.begin();
+  for(auto contextIter = thetaMle.params.begin();
       contextIter != thetaMle.params.end();
       ++contextIter) {
     for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
@@ -1268,9 +1268,9 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-					     map<int, double> &mleMarginalsGivenOneLabel,
+					     boost::unordered_map<int, double> &mleMarginalsGivenOneLabel,
 					     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
-					     map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+					     boost::unordered_map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
   
   // in the word alignment model, yDomain depends on the example
   PrepareExample(sentId);
@@ -1282,9 +1282,9 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 
 void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-    map<int, double> &mleMarginalsGivenOneLabel,
+    boost::unordered_map<int, double> &mleMarginalsGivenOneLabel,
     MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > &mleGivenTwoLabels, 
-    map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+    boost::unordered_map< std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
   
   MultinomialParams::NormalizeParams(mleGivenOneLabel, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
   nLogThetaGivenOneLabel = mleGivenOneLabel;
@@ -1351,7 +1351,7 @@ void LatentCrfModel::BroadcastTheta(unsigned rankId) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BroadcastTheta()" << endl;
   }
 
-  mpi::broadcast< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, nLogThetaGivenOneLabel.params, rankId);
+  mpi::broadcast< boost::unordered_map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, nLogThetaGivenOneLabel.params, rankId);
   
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BroadcastTheta()" << endl;
@@ -1360,16 +1360,16 @@ void LatentCrfModel::BroadcastTheta(unsigned rankId) {
 
 void LatentCrfModel::ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
 					   MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels,
-					   map<int, double> &mleMarginalsGivenOneLabel,
-					   map<std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+					   boost::unordered_map<int, double> &mleMarginalsGivenOneLabel,
+					   boost::unordered_map<std::pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank" << learningInfo.mpiWorld->rank() << ": before calling ReduceMleAndMarginals()" << endl;
   }
   
-  mpi::reduce< map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
+  mpi::reduce< boost::unordered_map< int, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
 								   mleGivenOneLabel.params, mleGivenOneLabel.params, 
 								   MultinomialParams::AccumulateConditionalMultinomials< int >, 0);
-  mpi::reduce< map< int, double > >(*learningInfo.mpiWorld, 
+  mpi::reduce< boost::unordered_map< int, double > >(*learningInfo.mpiWorld, 
 				      mleMarginalsGivenOneLabel, mleMarginalsGivenOneLabel, 
 				      MultinomialParams::AccumulateMultinomials<int>, 0);
   
@@ -1423,8 +1423,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // data structure to hold theta MLE estimates
         MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
         MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
-        map<int, double> mleMarginalsGivenOneLabel;
-        map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
+        boost::unordered_map<int, double> mleMarginalsGivenOneLabel;
+        boost::unordered_map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
         
         // update the mle for each sentence
         assert(examplesCount > 0);
@@ -1518,11 +1518,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
         
         MultinomialParams::ConditionalMultinomialParam<int> gradientOfNll;
         ComputeNllZGivenXThetaGradient(gradientOfNll);
-        for(std::map< int, std::map<int, double> >::iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
+        for(boost::unordered_map< int, boost::unordered_map<int, double> >::iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
             yIter != nLogThetaGivenOneLabel.params.end(); 
             ++yIter) {
           double marginal = 0.0;
-          for(std::map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+          for(boost::unordered_map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
             double oldTheta = MultinomialParams::nExp(zIter->second);
             double newTheta = oldTheta - learningInfo.thetaOptMethod->learningRate * gradientOfNll[yIter->first][zIter->first];
             if(newTheta <= 0) {
@@ -1534,7 +1534,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           } // end of theta updates for a particular event
           
           // now project (i.e. renormalize)
-          for(std::map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+          for(boost::unordered_map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
             double newTheta = zIter->second;
             double projectedNewTheta = newTheta / marginal;
             double nlogProjectedNewTheta = MultinomialParams::nLog(projectedNewTheta);
@@ -1852,8 +1852,8 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
   vector<vector<int> > labels;
   Label(tokens, labels);
   // analyze
-  map<int, map<string, int> > labelToTypesAndCounts;
-  map<string, map<int, int> > typeToLabelsAndCounts;
+  boost::unordered_map<int, boost::unordered_map<string, int> > labelToTypesAndCounts;
+  boost::unordered_map<string, boost::unordered_map<int, int> > typeToLabelsAndCounts;
   for(int sentId = 0; sentId < tokens.size(); sentId++) {
     for(int i = 0; i < tokens[sentId].size(); i++) {
       labelToTypesAndCounts[labels[sentId][i]][tokens[sentId][i]]++;
@@ -1863,27 +1863,27 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
   // write the number of tokens of each labels
   std::ofstream outputFile(outputFilename.c_str(), std::ios::out);
   outputFile << "# LABEL HISTOGRAM #" << endl;
-  for(map<int, map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
+  for(boost::unordered_map<int, boost::unordered_map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
     outputFile << "label:" << labelIter->first;
     int totalCount = 0;
-    for(map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
+    for(boost::unordered_map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
       totalCount += typeIter->second;
     }
     outputFile << " tokenCount:" << totalCount << endl;
   }
   // write the types of each label
   outputFile << endl << "# LABEL -> TYPES:COUNTS #" << endl;
-  for(map<int, map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
+  for(boost::unordered_map<int, boost::unordered_map<string, int> >::const_iterator labelIter = labelToTypesAndCounts.begin(); labelIter != labelToTypesAndCounts.end(); labelIter++) {
     outputFile << "label:" << labelIter->first << endl << "\ttypes: " << endl;
-    for(map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
+    for(boost::unordered_map<string, int>::const_iterator typeIter = labelIter->second.begin(); typeIter != labelIter->second.end(); typeIter++) {
       outputFile << "\t\t" << typeIter->first << ":" << typeIter->second << endl;
     }
   }
   // write the labels of each type
   outputFile << endl << "# TYPE -> LABELS:COUNT #" << endl;
-  for(map<string, map<int, int> >::const_iterator typeIter = typeToLabelsAndCounts.begin(); typeIter != typeToLabelsAndCounts.end(); typeIter++) {
+  for(boost::unordered_map<string, boost::unordered_map<int, int> >::const_iterator typeIter = typeToLabelsAndCounts.begin(); typeIter != typeToLabelsAndCounts.end(); typeIter++) {
     outputFile << "type:" << typeIter->first << "\tlabels: ";
-    for(map<int, int>::const_iterator labelIter = typeIter->second.begin(); labelIter != typeIter->second.end(); labelIter++) {
+    for(boost::unordered_map<int, int>::const_iterator labelIter = typeIter->second.begin(); labelIter != typeIter->second.end(); labelIter++) {
       outputFile << labelIter->first << ":" << labelIter->second << " ";
     }
     outputFile << endl;
@@ -1965,8 +1965,8 @@ void LatentCrfModel::InitLambda() {
   }
 
   // master collects all feature ids fired on any sentence
-  set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
-  mpi::reduce< set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
+  unordered_set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
+  mpi::reduce< unordered_set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
   // debug info
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
@@ -1975,7 +1975,7 @@ void LatentCrfModel::InitLambda() {
   
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
-    for(set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
+    for(unordered_set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
       lambda->AddParam(*paramIdIter);
     }
   }
@@ -1992,7 +1992,7 @@ void LatentCrfModel::InitLambda() {
 // returns -log p(z|x)
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					     MultinomialParams::ConditionalMultinomialParam<int> &mle, 
-					     std::map<int, double> &mleMarginals) {
+					     boost::unordered_map<int, double> &mleMarginals) {
   if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
     std::cerr << "sentId = " << sentId << endl;
   }
@@ -2004,7 +2004,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence
-  std::map< int, std::map< int, LogVal<double> > > B;
+  boost::unordered_map< int, boost::unordered_map< int, LogVal<double> > > B;
   B.clear();
   ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
@@ -2013,9 +2013,9 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
   double nLogP_ZGivenX = nLogC - nLogZ;
   // update mle for each z^*|y^* fired
-  for(typename std::map< int, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+  for(typename boost::unordered_map< int, boost::unordered_map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
     int context = GetContextOfTheta(sentId, yIter->first);
-    for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+    for(boost::unordered_map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
       double nLogb = -log<double>(zIter->second);
       assert(zIter->second.s_ == false); //  all B values are supposed to be positive
@@ -2034,7 +2034,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 // TODO: we don't need the lambdaFst. the return value of this function is just used for debugging.
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
 					     MultinomialParams::ConditionalMultinomialParam<pair<int,int> > &mle, 
-					     std::map< pair<int, int> , double> &mleMarginals) {
+					     boost::unordered_map< pair<int, int> , double> &mleMarginals) {
   if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
     std::cerr << "sentId = " << sentId << endl;
   }
@@ -2046,7 +2046,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence
-  std::map< pair<int, int>, std::map< int, LogVal<double> > > B;
+  boost::unordered_map< pair<int, int>, boost::unordered_map< int, LogVal<double> > > B;
   B.clear();
   ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
@@ -2056,9 +2056,9 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   double nLogP_ZGivenX = nLogC - nLogZ;
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
-  for(typename std::map< pair<int, int>, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+  for(typename boost::unordered_map< pair<int, int>, boost::unordered_map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
   const pair<int, int> &y_ = yIter->first;
-    for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+    for(boost::unordered_map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int z_ = zIter->first;
       double nLogb = -log<double>(zIter->second);
       assert(zIter->second.s_ == false); //  all B values are supposed to be positive

@@ -5,6 +5,10 @@
 #include <fstream>
 #include <math.h>
 
+#include <boost/unordered_map.hpp>
+
+#include "unordered_map_serialization.hpp"
+
 #include "LearningInfo.h"
 #include "StringUtils.h"
 #include "FstUtils.h"

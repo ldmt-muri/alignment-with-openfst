@@ -95,7 +95,7 @@ void IbmModel1::CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFst
 
 // normalizes the parameters such that \sum_t p(t|s) = 1 \forall s
 void IbmModel1::NormalizeParams() {
-  MultinomialParams::NormalizeParams<int>(params);
+  MultinomialParams::NormalizeParams(params);
 }
 
 void IbmModel1::PrintParams() {
@@ -116,7 +116,7 @@ void IbmModel1::InitParams() {
     for(int i=0; i<srcTokens.size(); i++) {
       int srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      map<int, double> &translations = params.params[srcToken];
+      boost::unordered_map<int, double> &translations = params.params[srcToken];
       
       // for each tgtToken
       for (int j=0; j<tgtTokens.size(); j++) {
@@ -149,8 +149,8 @@ void IbmModel1::CreateGrammarFst() {
   grammarFst.SetStart(0);
   grammarFst.SetFinal(0, 0);
   int fromState = 0, toState = 0;
-  for(map<int, MultinomialParams::MultinomialParam>::const_iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-    for(MultinomialParams::MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+  for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for(auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
       int tgtToken = tgtIter->first;
       int srcToken = srcIter->first;
       double paramValue = tgtIter->second;
@@ -190,8 +190,8 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >
 
 // zero all parameters
 void IbmModel1::ClearParams() {
-  for (map<int, MultinomialParams::MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-    for (MultinomialParams::MultinomialParam::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+  for (auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for (auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
       tgtIter->second = FstUtils::LOG_ZERO;
     }
   }
@@ -372,7 +372,7 @@ void IbmModel1::Align(const string &alignmentsFilename) {
     VectorFst< FstUtils::LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
     
     // given a src token id, what are the possible src position (in this sentence)
-    map<int, set<int> > srcTokenToSrcPos;
+    boost::unordered_map<int, set<int> > srcTokenToSrcPos;
     for(unsigned srcPos = 0; srcPos < srcSent.size(); srcPos++) {
       srcTokenToSrcPos[ srcSent[srcPos] ].insert(srcPos);
     }

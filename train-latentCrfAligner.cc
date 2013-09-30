@@ -211,11 +211,11 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   if(initialThetaParamsFilename.size() == 0 && learningInfo.initializeThetasWithModel1) {
     // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
     cerr << "rank #" << world.rank() << ": now update the multinomial params of the latentCrfALigner model." << endl;
-    for(map<int, MultinomialParams::MultinomialParam>::iterator contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
+    for(auto contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
 	contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
 	contextIter++) {
       
-      for(map<int, double>::iterator probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+      for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
 	
 	assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
 	probIter->second = ibmModel1.params[contextIter->first][probIter->first];

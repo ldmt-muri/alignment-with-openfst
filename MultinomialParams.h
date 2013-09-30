@@ -12,6 +12,10 @@
 #include <utility>
 #include <tuple>
 
+#include <boost/unordered_map.hpp>
+
+#include "unordered_map_serialization.hpp"
+
 #include "Samplers.h"
 #include "VocabEncoder.h"
 #include "FstUtils.h"
@@ -19,7 +23,7 @@
 namespace MultinomialParams {
 
   // parameters for describing a multinomial distribution p(x)=y such that x is the key and y is a log probability
-  typedef std::map<int, double> MultinomialParam;
+  typedef boost::unordered_map<int, double> MultinomialParam;
 
   // forward declarations
   double nLog(double prob);
@@ -45,7 +49,7 @@ namespace MultinomialParams {
 
     double Hash() {
       double hash = 0.0;
-      for(typename std::map<ContextType, MultinomialParam>::const_iterator cIter = params.begin(); cIter != params.end(); cIter++) {
+      for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator cIter = params.begin(); cIter != params.end(); cIter++) {
 	for(MultinomialParam::const_iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
 	  hash += mIter->second;
 	}
@@ -55,7 +59,7 @@ namespace MultinomialParams {
     
     void GaussianInit(double mean = 0.0, double std = 1.0) {
       GaussianSampler sampler(mean, std);
-      for(typename std::map<ContextType, MultinomialParam>::iterator cIter = params.begin(); cIter != params.end(); cIter++) {
+      for(typename boost::unordered_map<ContextType, MultinomialParam>::iterator cIter = params.begin(); cIter != params.end(); cIter++) {
         for(MultinomialParam::iterator mIter = cIter->second.begin(); mIter != cIter->second.end(); mIter++) {
           mIter->second = nExp(sampler.Draw());
         }
@@ -67,7 +71,7 @@ namespace MultinomialParams {
     void PrintParams() {
       // iterate over src tokens in the model
       int counter = 0;
-      for(typename map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+      for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
         for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
@@ -80,7 +84,7 @@ namespace MultinomialParams {
     void PrintParams(const VocabEncoder &encoder) {
       // iterate over src tokens in the model
       int counter = 0;
-      for(typename std::map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
+      for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
         for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
@@ -90,7 +94,7 @@ namespace MultinomialParams {
     }
     
   public:
-    std::map<ContextType, MultinomialParam> params;
+    boost::unordered_map<ContextType, MultinomialParam> params;
   };
   
   static const int NLOG_SMOOTHING_CONSTANT = 1;
@@ -107,7 +111,7 @@ namespace MultinomialParams {
 			    bool decodeContext=false,
 			    bool decodeEvent=false) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (std::map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
+    for (boost::unordered_map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
 	 srcIter != params.params.end(); 
 	 srcIter++) {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
@@ -189,7 +193,7 @@ namespace MultinomialParams {
 			    const ConditionalMultinomialParam< std::pair<int, int> > &params, 
 			    const VocabEncoder &vocabEncoder) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (std::map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
+    for (boost::unordered_map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
 	 srcIter != params.params.end(); 
 	 srcIter++) {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
@@ -203,20 +207,20 @@ namespace MultinomialParams {
   }
   
   template <typename ContextType>
-  static std::map<ContextType, double> AccumulateMultinomials(const std::map<ContextType, double>& p1, 
-							      const std::map<ContextType, double>& p2) {
-    std::map<ContextType, double> pTotal(p1);
-    for(typename std::map<ContextType, double>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+  static boost::unordered_map<ContextType, double> AccumulateMultinomials(const boost::unordered_map<ContextType, double>& p1, 
+							      const boost::unordered_map<ContextType, double>& p2) {
+    boost::unordered_map<ContextType, double> pTotal(p1);
+    for(typename boost::unordered_map<ContextType, double>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
       pTotal[p2Iter->first] += p2Iter->second;
     }
     return pTotal;
   }
 
   template <typename ContextType>
-  static std::map<ContextType, MultinomialParam> AccumulateConditionalMultinomials(const std::map<ContextType, MultinomialParam>& p1,
-										    const std::map<ContextType, MultinomialParam>& p2) {
-    std::map<ContextType, MultinomialParam> pTotal(p1);
-    for(typename std::map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+  static boost::unordered_map<ContextType, MultinomialParam> AccumulateConditionalMultinomials(const boost::unordered_map<ContextType, MultinomialParam>& p1,
+										    const boost::unordered_map<ContextType, MultinomialParam>& p2) {
+    boost::unordered_map<ContextType, MultinomialParam> pTotal(p1);
+    for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
       //MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
 	pTotal[p2Iter->first][subP2Iter->first] += subP2Iter->second;
@@ -226,10 +230,10 @@ namespace MultinomialParams {
   }
 
   template <typename ContextType>
-  static std::map<ContextType, MultinomialParam> AccumulateConditionalMultinomialsLogSpace(const std::map<ContextType, MultinomialParam>& p1,
-											   const std::map<ContextType, MultinomialParam>& p2) {
-    std::map<ContextType, MultinomialParam> pTotal(p1);
-    for(typename std::map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
+  static boost::unordered_map<ContextType, MultinomialParam> AccumulateConditionalMultinomialsLogSpace(const boost::unordered_map<ContextType, MultinomialParam>& p1,
+											   const boost::unordered_map<ContextType, MultinomialParam>& p2) {
+    boost::unordered_map<ContextType, MultinomialParam> pTotal(p1);
+    for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
       //MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
 	pTotal[p2Iter->first][subP2Iter->first] = 
@@ -269,7 +273,7 @@ namespace MultinomialParams {
         bool normalizedParamsAreInNLog = true) {
     assert(symDirichletAlpha >= 1.0); // for smaller values, we should use variational bayes
     // iterate over src tokens in the model
-    for(typename map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       MultinomialParam &translations = (*srcIter).second;
       double fTotalProb = 0.0;
       // iterate over tgt tokens logsumming over the logprob(tgt|src) 
@@ -297,7 +301,7 @@ namespace MultinomialParams {
   // zero all parameters
   template <typename ContextType>
     void ClearParams(ConditionalMultinomialParam<ContextType>& params, bool smooth=false) {
-    for (typename map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+    for (typename unordered_map<ContextType, MultinomialParam>::iterator srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       for (MultinomialParam::iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
 	if(smooth) {
 	  tgtIter->second = NLOG_SMOOTHING_CONSTANT;

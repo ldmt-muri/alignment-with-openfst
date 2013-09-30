@@ -15,7 +15,7 @@ void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialPar
     BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
 
     // compute the B matrix for this sentence
-    std::map< ContextType, std::map< int, LogVal<double> > > B;
+    boost::unordered_map< ContextType, boost::unordered_map< int, LogVal<double> > > B;
     B.clear();
     ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
     
@@ -23,9 +23,9 @@ void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialPar
     double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);    
 
     // update the gradient for every theta used in this sentence
-    for(typename std::map< ContextType, std::map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    for(typename boost::unordered_map< ContextType, boost::unordered_map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
       int context = GetContextOfTheta(sentId, yIter->first);
-      for(std::map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      for(boost::unordered_map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
 	int z_ = zIter->first;
 	double nLogb = -log<double>(zIter->second);
 	assert(zIter->second.s_ == false); //  all B values are supposed to be positive
@@ -41,17 +41,17 @@ void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialPar
   /*
   // add the penalty term for all thetas
   double delta = 1;
-  typename std::map<ContextType, double> thetaMarginals;
-  for(typename std::map< ContextType, std::map<int, double> >::const_iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
+  typename boost::unordered_map<ContextType, double> thetaMarginals;
+  for(typename boost::unordered_map< ContextType, boost::unordered_map<int, double> >::const_iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
       yIter != nLogThetaGivenOneLabel.params.end(); 
       ++yIter) {
     // first compute the marginal for each context
     thetaMarginals[yIter->first] = 0.0;
-    for(std::map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+    for(boost::unordered_map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
       thetaMarginals[yIter->first] += MultinomialParams::nExp(nLogThetaGivenOneLabel[yIter->first][zIter->first]);
     }
     // then update the gradient for all events
-    for(std::map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+    for(boost::unordered_map<int, double>::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
       gradient[yIter->first][zIter->first] += 2.0 / delta * sin( (1.0 - thetaMarginals[yIter->first]) / delta);
     }
   } 

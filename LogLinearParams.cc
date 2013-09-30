@@ -1,10 +1,11 @@
 #include "LogLinearParams.h"
 
 using namespace std;
+using namespace boost;
 
 LogLinearParams::LogLinearParams(const VocabEncoder &types, 
-				 const std::map<int, std::map<int, double> > &ibmModel1ForwardLogProbs,
-				 const std::map<int, std::map<int, double> > &ibmModel1BackwardLogProbs,
+				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
+				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
 				 double gaussianStdDev) :
   types(types), 
   ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
@@ -16,8 +17,8 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types,
 
 LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDev) : 
   types(types), 
-  ibmModel1ForwardScores(map<int, map<int, double> >()),
-  ibmModel1BackwardScores(map<int, map<int, double> >()),
+  ibmModel1ForwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
+  ibmModel1BackwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
@@ -231,8 +232,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   // F104: precomputed(tgt[i], src[y_i])
   if(enabledFeatureTypes.size() > 104 && enabledFeatureTypes[104]) {
     assert(precomputedFeaturesWithTwoInputs.size() > 0);
-    map<string, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
-    for(map<string, double>::const_iterator precomputedIter = precomputedFeatures.begin();
+    boost::unordered_map<string, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
+    for(auto precomputedIter = precomputedFeatures.begin();
 	precomputedIter != precomputedFeatures.end();
 	precomputedIter++) {
       AddParam(precomputedIter->first);
@@ -726,7 +727,7 @@ double LogLinearParams::Hash() {
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 
 				   const std::vector<bool>& enabledFeatureTypes, 
-				   std::map<string, double>& activeFeatures) {
+				   boost::unordered_map<string, double>& activeFeatures) {
   
   // for debugging
   //    cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
@@ -867,7 +868,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 void LogLinearParams::PersistParams(const string &outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
   
-  for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
+  for (auto paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
     paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
   }
 
@@ -904,7 +905,7 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
 }
 
 void LogLinearParams::PrintFirstNParams(unsigned n) {
-  for (map<string, int>::const_iterator paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
+  for (auto paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
     cerr << paramsIter->first << " " << paramWeights[paramsIter->second] << " at " << paramsIter->second << endl;
   }
 }
@@ -915,20 +916,19 @@ void LogLinearParams::PrintParams() {
   PrintFirstNParams(paramIndexes.size());
 }
 
-void LogLinearParams::PrintParams(std::map<std::string, double> tempParams) {
-  for(map<string, double>::const_iterator paramsIter = tempParams.begin(); paramsIter != tempParams.end(); paramsIter++) {
+void LogLinearParams::PrintParams(boost::unordered_map<std::string, double> tempParams) {
+  for(auto paramsIter = tempParams.begin(); paramsIter != tempParams.end(); paramsIter++) {
     cerr << paramsIter->first << " " << paramsIter->second << endl;
   }
 }
 
 
 // use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const map<string, double> &gradient, const OptMethod& optMethod) {
+void LogLinearParams::UpdateParams(const boost::unordered_map<string, double> &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
   case OptAlgorithm::GRADIENT_DESCENT:
-    for(map<string, double>::const_iterator gradientIter = gradient.begin();
-	gradientIter != gradient.end();
-	gradientIter++) {
+    for(auto gradientIter = gradient.begin(); gradientIter != gradient.end();
+        gradientIter++) {
       // in case this parameter does not exist in paramWeights/paramIndexes
       AddParam(gradientIter->first);
       // update the parameter weight
@@ -975,13 +975,15 @@ void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFea
 // converts a map into an array. 
 // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
 // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
-void LogLinearParams::ConvertFeatureMapToFeatureArray(map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount) { 
+void LogLinearParams::ConvertFeatureMapToFeatureArray(
+    boost::unordered_map<string, double>& valuesMap, double* valuesArray, 
+    unsigned constrainedFeaturesCount) { 
   // init to 0 
   for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
     valuesArray[i-constrainedFeaturesCount] = 0; 
   } 
   // set the active features 
-  for(map<string, double>::const_iterator valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) { 
+  for(auto valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) { 
     // skip constrained features 
     if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) { 
       continue; 
@@ -1005,7 +1007,7 @@ void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) 
   boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root); 
   boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
   boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
-  boost::mpi::broadcast< std::map< std::string, int> >(world, paramIndexes, root); 
+  boost::mpi::broadcast< boost::unordered_map< std::string, int> >(world, paramIndexes, root); 
 }   
 
 // checks whether the "otherParams" have the same parameters and values as this object 
@@ -1017,10 +1019,10 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
     return false; 
   if(paramIds.size() != otherParams.paramIds.size())  
     return false; 
-  for(std::map<std::string, int>::const_iterator paramIndexesIter = paramIndexes.begin();  
+  for(auto paramIndexesIter = paramIndexes.begin();  
       paramIndexesIter != paramIndexes.end(); 
       ++paramIndexesIter) { 
-    std::map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+    boost::unordered_map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
     if(paramIndexesIter->second != otherIter->second)  
       return false; 
   } 
@@ -1036,10 +1038,10 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
 }
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-double LogLinearParams::DotProduct(const std::map<std::string, double>& values) {
+double LogLinearParams::DotProduct(const boost::unordered_map<std::string, double>& values) {
   double dotProduct = 0;
   // for each active feature
-  for(std::map<std::string, double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
+  for(auto valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
     // make sure there's a corresponding feature in paramIndexes and paramWeights
     bool newParam = AddParam(valuesIter->first);
     // then update the dot product
