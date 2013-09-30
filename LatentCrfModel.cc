@@ -1938,11 +1938,17 @@ void LatentCrfModel::InitLambda() {
 
   // then, each process discovers the features that may show up in their sentences.
   for(int sentId = 0; sentId < examplesCount; sentId++) {
-
+    
     // skip sentences not assigned to this process
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       continue;
     }
+    
+    if(sentId % (examplesCount/10) == 0) {
+      cerr << "sentId=" << sentId;
+    }
+
+    
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
       cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now processing sent# " << sentId << endl;

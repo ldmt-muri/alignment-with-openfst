@@ -184,10 +184,10 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
     factorId.yIM1 = yIM1;
     factorId.i = i;
     factorId.srcWord = srcToken;
-    factorId.prevSrcWord = prevSrcToken;
+    factorId.prevSrcWord = enabledFeatureTypes[106]? prevSrcToken : 0;
     factorId.tgtWord = tgtToken;
-    factorId.prevTgtWord = prevTgtToken;
-    factorId.nextTgtWord = nextTgtToken;
+    factorId.prevTgtWord = enabledFeatureTypes[110]? prevTgtToken : 0;
+    factorId.nextTgtWord = enabledFeatureTypes[111]? nextTgtToken : 0;
     if(factorIdToFeatures.count(factorId) == 1) {
       activeFeatures = factorIdToFeatures[factorId];
       // logging
