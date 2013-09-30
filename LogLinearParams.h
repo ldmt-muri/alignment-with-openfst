@@ -15,7 +15,7 @@
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/mpi/collectives.hpp>
-
+#include <boost/functional/hash.hpp>
 #include "cdec-utils/fast_sparse_vector.h"
 
 #include "LearningInfo.h"
@@ -54,7 +54,17 @@ public:
   struct AlignerFactorHash : public std::unary_function<AlignerFactorId, size_t> {
     size_t operator()(const AlignerFactorId& x) const {
       // Example hash, can't guarantee that this is any good though...
-      return x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1;
+      size_t seed = 0;
+      boost::hash_combine(seed, x.i);
+      boost::hash_combine(seed, x.nextTgtWord);
+      boost::hash_combine(seed, x.prevSrcWord);
+      boost::hash_combine(seed, x.prevTgtWord);
+      boost::hash_combine(seed, x.srcWord);
+      boost::hash_combine(seed, x.tgtWord);
+      boost::hash_combine(seed, x.yI);
+      boost::hash_combine(seed, x.yIM1);
+      return seed;
+      //return std::hash<int>()(x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1);
     }
   };
 
