@@ -6,7 +6,7 @@ public:
   inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 					 int srcSentLength, int tgtSentLength, 
 					 const std::vector<bool>& enabledFeatureTypes) {
-    boost::unordered_map<std::string, double> activeFeatures;
+    boost::unordered_map<FeatureId, double> activeFeatures;
     FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
     // compute log prob
     double result = DotProduct(activeFeatures);    
@@ -14,7 +14,7 @@ public:
   }
   
   // update a single parameter's value (adds the parameter if necessary)
-  inline void UpdateParam(const std::string &paramId, const double newValue) {
+  inline void UpdateParam(const FeatureId &paramId, const double newValue) {
     if(!AddParam(paramId, newValue)) {
       paramWeights[paramIndexes[paramId]] = newValue;
     }
@@ -31,7 +31,7 @@ public:
   }
 
   // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
-  inline void UpdateOldParamWeight(const std::string &paramId) {
+  inline void UpdateOldParamWeight(const FeatureId &paramId) {
     if(!AddParam(paramId)) {
       oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
     }
@@ -46,7 +46,7 @@ public:
   }  
 
   // checks whether a parameter exists
-  inline bool ParamExists(const std::string &paramId) {
+  inline bool ParamExists(const FeatureId &paramId) {
     return paramIndexes.count(paramId) == 1;
   }
 
@@ -56,19 +56,19 @@ public:
   }
 
   // returns the int index of the parameter in the underlying array
-  inline unsigned GetParamIndex(const std::string &paramId) {
+  inline unsigned GetParamIndex(const FeatureId &paramId) {
     AddParam(paramId);
     return paramIndexes[paramId];
   }
 
   // returns the string identifier of the parameter given its int index in the weights array
-  inline std::string GetParamId(const unsigned paramIndex) {
+  inline FeatureId GetParamId(const unsigned paramIndex) {
     assert(paramIndex < paramWeights.size());
     return paramIds[paramIndex];
   }
 
   // returns the current weight of this param (adds the parameter if necessary)
-  inline double GetParamWeight(const std::string &paramId) {
+  inline double GetParamWeight(const FeatureId &paramId) {
     AddParam(paramId);
     return paramWeights[paramIndexes[paramId]];
   }
@@ -82,7 +82,7 @@ public:
   // returns the difference between new and old weights of a parameter, given its string ID. 
   // assumptions:
   // - paramId already exists
-  inline double GetParamNewMinusOldWeight(const std::string &paramId) {
+  inline double GetParamNewMinusOldWeight(const FeatureId &paramId) {
     return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
   }
 

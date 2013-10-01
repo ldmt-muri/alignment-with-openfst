@@ -24,7 +24,7 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDe
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
-void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue) {
+void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, FeatureId &featureId, double featureValue) {
   precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
   //  AddParam(featureId);
 }
@@ -66,12 +66,16 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       std::vector<string> featureIdAndValue;
       StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
       assert(featureIdAndValue.size() == 2);
-      string &featureId = featureIdAndValue[0];
+      FeatureId featureId;
+      featureId.type = FeatureType::PRECOMPUTED;
+      featureId.precomputed = types.Encode(featureIdAndValue[0]);
+      
       // read feature value
       double featureValue;
       stringstream temp;
       temp << featureIdAndValue[1];
       temp >> featureValue;
+      
       // store it for quick retrieval later on
       precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
     }
@@ -84,10 +88,14 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 }
 
 // initializes the parameter weight by drawing from a gaussian
-bool LogLinearParams::AddParam(const string &paramId) {
+bool LogLinearParams::AddParam(const FeatureId &paramId) {
   // does the parameter already exist?
   if(paramIndexes.count(paramId) > 0) {
     return false;
+  }
+
+  if(paramIndexes.size() % 1000000 == 0) {
+    cerr << "|lambdas| are now " << paramIndexes.size() << endl;
   }
 
   //  cerr << "_" << paramId << "_";
@@ -109,7 +117,7 @@ bool LogLinearParams::AddParam(const string &paramId) {
 }
 
 // if there's another parameter with the same ID already, do nothing
-bool LogLinearParams::AddParam(const string &paramId, double paramWeight) {
+bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
   bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
     if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
@@ -161,8 +169,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
          << ", activeFeatures.size()=" << activeFeatures.size() << endl;
   }
 
-  stringstream temp;
-
   // first, yI and yIM1 are not zero-based. LatentCrfAligner::FIRST_POS maps to the first position in the src sentence (this means the null token, if null alignments are enabled, or the first token in the src sent). 
   yI -= FIRST_POS;
   yIM1 -= FIRST_POS;
@@ -198,118 +204,94 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
     }
   }
   
+  FeatureId featureId;
+  
   // F101: I( y_i-y_{i-1} == 0 )
   if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
-    temp.str("");
-    temp << "F101:";
-    if(yI == yIM1) {
-      temp << "true";
-    } else {
-      temp << "false";
-    }
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    featureId.type = FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO;
+    featureId.alignmentJump = (yI == yIM1) ? 0 : 1;
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
   
   // F102: I( floor( ln(y_i - y_{i-1}) ) )
   if(enabledFeatureTypes.size() > 102 && enabledFeatureTypes[102]) {
-    temp.str("");
-    temp << "F102:";
-    unsigned diff = log(yI - yIM1);
-    temp << diff;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
+    featureId.alignmentJump = log(yI - yIM1);
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
 	 
   // F103: I( tgt[i] aligns_to src[y_i] )
   if(enabledFeatureTypes.size() > 103 && enabledFeatureTypes[103]) {
-    temp.str("");
-    temp << "F103:" << srcToken << ":" << tgtToken;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    featureId.type = FeatureTemplate::SRC0_TGT0;
+    featureId.srcWord = srcToken;
+    featureId.tgtWord = tgtToken;
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
   
   // F104: precomputed(tgt[i], src[y_i])
   if(enabledFeatureTypes.size() > 104 && enabledFeatureTypes[104]) {
     assert(precomputedFeaturesWithTwoInputs.size() > 0);
-    boost::unordered_map<string, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
+    boost::unordered_map<FeatureId, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
     for(auto precomputedIter = precomputedFeatures.begin();
-	precomputedIter != precomputedFeatures.end();
-	precomputedIter++) {
+        precomputedIter != precomputedFeatures.end();
+        precomputedIter++) {
       AddParam(precomputedIter->first);
       activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
     }
   }
-
+  
   // F105: I( y_i - y_{i-1} == k )
   if(enabledFeatureTypes.size() > 105 && enabledFeatureTypes[105]) {
-    temp.str("");
-    temp << "F105:";
-    int diff = yI - yIM1;
-    temp << diff;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
+    featureId.alignmentJump = yI - yIM1;
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
 	 
   // F106: I( src[y_{i-1}]:src[y_i] )
   if(enabledFeatureTypes.size() > 106 && enabledFeatureTypes[106]) {
-    temp.str("");
-    temp << "F106:" << prevSrcToken << ":" << srcToken;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    featureId.type = FeatureTemplate::SRC_BIGRAM;
+    featureId.bigram.previous = prevSrcToken;
+    featureId.bigram.current = srcToken;
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
   
   // F107: |i/len(src) - j/len(tgt)|
   // yI+yIM1 > 0 ensures that at least one of them will be meaningful in the computation of diagonal deviation
   if(enabledFeatureTypes.size() > 107 && enabledFeatureTypes[107] && (yI + yIM1 > 0)) {
-    string diagonalDeviation = "F107:diag-dev";
-    AddParam(diagonalDeviation);
+    featureId.type = FeatureTemplate::DIAGONAL_DEVIATION;
+    AddParam(featureId);
     double deviation = (yI > 0)?
       fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
       fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
-    activeFeatures[paramIndexes[diagonalDeviation]] += deviation;
+    activeFeatures[paramIndexes[featureId]] += deviation;
   }
 
   // F108: value = I( i==0 && y_i==0 )   ///OR\\\  I( i==len(tgt) && y_i==len(src) ) 
-  string theBeginningAligns = "F108:begin";
-  string theEndingAligns = "F108:end";
   if(enabledFeatureTypes.size() > 108 && enabledFeatureTypes[108]) {
     if(i == 0 && yI == 0) {
-      AddParam(theBeginningAligns);
-      activeFeatures[paramIndexes[theBeginningAligns]] += 1.0;
+      featureId.type = FeatureTemplate::SYNC_START;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
     }
     if(i == x_t.size() - 1 && yI == x_s.size() - 1) {
-      AddParam(theEndingAligns);
-      activeFeatures[paramIndexes[theEndingAligns]] += 1.0;
+      featureId.type = FeatureTemplate::SYNC_END;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
     }
-  }
-
-  // F109: dummy feature for debugging purposes
-  if(enabledFeatureTypes.size() > 109 && enabledFeatureTypes[109]) {
-    AddParam("F109");
-    activeFeatures[paramIndexes["F109"]] += i;
-  }
-
-  // F110: I( tgt[i-1] aligns_to src[y_i] ) 
-  if(enabledFeatureTypes.size() > 110 && enabledFeatureTypes[110]) {
-    temp.str("");
-    temp << "F110:" << srcToken << ":" << prevTgtToken;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  
-  // F111: I( tgt[i+1] aligns_to src[y_i] ) 
-  if(enabledFeatureTypes.size() > 111 && enabledFeatureTypes[111]) {
-    temp.str("");
-    temp << "F111:" << srcToken << ":" << nextTgtToken;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
 
   // save the active features in the cache
   if(learningInfo->cacheActiveFeatures) {
     assert(factorIdToFeatures.count(factorId) == 0);
     factorIdToFeatures[factorId] = activeFeatures;
+    if(factorIdToFeatures.size() % 1000000 == 0) {
+      cerr << "|factorIds| is now " << factorIdToFeatures.size() << endl;
+    } 
     // logging
     //factorId.Print();
     //PrintFeatureValues(activeFeatures);
@@ -317,12 +299,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   }
 }
 
+/*
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
-  
-  stringstream temp;
   
   const int &xI = x[i];
   const std::string& xIString = types.Decode(x[i]);
@@ -715,6 +696,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
 }
+*/
 
 double LogLinearParams::Hash() {
   double hash = 0.0;
@@ -724,6 +706,7 @@ double LogLinearParams::Hash() {
   return hash;
 } 
 
+/*
 void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 				   int srcSentLength, int tgtSentLength, 
 				   const std::vector<bool>& enabledFeatureTypes, 
@@ -874,6 +857,7 @@ void LogLinearParams::PersistParams(const string &outputFilename) {
 
   paramsFile.close();
 }
+*/
 
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::LoadParams(const string &inputFilename) {
@@ -897,7 +881,7 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
     weightString << splits[1];
     double weight;
     weightString >> weight;
-    string &paramId = splits[0];
+    FeatureId paramId = FeatureId::Read(splits[0]);
     // add the param
     AddParam(paramId, weight);
   }
@@ -916,15 +900,15 @@ void LogLinearParams::PrintParams() {
   PrintFirstNParams(paramIndexes.size());
 }
 
-void LogLinearParams::PrintParams(boost::unordered_map<std::string, double> tempParams) {
+void LogLinearParams::PrintParams(boost::unordered_map<FeatureId, double> tempParams) {
   for(auto paramsIter = tempParams.begin(); paramsIter != tempParams.end(); paramsIter++) {
-    cerr << paramsIter->first << " " << paramsIter->second << endl;
+    cerr << FeatureId::Write(paramsIter->first) << " " << paramsIter->second << endl;
   }
 }
 
 
 // use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const boost::unordered_map<string, double> &gradient, const OptMethod& optMethod) {
+void LogLinearParams::UpdateParams(const boost::unordered_map<FeatureId, double> &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
   case OptAlgorithm::GRADIENT_DESCENT:
     for(auto gradientIter = gradient.begin(); gradientIter != gradient.end();
@@ -952,31 +936,11 @@ void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
   }
 }
 
-// TODO: reimplement l1 penalty
-// if using a cumulative L1 regularizer, apply the cumulative l1 penalty
-void LogLinearParams::ApplyCumulativeL1Penalty(const LogLinearParams& applyToFeaturesHere,
-					       LogLinearParams& appliedL1Penalty,
-					       const double correctL1Penalty) {
-  assert(false);
-  /*  for(map<string, double>::const_iterator featuresIter = applyToFeaturesHere.params.begin();
-      featuresIter != applyToFeaturesHere.params.end();
-      featuresIter++) {
-    double currentFeatureWeight = params[featuresIter->first];
-    if(currentFeatureWeight >= 0) {
-      currentFeatureWeight = max(0.0, currentFeatureWeight - (correctL1Penalty + appliedL1Penalty.params[featuresIter->first]));
-    } else {
-      currentFeatureWeight = min(0.0, currentFeatureWeight + (correctL1Penalty - appliedL1Penalty.params[featuresIter->first]));
-    }
-    appliedL1Penalty.params[featuresIter->first] += currentFeatureWeight - params[featuresIter->first];
-    params[featuresIter->first] = currentFeatureWeight;
-    }*/
-}
-
 // converts a map into an array. 
 // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
 // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
 void LogLinearParams::ConvertFeatureMapToFeatureArray(
-    boost::unordered_map<string, double>& valuesMap, double* valuesArray, 
+    boost::unordered_map<FeatureId, double>& valuesMap, double* valuesArray, 
     unsigned constrainedFeaturesCount) { 
   // init to 0 
   for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
@@ -1004,10 +968,10 @@ double LogLinearParams::ComputeL2Norm() {
 
 // call boost::mpi::broadcast for the essential member variables of this object 
 void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) { 
-  boost::mpi::broadcast< std::vector<std::string> >(world, paramIds, root); 
+  boost::mpi::broadcast< std::vector<FeatureId> >(world, paramIds, root); 
   boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
   boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
-  boost::mpi::broadcast< boost::unordered_map< std::string, int> >(world, paramIndexes, root); 
+  boost::mpi::broadcast< boost::unordered_map< FeatureId, int> >(world, paramIndexes, root); 
 }   
 
 // checks whether the "otherParams" have the same parameters and values as this object 
@@ -1022,7 +986,7 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
   for(auto paramIndexesIter = paramIndexes.begin();  
       paramIndexesIter != paramIndexes.end(); 
       ++paramIndexesIter) { 
-    boost::unordered_map<std::string, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+    boost::unordered_map<FeatureId, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
     if(paramIndexesIter->second != otherIter->second)  
       return false; 
   } 
@@ -1038,7 +1002,7 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
 }
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-double LogLinearParams::DotProduct(const boost::unordered_map<std::string, double>& values) {
+double LogLinearParams::DotProduct(const boost::unordered_map<FeatureId, double>& values) {
   double dotProduct = 0;
   // for each active feature
   for(auto valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {

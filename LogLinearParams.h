@@ -24,6 +24,92 @@
 #include "VocabEncoder.h"
 #include "Samplers.h"
 
+enum FeatureTemplate { LABEL_BIGRAM, SRC_BIGRAM, ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, PRECOMPUTED, DIAGONAL_DEVIATION, SYNC_START, SYNC_END };
+
+struct FeatureId {
+public:
+  FeatureTemplate type;
+  union {
+    struct { unsigned current, previous; } bigram;
+    int alignmentJump;
+    struct { unsigned srcWord, tgtWord; } wordPair;
+    int precomputed;
+  };
+  static string Write(FeatureId x) {
+    string y;
+    return y;
+  }
+  static FeatureId Read(string y) {
+    FeatureId x;
+    return x;
+  }
+};
+
+std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
+{
+  os << obj.type;
+  switch(obj.type) {
+  case FeatureTemplate::LABEL_BIGRAM:
+  case FeatureTemplate::SRC_BIGRAM:
+    os << obj.bigram.current << obj.bigram.previous;
+    break;
+  case FeatureTemplate::ALIGNMENT_JUMP:
+  case FeatureTemplate::LOG_ALINGNMENT_JUMP:
+  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+    os << obj.alignmentJump;
+    break;
+  case FeatureTemplate::SRC0_TGT0:
+    os << obj.wordPair.srcWord << obj.wordPair.tgtWord;
+    break;
+  case FeatureTemplate::PRECOMPUTED:
+    os << obj.precomputed;
+    break;
+  case FeatureTemplate::DIAGONAL_DEVIATION:
+  case FeatureTemplate::SYNC_START:
+  case FeatureTemplate::SYNC_END:
+    break;
+  default:
+    assert(false);
+  }
+
+  return os;
+}
+
+std::istream& operator>>(std::istream& is, T& obj)
+{
+  // read obj from stream
+  if( /* no valid object of T found in stream */ )
+    is.setstate(std::ios::failbit);
+
+  is >> obj.type;
+  switch(obj.type) {
+  case FeatureTemplate::LABEL_BIGRAM:
+  case FeatureTemplate::SRC_BIGRAM:
+    is >> obj.bigram.current;
+    is >> obj.bigram.previous;
+    break;
+  case FeatureTemplate::ALIGNMENT_JUMP:
+  case FeatureTemplate::LOG_ALINGNMENT_JUMP:
+  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+    is >> obj.alignmentJump;
+    break;
+  case FeatureTemplate::SRC0_TGT0:
+    is >> obj.wordPair.srcWord;
+    is >> obj.wordPair.tgtWord;
+    break;
+  case FeatureTemplate::PRECOMPUTED:
+    is >> obj.precomputed;
+    break;
+  case FeatureTemplate::DIAGONAL_DEVIATION:
+  case FeatureTemplate::SYNC_START:
+  case FeatureTemplate::SYNC_END:
+    break;
+  default:
+    assert(false);
+  }
+  return is;
+}
+
 struct AlignerFactorId 
 { 
 public:
@@ -55,16 +141,15 @@ public:
 
   struct AlignerFactorHash : public std::unary_function<AlignerFactorId, size_t> {
     size_t operator()(const AlignerFactorId& x) const {
-      // Example hash, can't guarantee that this is any good though...
       size_t seed = 0;
-      boost::hash_combine(seed, x.i);
-      boost::hash_combine(seed, x.nextTgtWord);
-      boost::hash_combine(seed, x.prevSrcWord);
-      boost::hash_combine(seed, x.prevTgtWord);
-      boost::hash_combine(seed, x.srcWord);
-      boost::hash_combine(seed, x.tgtWord);
-      boost::hash_combine(seed, x.yI);
-      boost::hash_combine(seed, x.yIM1);
+      boost::hash_combine(seed, (unsigned char)x.i);
+      //boost::hash_combine(seed, x.nextTgtWord);
+      //boost::hash_combine(seed, x.prevSrcWord);
+      //boost::hash_combine(seed, x.prevTgtWord);
+      boost::hash_combine(seed, (unsigned short)x.srcWord);
+      boost::hash_combine(seed, (unsigned short)x.tgtWord);
+      boost::hash_combine(seed, (unsigned char)x.yI);
+      boost::hash_combine(seed, (unsigned char)x.yIM1);
       return seed;
       //return std::hash<int>()(x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1);
     }
@@ -98,7 +183,7 @@ class LogLinearParams {
   
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
-  void AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, std::string &featureId, double featureValue);
+  void AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, FeatureId &featureId, double featureValue);
 
   double Hash();
 
@@ -110,7 +195,7 @@ class LogLinearParams {
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
-		    const std::vector<bool>& enabledFeatureTypes, boost::unordered_map<std::string, double>& activeFeatures);
+		    const std::vector<bool>& enabledFeatureTypes, boost::unordered_map<FeatureId, double>& activeFeatures);
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 		    const std::vector<bool> &enabledFeatureTypes, 
@@ -122,13 +207,13 @@ class LogLinearParams {
 		    FastSparseVector<double> &activeFeatures);
 
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
-  bool AddParam(const std::string &paramId);
+  bool AddParam(const FeatureId &paramId);
   
   // if the paramId does not exist, add it. otherwise, do nothing. 
-  bool AddParam(const std::string &paramId, double paramWeight);
+  bool AddParam(const FeatureId &paramId, double paramWeight);
 
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-  double DotProduct(const boost::unordered_map<std::string, double>& values);
+  double DotProduct(const boost::unordered_map<FeatureId, double>& values);
 
   double DotProduct(const std::vector<double>& values);
 
@@ -139,7 +224,7 @@ class LogLinearParams {
   double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights);
  
   // updates the model parameters given the gradient and an optimization method
-  void UpdateParams(const boost::unordered_map<std::string, double> &gradient, const OptMethod &optMethod);
+  void UpdateParams(const boost::unordered_map<FeatureId, double> &gradient, const OptMethod &optMethod);
   
   // override the member weights vector with this array
   void UpdateParams(const double* array, const int arrayLength);
@@ -147,7 +232,7 @@ class LogLinearParams {
   // converts a map into an array. 
   // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
   // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
-  void ConvertFeatureMapToFeatureArray(boost::unordered_map<string, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
+  void ConvertFeatureMapToFeatureArray(boost::unordered_map<FeatureId, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
 
   // 1/2 * sum of the squares 
   double ComputeL2Norm();
@@ -161,7 +246,7 @@ class LogLinearParams {
   
   void PrintParams(); 
   
-  static void PrintParams(boost::unordered_map<std::string, double> tempParams); 
+  static void PrintParams(boost::unordered_map<FeatureId, double> tempParams); 
   
   void PrintFeatureValues(FastSparseVector<double> &feats);
 
@@ -182,10 +267,10 @@ class LogLinearParams {
 
  public:
   // the actual parameters 
-  boost::unordered_map< std::string, int > paramIndexes;
+  boost::unordered_map< FeatureId, int > paramIndexes;
   std::vector< double > paramWeights; 
   std::vector< double > oldParamWeights; 
-  std::vector< std::string > paramIds; 
+  std::vector< FeatureId > paramIds; 
   
   // maps a word id into a string
   const VocabEncoder &types;
@@ -203,7 +288,7 @@ class LogLinearParams {
 
   const set< int > *englishClosedClassTypes;
   
-  boost::unordered_map< int, boost::unordered_map< int, boost::unordered_map<std::string, double> > > precomputedFeaturesWithTwoInputs;
+  boost::unordered_map< int, boost::unordered_map< int, boost::unordered_map<FeatureId, double> > > precomputedFeaturesWithTwoInputs;
   
   boost::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
 
