@@ -1438,13 +1438,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
             continue;
           }
-          
-          // prune long sequences
-          if( GetObservableSequence(sentId).size() > learningInfo.maxSequenceLength ) {
-            continue;
-          }
-          
-          
+                    
           double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
           unregularizedObjective += sentLoglikelihood;
           
@@ -1946,10 +1940,6 @@ void LatentCrfModel::InitLambda() {
       continue;
     }
     
-    if(sentId % (examplesCount/10) == 0) {
-      cerr << "sentId=" << sentId;
-    }
-
     
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
