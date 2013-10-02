@@ -3,7 +3,73 @@
 using namespace std;
 using namespace boost;
 
-LogLinearParams::LogLinearParams(const VocabEncoder &types, 
+std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
+{
+  os << obj.type;
+  switch(obj.type) {
+  case FeatureTemplate::LABEL_BIGRAM:
+  case FeatureTemplate::SRC_BIGRAM:
+    os << obj.bigram.current << obj.bigram.previous;
+    break;
+  case FeatureTemplate::ALIGNMENT_JUMP:
+  case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+    os << obj.alignmentJump;
+    break;
+  case FeatureTemplate::SRC0_TGT0:
+    os << obj.wordPair.srcWord << obj.wordPair.tgtWord;
+    break;
+  case FeatureTemplate::PRECOMPUTED:
+    os << obj.precomputed;
+    break;
+  case FeatureTemplate::DIAGONAL_DEVIATION:
+  case FeatureTemplate::SYNC_START:
+  case FeatureTemplate::SYNC_END:
+    break;
+  default:
+    assert(false);
+  }
+
+  return os;
+}
+
+std::istream& operator>>(std::istream& is, FeatureId& obj)
+{
+  // read obj from stream
+  int temp;
+  is >> temp;
+  obj.type = (FeatureTemplate)temp;
+  switch(obj.type) {
+  case FeatureTemplate::LABEL_BIGRAM:
+  case FeatureTemplate::SRC_BIGRAM:
+    is >> obj.bigram.current;
+    is >> obj.bigram.previous;
+    break;
+  case FeatureTemplate::ALIGNMENT_JUMP:
+  case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+    is >> obj.alignmentJump;
+    break;
+  case FeatureTemplate::SRC0_TGT0:
+    is >> obj.wordPair.srcWord;
+    is >> obj.wordPair.tgtWord;
+    break;
+  case FeatureTemplate::PRECOMPUTED:
+    is >> obj.precomputed;
+    break;
+  case FeatureTemplate::DIAGONAL_DEVIATION:
+  case FeatureTemplate::SYNC_START:
+  case FeatureTemplate::SYNC_END:
+    break;
+  default:
+    is.setstate(std::ios::failbit);
+    assert(false);
+  }
+  return is;
+}
+
+
+LogLinearParams::LogLinearParams(VocabEncoder &types, 
 				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
 				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
 				 double gaussianStdDev) :
@@ -15,7 +81,7 @@ LogLinearParams::LogLinearParams(const VocabEncoder &types,
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
 }
 
-LogLinearParams::LogLinearParams(const VocabEncoder &types, double gaussianStdDev) : 
+LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) : 
   types(types), 
   ibmModel1ForwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
   ibmModel1BackwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
@@ -67,7 +133,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
       assert(featureIdAndValue.size() == 2);
       FeatureId featureId;
-      featureId.type = FeatureType::PRECOMPUTED;
+      featureId.type = FeatureTemplate::PRECOMPUTED;
       featureId.precomputed = types.Encode(featureIdAndValue[0]);
       
       // read feature value
@@ -225,8 +291,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   // F103: I( tgt[i] aligns_to src[y_i] )
   if(enabledFeatureTypes.size() > 103 && enabledFeatureTypes[103]) {
     featureId.type = FeatureTemplate::SRC0_TGT0;
-    featureId.srcWord = srcToken;
-    featureId.tgtWord = tgtToken;
+    featureId.wordPair.srcWord = srcToken;
+    featureId.wordPair.tgtWord = tgtToken;
     AddParam(featureId);
     activeFeatures[paramIndexes[featureId]] += 1.0;
   }
@@ -234,7 +300,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   // F104: precomputed(tgt[i], src[y_i])
   if(enabledFeatureTypes.size() > 104 && enabledFeatureTypes[104]) {
     assert(precomputedFeaturesWithTwoInputs.size() > 0);
-    boost::unordered_map<FeatureId, double> &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
+    unordered_map_featureId_double &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
     for(auto precomputedIter = precomputedFeatures.begin();
         precomputedIter != precomputedFeatures.end();
         precomputedIter++) {
@@ -847,6 +913,7 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
   //}
 }
 
+*/
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::PersistParams(const string &outputFilename) {
   ofstream paramsFile(outputFilename.c_str());
@@ -857,7 +924,6 @@ void LogLinearParams::PersistParams(const string &outputFilename) {
 
   paramsFile.close();
 }
-*/
 
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::LoadParams(const string &inputFilename) {
@@ -881,7 +947,9 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
     weightString << splits[1];
     double weight;
     weightString >> weight;
-    FeatureId paramId = FeatureId::Read(splits[0]);
+    stringstream paramIdStream(splits[0]);
+    FeatureId paramId;
+    paramIdStream >> paramId;
     // add the param
     AddParam(paramId, weight);
   }
@@ -900,15 +968,15 @@ void LogLinearParams::PrintParams() {
   PrintFirstNParams(paramIndexes.size());
 }
 
-void LogLinearParams::PrintParams(boost::unordered_map<FeatureId, double> tempParams) {
+void LogLinearParams::PrintParams(unordered_map_featureId_double &tempParams) {
   for(auto paramsIter = tempParams.begin(); paramsIter != tempParams.end(); paramsIter++) {
-    cerr << FeatureId::Write(paramsIter->first) << " " << paramsIter->second << endl;
+    cerr << paramsIter->first << " " << paramsIter->second << endl;
   }
 }
 
 
 // use gradient based methods to update the model parameter weights
-void LogLinearParams::UpdateParams(const boost::unordered_map<FeatureId, double> &gradient, const OptMethod& optMethod) {
+void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradient, const OptMethod& optMethod) {
   switch(optMethod.algorithm) {
   case OptAlgorithm::GRADIENT_DESCENT:
     for(auto gradientIter = gradient.begin(); gradientIter != gradient.end();
@@ -940,7 +1008,7 @@ void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
 // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
 // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
 void LogLinearParams::ConvertFeatureMapToFeatureArray(
-    boost::unordered_map<FeatureId, double>& valuesMap, double* valuesArray, 
+    unordered_map_featureId_double& valuesMap, double* valuesArray, 
     unsigned constrainedFeaturesCount) { 
   // init to 0 
   for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
@@ -971,7 +1039,7 @@ void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) 
   boost::mpi::broadcast< std::vector<FeatureId> >(world, paramIds, root); 
   boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
   boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
-  boost::mpi::broadcast< boost::unordered_map< FeatureId, int> >(world, paramIndexes, root); 
+  boost::mpi::broadcast< unordered_map_featureId_int >(world, paramIndexes, root); 
 }   
 
 // checks whether the "otherParams" have the same parameters and values as this object 
@@ -986,7 +1054,7 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
   for(auto paramIndexesIter = paramIndexes.begin();  
       paramIndexesIter != paramIndexes.end(); 
       ++paramIndexesIter) { 
-    boost::unordered_map<FeatureId, int>::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+    unordered_map_featureId_int::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
     if(paramIndexesIter->second != otherIter->second)  
       return false; 
   } 
@@ -1002,7 +1070,7 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
 }
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-double LogLinearParams::DotProduct(const boost::unordered_map<FeatureId, double>& values) {
+double LogLinearParams::DotProduct(const unordered_map_featureId_double& values) {
   double dotProduct = 0;
   // for each active feature
   for(auto valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {

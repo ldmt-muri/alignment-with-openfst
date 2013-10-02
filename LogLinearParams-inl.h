@@ -6,7 +6,7 @@ public:
   inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 					 int srcSentLength, int tgtSentLength, 
 					 const std::vector<bool>& enabledFeatureTypes) {
-    boost::unordered_map<FeatureId, double> activeFeatures;
+    unordered_map_featureId_double activeFeatures;
     FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
     // compute log prob
     double result = DotProduct(activeFeatures);    

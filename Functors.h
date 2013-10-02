@@ -15,16 +15,6 @@ struct AggregateFastSparseVectors2 {
   }
 };
 
-struct AggregateSets2 {
-  unordered_set<std::string> operator()(const unordered_set<std::string> &v1, const unordered_set<std::string> &v2) {
-    unordered_set<std::string> vTotal(v2);
-    for(unordered_set<std::string>::const_iterator v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
-      vTotal.insert(*v1Iter);
-    }
-    return vTotal; 
-  }
-};
-
 struct AggregateVectors2 {
   std::vector<double> operator()(std::vector<double> &v1, const std::vector<double> &v2) {
     assert(v1.size() == v2.size());

@@ -15,6 +15,8 @@
 #include <boost/mpi/collectives.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
 
 #include "unordered_map_serialization.hpp"
 
@@ -27,6 +29,7 @@
 enum FeatureTemplate { LABEL_BIGRAM, SRC_BIGRAM, ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, PRECOMPUTED, DIAGONAL_DEVIATION, SYNC_START, SYNC_END };
 
 struct FeatureId {
+  
 public:
   FeatureTemplate type;
   union {
@@ -35,80 +38,141 @@ public:
     struct { unsigned srcWord, tgtWord; } wordPair;
     int precomputed;
   };
-  static string Write(FeatureId x) {
-    string y;
-    return y;
+  
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned int version) {
+    ar & type;
+    switch(type) {
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+        ar & alignmentJump;
+        break;
+      case FeatureTemplate::DIAGONAL_DEVIATION:
+      case FeatureTemplate::SYNC_END:
+      case FeatureTemplate::SYNC_START:
+        break;
+      case FeatureTemplate::LABEL_BIGRAM:
+      case FeatureTemplate::SRC_BIGRAM:
+        ar & bigram.previous;
+        ar & bigram.current;
+        break;
+      case FeatureTemplate::PRECOMPUTED:
+        ar & precomputed;
+        break;
+      case FeatureTemplate::SRC0_TGT0:
+        ar & wordPair.srcWord;
+        ar & wordPair.tgtWord;
+        break;
+      default:
+        assert(false);
+    }
   }
-  static FeatureId Read(string y) {
-    FeatureId x;
-    return x;
+
+  bool operator!=(const FeatureId& rhs) const {
+    if(type != rhs.type) return true;
+    switch(type) {
+      case FeatureTemplate::LABEL_BIGRAM:
+      case FeatureTemplate::SRC_BIGRAM:
+        return bigram.current != rhs.bigram.current || bigram.previous != rhs.bigram.previous;
+        break;
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+        return alignmentJump != rhs.alignmentJump;
+        break;
+      case SRC0_TGT0:
+        return wordPair.srcWord != rhs.wordPair.srcWord || wordPair.tgtWord != rhs.wordPair.tgtWord;
+        break;
+      case PRECOMPUTED:
+        return precomputed != rhs.precomputed;
+        break;
+      case DIAGONAL_DEVIATION:
+      case SYNC_START:
+      case SYNC_END:
+        return false;
+        break;
+      default:
+        assert(false);
+    }
   }
+  
+  bool operator==(const FeatureId& rhs) const {
+    return !this->operator !=(rhs);
+  }
+
+  struct FeatureIdHash : public std::unary_function<FeatureId, size_t> {
+    size_t operator()(const FeatureId& x) const {
+      size_t seed = 0;
+      boost::hash_combine(seed, x.type);
+      switch(x.type) {
+        case FeatureTemplate::LABEL_BIGRAM:
+        case FeatureTemplate::SRC_BIGRAM:
+          boost::hash_combine(seed, x.bigram.current);
+          boost::hash_combine(seed, x.bigram.previous);
+          break;
+        case FeatureTemplate::ALIGNMENT_JUMP:
+        case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+          boost::hash_combine(seed, x.alignmentJump);
+          break;
+        case SRC0_TGT0:
+          boost::hash_combine(seed, x.wordPair.srcWord);
+          boost::hash_combine(seed, x.wordPair.tgtWord);
+          break;
+        case PRECOMPUTED:
+          boost::hash_combine(seed, x.precomputed);
+          break;
+        case DIAGONAL_DEVIATION:
+        case SYNC_START:
+        case SYNC_END:
+          break;
+        default:
+          assert(false);
+      }
+      return seed;
+    }
+  };
+
+  struct FeatureIdEqual : public std::unary_function<FeatureId, bool> {
+    bool operator()(const FeatureId& left, const FeatureId& right) const {
+      if(left.type != right.type) return false;
+      switch(left.type) {
+        case FeatureTemplate::LABEL_BIGRAM:
+        case FeatureTemplate::SRC_BIGRAM:
+          return left.bigram.current == right.bigram.current && left.bigram.previous == right.bigram.previous;
+          break;
+        case FeatureTemplate::ALIGNMENT_JUMP:
+        case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+          return left.alignmentJump == right.alignmentJump;
+          break;
+        case SRC0_TGT0:
+          return left.wordPair.srcWord == right.wordPair.srcWord && left.wordPair.tgtWord == right.wordPair.tgtWord;
+          break;
+        case PRECOMPUTED:
+          return left.precomputed == right.precomputed;
+          break;
+        case DIAGONAL_DEVIATION:
+        case SYNC_START:
+        case SYNC_END:
+          return true;
+          break;
+        default:
+          assert(false);
+      }
+    }
+  };
+  
 };
 
-std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
-{
-  os << obj.type;
-  switch(obj.type) {
-  case FeatureTemplate::LABEL_BIGRAM:
-  case FeatureTemplate::SRC_BIGRAM:
-    os << obj.bigram.current << obj.bigram.previous;
-    break;
-  case FeatureTemplate::ALIGNMENT_JUMP:
-  case FeatureTemplate::LOG_ALINGNMENT_JUMP:
-  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-    os << obj.alignmentJump;
-    break;
-  case FeatureTemplate::SRC0_TGT0:
-    os << obj.wordPair.srcWord << obj.wordPair.tgtWord;
-    break;
-  case FeatureTemplate::PRECOMPUTED:
-    os << obj.precomputed;
-    break;
-  case FeatureTemplate::DIAGONAL_DEVIATION:
-  case FeatureTemplate::SYNC_START:
-  case FeatureTemplate::SYNC_END:
-    break;
-  default:
-    assert(false);
-  }
+// a few typedefs
+using unordered_map_featureId_double = boost::unordered_map<FeatureId, double, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
+using unordered_map_featureId_int = boost::unordered_map<FeatureId, int, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
 
-  return os;
-}
 
-std::istream& operator>>(std::istream& is, T& obj)
-{
-  // read obj from stream
-  if( /* no valid object of T found in stream */ )
-    is.setstate(std::ios::failbit);
-
-  is >> obj.type;
-  switch(obj.type) {
-  case FeatureTemplate::LABEL_BIGRAM:
-  case FeatureTemplate::SRC_BIGRAM:
-    is >> obj.bigram.current;
-    is >> obj.bigram.previous;
-    break;
-  case FeatureTemplate::ALIGNMENT_JUMP:
-  case FeatureTemplate::LOG_ALINGNMENT_JUMP:
-  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-    is >> obj.alignmentJump;
-    break;
-  case FeatureTemplate::SRC0_TGT0:
-    is >> obj.wordPair.srcWord;
-    is >> obj.wordPair.tgtWord;
-    break;
-  case FeatureTemplate::PRECOMPUTED:
-    is >> obj.precomputed;
-    break;
-  case FeatureTemplate::DIAGONAL_DEVIATION:
-  case FeatureTemplate::SYNC_START:
-  case FeatureTemplate::SYNC_END:
-    break;
-  default:
-    assert(false);
-  }
-  return is;
-}
+std::ostream& operator<<(std::ostream& os, const FeatureId& obj);
+std::istream& operator>>(std::istream& is, FeatureId& obj);
 
 struct AlignerFactorId 
 { 
@@ -163,6 +227,7 @@ public:
               left.yI == right.yI && left.yIM1 == right.yIM1;
     }
   };
+
 };
 
 class LogLinearParams {
@@ -173,13 +238,13 @@ class LogLinearParams {
  public:
 
   // for the loglinear word alignment model
-  LogLinearParams(const VocabEncoder &types, 
+  LogLinearParams(VocabEncoder &types, 
 		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
 		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
 		  double gaussianStdDev = 0.01);
 
   // for the latent CRF model
-  LogLinearParams(const VocabEncoder &types, double gaussianStdDev = 1);
+  LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
@@ -195,7 +260,7 @@ class LogLinearParams {
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
-		    const std::vector<bool>& enabledFeatureTypes, boost::unordered_map<FeatureId, double>& activeFeatures);
+		    const std::vector<bool>& enabledFeatureTypes, unordered_map_featureId_double& activeFeatures);
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
 		    const std::vector<bool> &enabledFeatureTypes, 
@@ -213,7 +278,7 @@ class LogLinearParams {
   bool AddParam(const FeatureId &paramId, double paramWeight);
 
   // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
-  double DotProduct(const boost::unordered_map<FeatureId, double>& values);
+  double DotProduct(const unordered_map_featureId_double& values);
 
   double DotProduct(const std::vector<double>& values);
 
@@ -224,7 +289,7 @@ class LogLinearParams {
   double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights);
  
   // updates the model parameters given the gradient and an optimization method
-  void UpdateParams(const boost::unordered_map<FeatureId, double> &gradient, const OptMethod &optMethod);
+  void UpdateParams(const unordered_map_featureId_double &gradient, const OptMethod &optMethod);
   
   // override the member weights vector with this array
   void UpdateParams(const double* array, const int arrayLength);
@@ -232,7 +297,7 @@ class LogLinearParams {
   // converts a map into an array. 
   // when constrainedFeaturesCount is non-zero, length(valuesArray)  should be = valuesMap.size() - constrainedFeaturesCount, 
   // we pretend as if the constrained features don't exist by subtracting the internal index - constrainedFeaturesCount  
-  void ConvertFeatureMapToFeatureArray(boost::unordered_map<FeatureId, double>& valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
+  void ConvertFeatureMapToFeatureArray(unordered_map_featureId_double &valuesMap, double* valuesArray, unsigned constrainedFeaturesCount = 0);
 
   // 1/2 * sum of the squares 
   double ComputeL2Norm();
@@ -246,7 +311,7 @@ class LogLinearParams {
   
   void PrintParams(); 
   
-  static void PrintParams(boost::unordered_map<FeatureId, double> tempParams); 
+  static void PrintParams(unordered_map_featureId_double &tempParams); 
   
   void PrintFeatureValues(FastSparseVector<double> &feats);
 
@@ -267,13 +332,13 @@ class LogLinearParams {
 
  public:
   // the actual parameters 
-  boost::unordered_map< FeatureId, int > paramIndexes;
+  unordered_map_featureId_int paramIndexes;
   std::vector< double > paramWeights; 
   std::vector< double > oldParamWeights; 
   std::vector< FeatureId > paramIds; 
   
   // maps a word id into a string
-  const VocabEncoder &types;
+  VocabEncoder &types;
 
   // TODO: inappropriate for this general class. consider adding to a derived class
   // maps [srcTokenId][tgtTokenId] => forward logprob
@@ -288,7 +353,7 @@ class LogLinearParams {
 
   const set< int > *englishClosedClassTypes;
   
-  boost::unordered_map< int, boost::unordered_map< int, boost::unordered_map<FeatureId, double> > > precomputedFeaturesWithTwoInputs;
+  boost::unordered_map< int, boost::unordered_map< int, unordered_map_featureId_double > > precomputedFeaturesWithTwoInputs;
   
   boost::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
 

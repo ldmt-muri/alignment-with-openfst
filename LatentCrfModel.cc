@@ -269,7 +269,8 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
 				  FastSparseVector<double> &activeFeatures) { 
   if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
-    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
+    assert(false); // fix the implementation of FireFeatures for pOS tagging replacing string feature ids with FeatureId structs
+    //lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
   } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
     int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
@@ -1923,6 +1924,7 @@ double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabels
   return ClustersComparer::ComputeManyToOne(clusteringA, clusteringB);
 }
 
+
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::InitLambda() {
   if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
@@ -1971,8 +1973,8 @@ void LatentCrfModel::InitLambda() {
   }
 
   // master collects all feature ids fired on any sentence
-  unordered_set<string> localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
-  mpi::reduce< unordered_set<string> >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
+  unordered_set_featureId localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
+  mpi::reduce< unordered_set_featureId >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
   // debug info
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
@@ -1981,7 +1983,7 @@ void LatentCrfModel::InitLambda() {
   
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
-    for(unordered_set<string>::const_iterator paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
+    for(auto paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
       lambda->AddParam(*paramIdIter);
     }
   }

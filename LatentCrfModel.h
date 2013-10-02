@@ -74,6 +74,20 @@ void serialize(Archive &ar,
 }
 }
 
+using unordered_set_featureId = unordered_set<FeatureId, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
+
+struct AggregateSets2 {
+   unordered_set_featureId operator()(const unordered_set_featureId &v1, 
+                                      const unordered_set_featureId &v2) {
+    unordered_set_featureId vTotal(v2);
+    for(auto v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
+      vTotal.insert(*v1Iter);
+    }
+    return vTotal; 
+  }
+};
+
+
 // implements the model described at doc/LatentCrfModel.tex
 class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
