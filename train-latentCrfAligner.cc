@@ -351,7 +351,8 @@ int main(int argc, char **argv) {
 
   // print best params
   if(learningInfo.mpiWorld->rank() == 0) {
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"));
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
     model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
   }
 

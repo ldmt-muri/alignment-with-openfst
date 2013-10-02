@@ -1770,7 +1770,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
       if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
         cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
       }
-      lambda->PersistParams(lambdaParamsFilename.str());
+      lambda->PersistParams(lambdaParamsFilename.str(), false);
+      lambdaParamsFilename << ".humane";
+      lambda->PersistParams(lambdaParamsFilename.str(), true);
     }
     
     // label the first K examples from the training set (i.e. the test set)

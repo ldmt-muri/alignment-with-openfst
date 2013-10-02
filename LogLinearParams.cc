@@ -1,5 +1,7 @@
 #include "LogLinearParams.h"
 
+VocabEncoder* FeatureId::vocabEncoder = 0;
+
 using namespace std;
 using namespace boost;
 
@@ -9,18 +11,18 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   switch(obj.type) {
   case FeatureTemplate::LABEL_BIGRAM:
   case FeatureTemplate::SRC_BIGRAM:
-    os << obj.bigram.current << obj.bigram.previous;
+    os << '|' << obj.bigram.previous << '|' << obj.bigram.current;
     break;
   case FeatureTemplate::ALIGNMENT_JUMP:
   case FeatureTemplate::LOG_ALIGNMENT_JUMP:
   case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-    os << obj.alignmentJump;
+    os << '|' << obj.alignmentJump;
     break;
   case FeatureTemplate::SRC0_TGT0:
-    os << obj.wordPair.srcWord << obj.wordPair.tgtWord;
+    os << '|' << obj.wordPair.srcWord << '|' << obj.wordPair.tgtWord;
     break;
   case FeatureTemplate::PRECOMPUTED:
-    os << obj.precomputed;
+    os << '|' << obj.DecodePrecomputedFeature();
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
   case FeatureTemplate::SYNC_START:
@@ -29,7 +31,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   default:
     assert(false);
   }
-
+  os << '|';
   return os;
 }
 
@@ -37,25 +39,34 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
 {
   // read obj from stream
   int temp;
+  string temp2;
   is >> temp;
   obj.type = (FeatureTemplate)temp;
+  char separator;
   switch(obj.type) {
   case FeatureTemplate::LABEL_BIGRAM:
   case FeatureTemplate::SRC_BIGRAM:
-    is >> obj.bigram.current;
-    is >> obj.bigram.previous;
+    is >> separator >> obj.bigram.current;
+    assert(separator == '|');
+    is >> separator >> obj.bigram.previous;
+    assert(separator == '|');
     break;
   case FeatureTemplate::ALIGNMENT_JUMP:
   case FeatureTemplate::LOG_ALIGNMENT_JUMP:
   case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-    is >> obj.alignmentJump;
+    is >> separator >> obj.alignmentJump;
+    assert(separator == '|');
     break;
   case FeatureTemplate::SRC0_TGT0:
-    is >> obj.wordPair.srcWord;
-    is >> obj.wordPair.tgtWord;
+    is >> separator >> obj.wordPair.srcWord;
+    assert(separator == '|');
+    is >> separator >> obj.wordPair.tgtWord;
+    assert(separator == '|');
     break;
   case FeatureTemplate::PRECOMPUTED:
-    is >> obj.precomputed;
+    is >> separator >> temp2;
+    obj.EncodePrecomputedFeature(temp2);
+    assert(separator == '|');
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
   case FeatureTemplate::SYNC_START:
@@ -65,6 +76,8 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
     is.setstate(std::ios::failbit);
     assert(false);
   }
+  is >> separator;
+  assert(separator == '|');
   return is;
 }
 
@@ -79,6 +92,7 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   COUNT_OF_FEATURE_TYPES(100) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
+  FeatureId::vocabEncoder = &types;
 }
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) : 
@@ -87,6 +101,7 @@ LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) :
   ibmModel1BackwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
   COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
+  FeatureId::vocabEncoder = &types;
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
@@ -159,12 +174,6 @@ bool LogLinearParams::AddParam(const FeatureId &paramId) {
   if(paramIndexes.count(paramId) > 0) {
     return false;
   }
-
-  if(paramIndexes.size() % 1000000 == 0) {
-    cerr << "|lambdas| are now " << paramIndexes.size() << endl;
-  }
-
-  //  cerr << "_" << paramId << "_";
 
   // sample paramWeight from an approx of gaussian with mean 0 and variance of 0.01
   double paramWeight = 0;
@@ -914,14 +923,23 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 }
 
 */
+
 // each line consists of: <featureStringId><space><featureWeight>\n
-void LogLinearParams::PersistParams(const string &outputFilename) {
+void LogLinearParams::PersistParams(const string &outputFilename, bool humanFriendly) {
+
   ofstream paramsFile(outputFilename.c_str());
   
-  for (auto paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
-    paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
+  if(!humanFriendly) {
+    // save data to archive
+    archive::text_oarchive oa(paramsFile);
+    // write class instance to archive
+    oa << *this;
+    // archive and stream closed when destructors are called
+  } else {
+    for (auto paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
+      paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
+    }
   }
-
   paramsFile.close();
 }
 
@@ -929,30 +947,8 @@ void LogLinearParams::PersistParams(const string &outputFilename) {
 void LogLinearParams::LoadParams(const string &inputFilename) {
   assert(paramIndexes.size() == paramWeights.size() && paramIndexes.size() == paramIds.size());
   ifstream paramsFile(inputFilename.c_str(), ios::in);
-  
-  string line;
-  // for each line
-  while(getline(paramsFile, line)) {
-    if(line.size() == 0) {
-      continue;
-    }
-    std::vector<string> splits;
-    StringUtils::SplitString(line, ' ', splits);
-    // check format
-    if(splits.size() != 2) {
-      assert(false);
-      exit(1);
-    }
-    stringstream weightString;
-    weightString << splits[1];
-    double weight;
-    weightString >> weight;
-    stringstream paramIdStream(splits[0]);
-    FeatureId paramId;
-    paramIdStream >> paramId;
-    // add the param
-    AddParam(paramId, weight);
-  }
+  boost::archive::text_iarchive oa(paramsFile);
+  oa >> *this;
   paramsFile.close();
 }
 

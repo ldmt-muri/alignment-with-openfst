@@ -17,6 +17,8 @@
 #include <boost/unordered_map.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+//#include "boost/archive/binary_oarchive.hpp"
+//#include "boost/archive/binary_iarchive.hpp"
 
 #include "unordered_map_serialization.hpp"
 
@@ -29,8 +31,8 @@
 enum FeatureTemplate { LABEL_BIGRAM, SRC_BIGRAM, ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, PRECOMPUTED, DIAGONAL_DEVIATION, SYNC_START, SYNC_END };
 
 struct FeatureId {
-  
 public:
+  static VocabEncoder *vocabEncoder;
   FeatureTemplate type;
   union {
     struct { unsigned current, previous; } bigram;
@@ -38,6 +40,17 @@ public:
     struct { unsigned srcWord, tgtWord; } wordPair;
     int precomputed;
   };
+  
+  // replace this with a copy constructor 
+  const string& DecodePrecomputedFeature() const {
+    assert(type == FeatureTemplate::PRECOMPUTED);
+    return vocabEncoder->Decode(precomputed);
+  }
+
+  void EncodePrecomputedFeature(const string& featureIdString) {
+    assert(type == FeatureTemplate::PRECOMPUTED);
+    precomputed = vocabEncoder->Encode(featureIdString);
+  }
   
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
@@ -246,6 +259,11 @@ class LogLinearParams {
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
+  template<class Archive> void serialize(Archive & ar, const unsigned int version) {
+    ar & paramIndexes;
+    ar & paramWeights;
+  }
+
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
   void AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, FeatureId &featureId, double featureValue);
@@ -316,7 +334,7 @@ class LogLinearParams {
   void PrintFeatureValues(FastSparseVector<double> &feats);
 
   // writes the features to a text file formatted one feature per line.  
-  void PersistParams(const std::string& outputFilename); 
+  void PersistParams(const std::string& outputFilename, bool humanFriendly=true); 
 
   // loads the parameters
   void LoadParams(const std::string &inputFilename);
