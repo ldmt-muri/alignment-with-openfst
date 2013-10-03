@@ -618,16 +618,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 
       	// compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
-        int tempParamIndexesSize = lambda->paramIndexes.size(), tempParamWeightsSize = lambda->paramWeights.size();
         FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
-        if(lambda->paramWeights.size() != tempParamWeightsSize || lambda->paramIndexes.size() != tempParamIndexesSize) {
-          cerr << "rank" << learningInfo.mpiWorld->rank() << ": timestamp113 lambda updates, " << tempParamIndexesSize << " vs. " << tempParamWeightsSize << endl;
-          cerr << "rank" << learningInfo.mpiWorld->rank() << ": timestamp117 lambda updates, " << lambda->paramIndexes.size() << " vs. " << lambda->paramWeights.size() << endl;
-          for(int newParamIndex = tempParamIndexesSize; newParamIndex < lambda->paramIndexes.size(); newParamIndex++) {
-            cerr << "new param: " << lambda->paramIds[newParamIndex] << endl;
-            exit(1);
-          }
-        }
 
         // prepare -log \theta_{z_i|y_i}
         int zI = z[i];
@@ -1254,11 +1245,6 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     cerr << endl << endl;
   }
 
-  // update the old lambdas
-  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "updating the old lambda params (necessary for applying the moveAwayPenalty) ..." << endl;
-  }
-  model.lambda->UpdateOldParamWeights();
   if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "done" << endl;
   }
@@ -1419,6 +1405,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
       // run a few EM iterations to update thetas
       for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
+    
+        lambda->GetParamsCount();
+        // skip EM updates of the first block-coord-descent iteration
+        //if(learningInfo.iterationsCount == 0) {
+        //  break;
+        //}
         
         // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
         // data structure to hold theta MLE estimates
@@ -1489,20 +1481,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
         PersistTheta(thetaParamsFilename.str());
       }
       
-      // debug. 
-      /*      if(learningInfo.mpiWorld->rank() == 0) {
-	cerr << "compute the objective after updating theta...";
-      }
-      double objectiveAfterUpdatingTheta = EvaluateNll();
-      if(learningInfo.mpiWorld->rank()  == 0) {
-	if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-	  cerr << "l2 reg. objective = " << objectiveAfterUpdatingTheta << endl;
-	} else {
-	  cerr << "unregularized objective = " << objectiveAfterUpdatingTheta << endl;
-	}
-      } 
-      */
-
       // end of if(thetaOptMethod->algorithm == EM)
     } else if (learningInfo.thetaOptMethod->algorithm == GRADIENT_DESCENT) {
       assert(learningInfo.mpiWorld->size() == 1); // this method is only supported for single-threaded runs

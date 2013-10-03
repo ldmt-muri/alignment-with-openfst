@@ -30,21 +30,6 @@ public:
     paramWeights[paramIndex] = newValue;
   }
 
-  // copies the weight of the specified feature from paramWeights vector to oldParamWeights vector
-  inline void UpdateOldParamWeight(const FeatureId &paramId) {
-    if(!AddParam(paramId)) {
-      oldParamWeights[paramIndexes[paramId]] = paramWeights[paramIndexes[paramId]];
-    }
-  }
-
-  // copies the weight of all features from paramWeights vector to oldParamWeights vector
-  inline void UpdateOldParamWeights() {
-    assert(oldParamWeights.size() == paramWeights.size());
-    for(int i = 0; i < paramWeights.size(); i++) {
-      oldParamWeights[i] = paramWeights[i];
-    }
-  }  
-
   // checks whether a parameter exists
   inline bool ParamExists(const FeatureId &paramId) {
     return paramIndexes.count(paramId) == 1;
@@ -79,20 +64,6 @@ public:
     return paramWeights[paramIndex];
   }
   
-  // returns the difference between new and old weights of a parameter, given its string ID. 
-  // assumptions:
-  // - paramId already exists
-  inline double GetParamNewMinusOldWeight(const FeatureId &paramId) {
-    return paramWeights[paramIndexes[paramId]] - oldParamWeights[paramIndexes[paramId]];
-  }
-
-  // returns the difference between new and old weights of a parameter, given its vector index
-  // assumptions:
-  // - paramIndex is a valid index
-  inline double GetParamNewMinusOldWeight(const unsigned paramIndex) {
-    return paramWeights[paramIndex] - oldParamWeights[paramIndex];
-  }
-
   inline int GetParamsCount() {
     if(paramWeights.size() != paramIndexes.size()) {
       cerr << "paramWeights.size() = " << paramWeights.size() << endl;
@@ -105,11 +76,6 @@ public:
   // returns a pointer to the array of parameter weights
    inline double* GetParamWeightsArray() { 
      return paramWeights.data(); 
-   } 
-
-   // returns a pointer to the array of old parameter weights 
-   inline double* GetOldParamWeightsArray() { 
-     return oldParamWeights.data(); 
    } 
 
    // clear model parameters 

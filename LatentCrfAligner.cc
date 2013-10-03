@@ -150,7 +150,12 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   }
   
   // populate the map of precomputed feature ids and feature values
-  lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+  //for(int rank = 0; rank < learningInfo.mpiWorld->size(); ++rank) {
+  //  mpi::broadcast<int>(*learningInfo.mpiWorld, rank, rank);
+  //  if(rank == learningInfo.mpiWorld->rank()) {
+      lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+      //  }
+      //}
 
   // initialize the lambda parameters
   if(initialLambdaParamsFilename.size() == 0) {

@@ -207,13 +207,11 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
 
     // check class's integrity
     assert(paramIndexes.size() == paramWeights.size());
-    assert(paramIndexes.size() == oldParamWeights.size());
     assert(paramIndexes.size() == paramIds.size());
     // do the work
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramWeights.push_back(paramWeight);
-    oldParamWeights.push_back(0.0);
     paramIds.push_back(paramId);
     returnValue = true;
   } else {
@@ -949,7 +947,13 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
   ifstream paramsFile(inputFilename.c_str(), ios::in);
   boost::archive::text_iarchive oa(paramsFile);
   oa >> *this;
+  int index = 0;
+  for(auto paramIdIter = paramIds.begin(); paramIdIter != paramIds.end(); ++paramIdIter, ++index) {
+    paramIndexes[*paramIdIter] = index;
+  }
+  cerr << "|paramIds|=" << paramIds.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeights|=" << paramWeights.size() << endl;
   paramsFile.close();
+  assert(paramIndexes.size() == paramWeights.size() && paramIndexes.size() == paramIds.size());
 }
 
 void LogLinearParams::PrintFirstNParams(unsigned n) {
@@ -1034,7 +1038,6 @@ double LogLinearParams::ComputeL2Norm() {
 void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) { 
   boost::mpi::broadcast< std::vector<FeatureId> >(world, paramIds, root); 
   boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
-  boost::mpi::broadcast< std::vector<double> >(world, oldParamWeights, root); 
   boost::mpi::broadcast< unordered_map_featureId_int >(world, paramIndexes, root); 
 }   
 

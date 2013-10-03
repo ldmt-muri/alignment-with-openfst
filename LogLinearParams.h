@@ -260,7 +260,7 @@ class LogLinearParams {
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
   template<class Archive> void serialize(Archive & ar, const unsigned int version) {
-    ar & paramIndexes;
+    ar & paramIds;
     ar & paramWeights;
   }
 
@@ -352,7 +352,6 @@ class LogLinearParams {
   // the actual parameters 
   unordered_map_featureId_int paramIndexes;
   std::vector< double > paramWeights; 
-  std::vector< double > oldParamWeights; 
   std::vector< FeatureId > paramIds; 
   
   // maps a word id into a string
