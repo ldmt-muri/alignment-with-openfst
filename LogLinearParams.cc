@@ -93,6 +93,9 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::vocabEncoder = &types;
+  paramIndexes.reserve(learningInfo->expectedFeaturesCount);
+  paramWeights.reserve(learningInfo->expectedFeaturesCount);
+  paramIds.reserve(learningInfo->expectedFeaturesCount);
 }
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) : 
@@ -102,6 +105,9 @@ LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) :
   COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::vocabEncoder = &types;
+  paramIndexes.reserve(learningInfo->expectedFeaturesCount);
+  paramWeights.reserve(learningInfo->expectedFeaturesCount);
+  paramIds.reserve(learningInfo->expectedFeaturesCount);
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]

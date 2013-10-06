@@ -239,6 +239,7 @@ class LearningInfo {
     hiddenSequenceIsMarkovian = true;
     cacheActiveFeatures = false;
     multinomialSymmetricDirichletAlpha = 1.0;
+    expectedFeaturesCount = 1000 * 1000 * 1000;
   }
 
   bool IsModelConverged() {
@@ -393,8 +394,6 @@ class LearningInfo {
   
   bool smoothMultinomialParams;
 
-  //bool fixDOverC;
-
   unsigned nSentsPerDot;
 
   unsigned emIterationsCount;
@@ -421,7 +420,8 @@ class LearningInfo {
   bool fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
   
   double multinomialSymmetricDirichletAlpha;
-  
+
+  int expectedFeaturesCount;
 };
 
 

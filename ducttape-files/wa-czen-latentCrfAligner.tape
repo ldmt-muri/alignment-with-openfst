@@ -15,18 +15,28 @@ task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix 
   pushd /usr0/home/wammar/alignment-with-openfst/
   # compile
   make -f Makefile-latentCrfAligner
+  mv train-latentCrfAligner train-latentCrfAligner-copy
   popd
 
   # the latent-CRF word alignment model
-  mpirun -np $procs /usr0/home/wammar/alignment-with-openfst/train-latentCrfAligner \
+  mpirun -np $procs /usr0/home/wammar/alignment-with-openfst/train-latentCrfAligner-copy \
   --train-data $data_file \
   --output-prefix "$prefix-fwd" \
-  --feat 101 --feat 102 --feat 103 --feat 104 --feat 105 --feat 106 --feat 107 --feat 108 \
-  --wordpair-feats $wordpair_feats_file \
+  --feat 103 --feat 105 --feat 107 --feat 108 \
   --test-size $test_sents_count \
-  --optimizer adagrad \
-  --l2-strength 0.0 \
+  --max-em-iter-count 1 \
+  --max-lbfgs-iter-count 1 \
   2> $out_err
+
+#  --init-lambda /usr0/home/wammar/alignment-with-openfst/ducttape-files/init-lambda-10 \
+#  --init-theta /usr0/home/wammar/alignment-with-openfst/ducttape-files/init-theta-10 \
+#  --feat 104 --wordpair-feats $wordpair_feats_file \
+#  --minibatch-size 500 \
+#  --optimizer adagrad \
+#  --max-model1-iter-count 100 \
+#  --max-iter-count 1 \
+#  --l2-strength 1.0 \
+#  --cache-feats false \
 
   cp "$prefix-fwd.labels" $fwd_align
 }
@@ -70,15 +80,27 @@ task fast_align :: data_file=$data_file > fwd_align bwd_align sym_align {
   /usr0/home/wammar/cdec/utils/atools -i $fwd_align -j $bwd_align -c grow-diag-final-and > $sym_align
 }
 
+task giza_align :: giza_bin=$giza_bin moses_train_script=$moses_train_script data_file=$data_file src=$src tgt=$tgt procs=$procs > output_dir sym_align fwd_align bwd_align {
+
+  $moses_train_script --first-step 1 --last-step 3 --parallel --root-dir $output_dir --corpus $data_file --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$procs --alignment srctotgt 
+  cp $output_dir/model/aligned.srctotgt $fwd_align
+
+  $moses_train_script --first-step 3 --last-step 3 --parallel --root-dir $output_dir --corpus $data_file --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$procs --alignment tgttosrc
+  cp $output_dir/model/aligned.tgttosrc $bwd_align
+
+  /usr0/home/wammar/cdec/utils/atools -i $fwd_align -j $bwd_align -c grow-diag-final-and > $sym_align
+
+}
+
 task eval_align :: eval_script=$eval_script gold_file=$gold_file < fwd_align=$fwd_align@autoencoder_fwd_align > aer_file="aer" {
   # compute aer
   $eval_script \
     $fwd_align \
     $gold_file \
-    > $aer_file  
+    > $aer_file
 }
-  
-task train_cdec :: procs=$procs data_file=$data_file dev_file=$dev_file test_file=$test_file mono_file=$mono_file cdec_ini_file=$cdec_ini_file < sym_align=$sym_align@autoencoder_align > extract_ini_file klm_file="klm" dev_sgm test_sgm lm_file suffix_array dev_grammar test_grammar cdec_ini_ofile {
+
+task train_cdec :: procs=$procs data_file=$data_file dev_file=$dev_file test_file=$test_file mono_file=$mono_file cdec_ini_file=$cdec_ini_file < sym_align=$sym_align@giza_align > extract_ini_file klm_file="klm" dev_sgm test_sgm lm_file suffix_array dev_grammar test_grammar cdec_ini_ofile {
   export PYTHONPATH=`echo ~/cdec/python/build/lib.*`
   echo "create extract ini file and suffix array from training data $data_file and alignments $sym_align"
   python -m cdec.sa.compile -b $data_file -a $sym_align -c extract_ini_file -o $suffix_array
@@ -101,17 +123,35 @@ task tune_mira :: procs=$procs < dev_sgm=$dev_sgm@train_cdec test_sgm=$test_sgm@
     -o $mira_out_dir
 }
 
+plan plan_giza {
+  reach giza_align
+}
+
+plan plan_fastalign {
+  reach fast_align
+}
+
+plan plan_autoencoder {
+  reach eval_align
+}
+
+plan plan_cdec {
+  reach tune_mira
+}
+
 global {
+  giza_bin=/opt/tools/mgizapp-0.7.2/bin/
+  moses_train_script=/usr0/home/wammar/mosesdecoder/scripts/training/train-model.perl
   eval_script=/usr0/home/wammar/alignment-with-openfst/data/czen-manual-alignments/eval-czen.pl
   gold_file=/usr0/home/wammar/alignment-with-openfst/data/czen-manual-alignments/czen.wal
-  mono_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en.en
-  data_file=/usr0/home/wammar/alignment-with-openfst/data/1k.cz-en
-  bwd_data_file=/usr0/home/wammar/alignment-with-openfst/data/1k.en-cz
+  mono_file=/usr1/home/wammar/monolingual/plain-en/news.2012.en.shuffled
+  data_file=/usr0/home/wammar/alignment-with-openfst/data/90k.cz-en
+  bwd_data_file=/usr0/home/wammar/alignment-with-openfst/data/90k.en-cz
   dev_file=/usr0/home/wammar/alignment-with-openfst/data/dev.cz-en
-  test_file=/usr0/home/wammar/alignment-with-openfst/data/test.cz-en
-  prefix=1k
+  test_file=/usr0/home/wammar/alignment-with-openfst/data/dev2.cz-en
+  prefix=90k
   cdec_ini_file=/usr0/home/wammar/alignment-with-openfst/ducttape-files/cdec.ini
-  procs=28
+  procs=24
   src=cz
   tgt=en
   fwd=cz-en

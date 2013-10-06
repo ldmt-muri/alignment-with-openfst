@@ -185,7 +185,6 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
   // first, build the fst
   BuildLambdaFst(sentId, fst);
-  //  cerr << FstUtils::PrintFstSummary(fst);
 
   // then, compute potentials
   assert(alphas.size() == 0);
@@ -193,10 +192,6 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   assert(betas.size() == 0);
   ShortestDistance(fst, &betas, true);
 
-  // debug info
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << " BuildLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
-  }
 }
 
 // assumptions: 
@@ -258,10 +253,6 @@ void LatentCrfModel::ComputeF(unsigned sentId,
     iStates = iP1States;
     iP1States.clear();
   }  
-
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << "ComputeF() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
-  }
 }			   
 
 void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
@@ -326,10 +317,6 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
     iStates = iP1States;
     iP1States.clear();
   }  
-
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    cerr << "FireFeatures() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec." << endl;
-  }
 }			   
 
 // assumptions: 
@@ -542,14 +529,13 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
     unsigned FIRST_POSITION = learningInfo.allowNullAlignments? NULL_POSITION: NULL_POSITION+1;
     yi -= FIRST_POSITION;
     yim1 -= FIRST_POSITION;
-    assert(yi < (int)srcSent.size());
-    assert(yim1 < (int)srcSent.size());
+    // identify and explain a pathological situation
     if(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) == 0) {
       cerr << "yi = " << yi << ", srcSent[yi] == " << srcSent[yi] << ", nLogThetaGivenOneLabel.params.count(" << srcSent[yi] << ")=0" << " although nLogThetaGivenOneLabel.params.size() = " << nLogThetaGivenOneLabel.params.size() << endl << "keys available are: " << endl;
       for(auto contextIter = nLogThetaGivenOneLabel.params.begin();
-	  contextIter != nLogThetaGivenOneLabel.params.end();
-	  ++contextIter) {
-	cerr << " " << contextIter->first << endl;
+          contextIter != nLogThetaGivenOneLabel.params.end();
+          ++contextIter) {
+        cerr << " " << contextIter->first << endl;
       }
     }
     assert(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) > 0);
@@ -571,12 +557,6 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 
   const vector<int> &x = GetObservableSequence(sentId);
 
-  //  debug info
-    //  cerr << "lambdas:\n=======\n";
-  //  lambda->PrintParams();
-  //  cerr << "\nthetas:\n=========\n";
-  //  nLogThetaGivenOneLabel.PrintParams();
-
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -587,8 +567,6 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   
   // map values of y_{i-1} and y_i to fst states
   boost::unordered_map<int, int> yIM1ToState, yIToState;
-  assert(yIM1ToState.size() == 0);
-  assert(yIToState.size() == 0);
 
   yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
@@ -656,8 +634,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
         }
         // now add the arc
         fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));
-        //	cerr << "from " << fromState << " to " << toState << " nLambdaH = " << nLambdaH << ", nLogTheta_zI_y = " << nLogTheta_zI_y << endl;
-     
+        
       }
       
       // if hidden labels are independent given observation, then there's only one unique state in the previous timestamp
@@ -676,21 +653,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   //cerr << FstUtils::PrintFstSummary(fst);
   ShortestDistance(fst, &alphas, false);
   ShortestDistance(fst, &betas, true);  
-  for(unsigned i = 0; i < alphas.size(); ++i) {
-    if(i==1) continue;
-    //    cerr << "alphas[" << i << "]="<< alphas[i] <<", betas[" << i << "]=" << betas[i] <<endl;
-  }
-  //  cerr << "alphas[" << 1 << "]="<< alphas[1] <<", betas[" << 1 << "]=" << betas[1] <<endl;
 
-  if(learningInfo.debugLevel == DebugLevel::SENTENCE) {
-    //    cerr << " BuildThetaLambdaFst() for this sentence took " << (float) (clock() - timestamp) / CLOCKS_PER_SEC << " sec. " << endl;
-  }
-
-  if(sentId == 0) {
-    //    cerr << "theta-lambda-fst of sent0" << endl << "===========================" << endl;
-    //    cerr << FstUtils::PrintFstSummary(fst) << endl; 
-  }
-  //  cerr << "ending LatentCrfModel::BuildThetaLambdaFst" << endl;
 }
 
 void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
@@ -1920,37 +1883,15 @@ void LatentCrfModel::InitLambda() {
       continue;
     }
     
-    
-    // debug info
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": now processing sent# " << sentId << endl;
-    }
     // build the FST
     fst::VectorFst<FstUtils::LogArc> lambdaFst;
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() <<", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
-    }
     BuildLambdaFst(sentId, lambdaFst);
-    if(learningInfo.debugLevel >= DebugLevel::SENTENCE) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BuildLambdaFst(), |lambda| =  " << lambda->GetParamsCount() << ", |lambdaFst| =  " << lambdaFst.NumStates() << endl;
-    }
-  }
-
-  // debug info
-  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": done with my share of FireFeatures(sent)" << endl;
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before reduce()" << endl;
   }
 
   // master collects all feature ids fired on any sentence
   unordered_set_featureId localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
   mpi::reduce< unordered_set_featureId >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
-  // debug info
-  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS){ 
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after reduce()" << endl;
-  }
-  
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
     for(auto paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
@@ -1961,8 +1902,7 @@ void LatentCrfModel::InitLambda() {
   // master broadcasts the full set of features to all slaves
   BroadcastLambdas(0);
 
-  // DEBUG INFO
-  if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH){
+  if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "|lambda| = " << lambda->GetParamsCount() << endl;
   }
 }

@@ -275,7 +275,6 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodDiff = false;
   learningInfo.minLikelihoodDiff = 2;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  //learningInfo.minLikelihoodRelativeDiff set by ParseParameters
   learningInfo.useSparseVectors = true;
   learningInfo.persistParamsAfterNIteration = 1;
   // block coordinate descent
@@ -284,28 +283,20 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  // learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations set by ParseParameters
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
-  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 50;
-  //  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision = 0.00000000000000000000000001;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   // thetas
   learningInfo.thetaOptMethod = new OptMethod();
   learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
-  //  learningInfo.thetaOptMethod->learningRate = 0.01;
   // general
   learningInfo.supervisedTraining = false;
-  learningInfo.invokeCallbackFunctionEveryKIterations = 5;
+  learningInfo.invokeCallbackFunctionEveryKIterations = 1;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
-  //learningInfo.fixDOverC = false;
 
   // hot configs
   learningInfo.allowNullAlignments = true;
-  // learningInfo.firstKExamplesToLabel set by ParseParameters
-  // learningInfo.emIterationsCount set by ParseParameters;
   learningInfo.nSentsPerDot = 250;
-  //learningInfo.maxIterationsCount set by ParseParameters
 
   learningInfo.initializeThetasWithGaussian = false;
   learningInfo.initializeThetasWithUniform = false;
