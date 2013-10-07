@@ -236,14 +236,13 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
 				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
-				   const std::vector<bool> &enabledFeatureTypes, 
 				   FastSparseVector<double> &activeFeatures) {
   // debug info
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "executing FireFeatures(yI=" << yI << ", yIM1=" << yIM1 << ", x_t.size()=" << x_t.size() \
-         << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE \
-         << ", FIRST_POS=" << FIRST_POS << ", enabledFeatureTypes.size()=" << enabledFeatureTypes.size() \
-         << ", activeFeatures.size()=" << activeFeatures.size() << endl;
+    cerr << "executing FireFeatures(yI=" << yI << ", yIM1=" << yIM1 << ", x_t.size()=" << x_t.size();
+    cerr << ", x_s.size()=" << x_s.size() << ", i=" << i << ", START=" << START_OF_SENTENCE_Y_VALUE;
+    cerr << ", FIRST_POS=" << FIRST_POS;
+    cerr << ", activeFeatures.size()=" << activeFeatures.size() << endl;
   }
 
   // first, yI and yIM1 are not zero-based. LatentCrfAligner::FIRST_POS maps to the first position in the src sentence (this means the null token, if null alignments are enabled, or the first token in the src sent). 
@@ -260,122 +259,100 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   int tgtToken = x_t[i];
   int prevTgtToken = i > 0? x_t[i-1] : -1;
   int nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : -1;
-
-  AlignerFactorId factorId;
-  if(learningInfo->cacheActiveFeatures) {
-    factorId.yI = yI;
-    factorId.yIM1 = yIM1;
-    factorId.i = i;
-    factorId.srcWord = srcToken;
-    factorId.prevSrcWord = enabledFeatureTypes[106]? prevSrcToken : 0;
-    factorId.tgtWord = tgtToken;
-    factorId.prevTgtWord = enabledFeatureTypes[110]? prevTgtToken : 0;
-    factorId.nextTgtWord = enabledFeatureTypes[111]? nextTgtToken : 0;
-    if(factorIdToFeatures.count(factorId) == 1) {
-      activeFeatures = factorIdToFeatures[factorId];
-      // logging
-      //factorId.Print();
-      //PrintFeatureValues(activeFeatures);
-      //cerr << endl;
-      return;
-    }
-  }
+  unordered_map_featureId_double *precomputedFeatures =
+    precomputedFeaturesWithTwoInputs.size() != 0?
+    &(precomputedFeaturesWithTwoInputs[srcToken][tgtToken]) : 0;
   
   FeatureId featureId;
   
-  // F101: I( y_i-y_{i-1} == 0 )
-  if(enabledFeatureTypes.size() > 101 && enabledFeatureTypes[101]) {
-    featureId.type = FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO;
-    featureId.alignmentJump = (yI == yIM1) ? 0 : 1;
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-  
-  // F102: I( floor( ln(y_i - y_{i-1}) ) )
-  if(enabledFeatureTypes.size() > 102 && enabledFeatureTypes[102]) {
-    featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
-    featureId.alignmentJump = log(yI - yIM1);
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-	 
-  // F103: I( tgt[i] aligns_to src[y_i] )
-  if(enabledFeatureTypes.size() > 103 && enabledFeatureTypes[103]) {
-    featureId.type = FeatureTemplate::SRC0_TGT0;
-    featureId.wordPair.srcWord = srcToken;
-    featureId.wordPair.tgtWord = tgtToken;
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-  
-  // F104: precomputed(tgt[i], src[y_i])
-  if(enabledFeatureTypes.size() > 104 && enabledFeatureTypes[104]) {
-    assert(precomputedFeaturesWithTwoInputs.size() > 0);
-    unordered_map_featureId_double &precomputedFeatures = precomputedFeaturesWithTwoInputs[srcToken][tgtToken];
-    for(auto precomputedIter = precomputedFeatures.begin();
-        precomputedIter != precomputedFeatures.end();
-        precomputedIter++) {
-      AddParam(precomputedIter->first);
-      activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
-    }
-  }
-  
-  // F105: I( y_i - y_{i-1} == k )
-  if(enabledFeatureTypes.size() > 105 && enabledFeatureTypes[105]) {
-    featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
-    featureId.alignmentJump = yI - yIM1;
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-	 
-  // F106: I( src[y_{i-1}]:src[y_i] )
-  if(enabledFeatureTypes.size() > 106 && enabledFeatureTypes[106]) {
-    featureId.type = FeatureTemplate::SRC_BIGRAM;
-    featureId.bigram.previous = prevSrcToken;
-    featureId.bigram.current = srcToken;
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-  
-  // F107: |i/len(src) - j/len(tgt)|
-  // yI+yIM1 > 0 ensures that at least one of them will be meaningful in the computation of diagonal deviation
-  if(enabledFeatureTypes.size() > 107 && enabledFeatureTypes[107] && (yI + yIM1 > 0)) {
-    featureId.type = FeatureTemplate::DIAGONAL_DEVIATION;
-    AddParam(featureId);
-    double deviation = (yI > 0)?
-      fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
-      fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
-    activeFeatures[paramIndexes[featureId]] += deviation;
-  }
-
-  // F108: value = I( i==0 && y_i==0 )   ///OR\\\  I( i==len(tgt) && y_i==len(src) ) 
-  if(enabledFeatureTypes.size() > 108 && enabledFeatureTypes[108]) {
-    if(i == 0 && yI == 0) {
-      featureId.type = FeatureTemplate::SYNC_START;
+  for(auto featTemplateIter = learningInfo->featureTemplates.begin();
+      featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
+    
+    switch(*featTemplateIter) {
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      featureId.type = FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO;
+      featureId.alignmentJump = (yI == yIM1) ? 0 : 1;
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
-    }
-    if(i == x_t.size() - 1 && yI == x_s.size() - 1) {
-      featureId.type = FeatureTemplate::SYNC_END;
+      break;
+
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
+      featureId.alignmentJump = log(yI - yIM1);
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
-    }
-  }
+      break;
 
-  // save the active features in the cache
-  if(learningInfo->cacheActiveFeatures) {
-    assert(factorIdToFeatures.count(factorId) == 0);
-    factorIdToFeatures[factorId] = activeFeatures;
-    if(factorIdToFeatures.size() % 1000000 == 0) {
-      cerr << "|factorIds| is now " << factorIdToFeatures.size() << endl;
-    } 
-    // logging
-    //factorId.Print();
-    //PrintFeatureValues(activeFeatures);
-    //cerr << endl;
-  }
+      case FeatureTemplate::SRC0_TGT0:
+      featureId.type = FeatureTemplate::SRC0_TGT0;
+      featureId.wordPair.srcWord = srcToken;
+      featureId.wordPair.tgtWord = tgtToken;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+
+      case FeatureTemplate::PRECOMPUTED:
+      assert(precomputedFeaturesWithTwoInputs.size() > 0);
+      for(auto precomputedIter = precomputedFeatures->begin();
+          precomputedIter != precomputedFeatures->end();
+          precomputedIter++) {
+        AddParam(precomputedIter->first);
+        activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
+      }
+      break;
+
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
+      featureId.alignmentJump = yI - yIM1;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+    
+      case FeatureTemplate::SRC_BIGRAM:
+      featureId.type = FeatureTemplate::SRC_BIGRAM;
+      featureId.bigram.previous = prevSrcToken;
+      featureId.bigram.current = srcToken;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+      case FeatureTemplate::DIAGONAL_DEVIATION:
+      if(yI + yIM1 > 0) {
+        featureId.type = FeatureTemplate::DIAGONAL_DEVIATION;
+        AddParam(featureId);
+        double deviation = (yI > 0)?
+          fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
+          fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
+        activeFeatures[paramIndexes[featureId]] += deviation;
+      }
+      break;
+
+      case FeatureTemplate::SYNC_START:
+      if(i == 0 && yI == 0) {
+        featureId.type = FeatureTemplate::SYNC_START;
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+      
+      case FeatureTemplate::SYNC_END:
+      if(i == x_t.size() - 1 && yI == x_s.size() - 1) {
+        featureId.type = FeatureTemplate::SYNC_END;
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+    
+      case FeatureTemplate::LABEL_BIGRAM:
+      cerr << "this feature template is not implemented for word alignment" << endl;
+      assert(false);
+      break;
+      
+      default:
+        assert(false);
+    } // end of switch
+  } // end of loop over enabled feature templates
 }
-
 /*
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 

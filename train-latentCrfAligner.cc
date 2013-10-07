@@ -7,6 +7,7 @@
 #include <boost/mpi/communicator.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/program_options.hpp>
+#include <boost/foreach.hpp>
 
 #include "LatentCrfAligner.h"
 #include "IbmModel1.h"
@@ -103,7 +104,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
      // deen=150 // czen=515 // fren=447;
     (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
-    (FEAT.c_str(), po::value< vector< int > >(&learningInfo.featureTemplates), "(multiple ints) specifies feature templates to be fired")
+    (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
@@ -138,8 +139,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   
   if (vm.count(FEAT.c_str()) == 0) {
     cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
-    int srcTgtWordPairIdentitiesFeatureTemplateId = 103;
-    learningInfo.featureTemplates.push_back(srcTgtWordPairIdentitiesFeatureTemplateId);
+    learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
   }
 
   if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
@@ -148,6 +148,33 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   }
 
+  for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
+      featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+    if(*featIter == "LABEL_BIGRAM") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
+    } else if(*featIter == "SRC_BIGRAM") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
+    } else if(*featIter == "ALIGNMENT_JUMP") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
+    } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
+    } else if(*featIter == "ALIGNMENT_JUMP_IS_ZERO") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO);
+    } else if(*featIter == "SRC0_TGT0") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
+    } else if(*featIter == "PRECOMPUTED") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
+    } else if (*featIter == "DIAGONAL_DEVIATION") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
+    } else if(*featIter == "SYNC_START" ){
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
+    } else if(*featIter == "SYNC_END") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
+    } else {
+      assert(false);
+    }
+  }
+  
   if(vm.count(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str())) {
     learningInfo.hiddenSequenceIsMarkovian = false;
   }

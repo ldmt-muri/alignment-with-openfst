@@ -98,8 +98,6 @@ class LogLinearModel : public IAlignmentModel {
   LearningInfo learningInfo;
   // maps a srcTokenId to a map of tgtTokenIds and the number of times they co-occurred in a sent pair
   std::map<int, std::map<int, int> > srcTgtFreq;
-  // vectors specifiying which feature types to use (initialized in the constructor)
-  std::vector<bool> enabledFeatureTypesFirstOrder, enabledFeatureTypesSimple;
   // number of sentences in the corpus
   int corpusSize;
   // vector of (allTgtSentenceFst o grammarFst), indexed by target length

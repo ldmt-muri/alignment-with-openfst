@@ -4,10 +4,9 @@
 public:
   // given description of an arc in the alignment transducer, compute the local arc probability
   inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
-					 int srcSentLength, int tgtSentLength, 
-					 const std::vector<bool>& enabledFeatureTypes) {
+					 int srcSentLength, int tgtSentLength) {
     unordered_map_featureId_double activeFeatures;
-    FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, enabledFeatureTypes, activeFeatures);
+    FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, activeFeatures);
     // compute log prob
     double result = DotProduct(activeFeatures);    
     return result;

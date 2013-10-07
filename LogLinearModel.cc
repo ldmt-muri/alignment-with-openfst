@@ -89,23 +89,6 @@ LogLinearModel::LogLinearModel(const string& srcIntCorpusFilename,
     // - GD with L1
     assert(false);
   }
-
-  // bool vectors indicating which feature types to use
-  assert(enabledFeatureTypesSimple.size() == 0 && enabledFeatureTypesFirstOrder.size() == 0);
-  for(int i = 0; i < 25; i++) {
-    enabledFeatureTypesSimple.push_back(true);
-    enabledFeatureTypesFirstOrder.push_back(true);
-  }
-  // disable nonlocal features for a simpler model
-  enabledFeatureTypesSimple[4] = false; // F4
-  enabledFeatureTypesSimple[5] = false; // F5
-  enabledFeatureTypesSimple[6] = false; // F6  
-  enabledFeatureTypesSimple[7] = false; // F7
-  enabledFeatureTypesSimple[19] = false; // F19
-  enabledFeatureTypesSimple[20] = false; // F20
-  enabledFeatureTypesSimple[23] = false; // F23
-  enabledFeatureTypesSimple[24] = false; // F24
-
 }
 
 // assumptions: 
@@ -483,7 +466,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens,
 	  int prevSrcTokenId = prevSrcTokenPosHolder == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[prevSrcTokenPosHolder];
 	  float trueUnnormalizedArcLogProb = params.ComputeLogProb(srcTokenId, prevSrcTokenId, tgtTokenId, 
 								   srcTokenPos, prevSrcTokenPosHolder, tgtTokenPos, 
-								   srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
+								   srcTokens.size(), tgtTokens.size());
 
 	  // for debugging only
 	  //cerr <<  " tgtTokenPos=" << tgtTokenPos << " srcTokenPos=" << srcTokenPos << " prevSrcTokenPos=" << prevSrcTokenPosHolder << " trueUnnormalizedArcLogProb=" << trueUnnormalizedArcLogProb << " proposalUnnormalizedArcLogProb=" << arcProbHolder;
@@ -579,7 +562,7 @@ void LogLinearModel::BuildAlignmentFst(const vector<int>& srcTokens,
 	FstUtils::DecodeQuad(arc.weight, tgtTokenPos, srcTokenPos, prevSrcTokenPos, dummy);
 	int prevSrcTokenId = prevSrcTokenPos == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[prevSrcTokenPos];
 	float arcProb = params.ComputeLogProb(srcTokenId, prevSrcTokenId,  tgtTokenId, srcTokenPos, prevSrcTokenPos, tgtTokenPos, 
-					      srcTokens.size(), tgtTokens.size(), enabledFeatureTypesFirstOrder);
+					      srcTokens.size(), tgtTokens.size());
 	arc.weight = FstUtils::EncodeQuad(tgtTokenPos, srcTokenPos, prevSrcTokenPos, arcProb);
 	aiter.SetValue(arc);
       }
@@ -638,7 +621,7 @@ void LogLinearModel::CreateSampleAlignmentFst(const vector<int>& srcTokens,
       int prevSrcToken = previousSrcPosition == INITIAL_SRC_POS? INITIAL_SRC_POS : srcTokens[previousSrcPosition];
       float unnormalizedTrueDistPriorProb = 
 	params.ComputeLogProb(srcToken, prevSrcToken, tgtToken, srcPos, previousSrcPosition, tgtPos, 
-			      srcTokens.size(), translations[i].size(), enabledFeatureTypesFirstOrder);
+			      srcTokens.size(), translations[i].size());
       
       // now add the arc
       alignmentFst.AddArc(previousState, 
@@ -711,7 +694,7 @@ void LogLinearModel::AddSentenceContributionToGradient(const VectorFst< LogQuadA
       assert(srcToken != 0);
       assert(tgtToken != 0);
       gradient.FireFeatures(srcToken, prevSrcToken, tgtToken, (int)srcPos, (int)prevSrcPos, (int)tgtPos, 
-			    srcTokens.size(), tgtTokensCount, enabledFeatureTypesFirstOrder, activeFeatures);
+			    srcTokens.size(), tgtTokensCount, activeFeatures);
       d4 += clock() - temp;
       temp = clock();
       // for debugging

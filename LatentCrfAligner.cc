@@ -107,27 +107,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(srcSents.size() == tgtSents.size());
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
-
-  // bool vectors indicating which feature types to use
-  assert(enabledFeatureTypes.size() == 0);
-  // features 1-50 are reserved for wordalignment
-  for(int i = 0; i <= 50; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  // features 51-100 are reserved for latentCrfPosTagger model
-  for(int i = 51; i < 100; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  // features 101-150 are reserved for latentCrfAligner model
-  for(int i = 51; i < 100; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  for(auto templateId = learningInfo.featureTemplates.begin();
-      templateId != learningInfo.featureTemplates.end();
-      templateId++) {
-    enabledFeatureTypes[*templateId] = true;
-  }
-   
+ 
   // TODO-REFACTOR: use indicative strings to refer to feature templates instead of those cryptic int ids
   /*
   enabledFeatureTypes[101] = true;  // (bool) // id = y_i-y_{i-1} 

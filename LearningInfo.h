@@ -15,6 +15,8 @@
 
 using namespace std;
 
+enum FeatureTemplate { LABEL_BIGRAM, SRC_BIGRAM, ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, PRECOMPUTED, DIAGONAL_DEVIATION, SYNC_START, SYNC_END };
+
 namespace Distribution {
   enum Distribution {
     // the log linear distribution with all features
@@ -355,7 +357,7 @@ class LearningInfo {
   std::map<int, std::map<int, float> > *ibm1BackwardLogProbs;
 
   // list of feature templates to be fired
-  std::vector<int> featureTemplates;
+  std::vector<FeatureTemplate> featureTemplates;
   
   // 0 = no debug info. 
   // 1 = corpus level debug info.

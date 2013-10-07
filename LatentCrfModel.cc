@@ -137,7 +137,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
         // compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
-      	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+      	FireFeatures(yI, yIM1, sentId, i, h);
         // compute the weight of this transition:
         // \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
         double nLambdaH = -1.0 * lambda->DotProduct(h);
@@ -235,7 +235,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 
 	// for each feature that fires on this arc
 	FastSparseVector<double> h;
-	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, h);
 	for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
 	  if(FXk.find(h_k->first) == FXk.end()) {
@@ -256,7 +256,6 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 }			   
 
 void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
-				  const std::vector<bool> &enabledFeatureTypes, 
 				  FastSparseVector<double> &activeFeatures) { 
   if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
@@ -267,7 +266,7 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
     int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
     lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), GetObservableContext(sentId), i, 
 			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, firstPos, 
-			 enabledFeatureTypes, activeFeatures);
+			 activeFeatures);
     assert(GetObservableSequence(sentId).size() > 0);
   } else {
     assert(false);
@@ -306,7 +305,7 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
 	int toState = arc.nextstate;
 
 	// for each feature that fires on this arc
-	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, h);
 
 	// prepare the schedule for visiting states in the next timestep
 	iP1States.insert(toState);
@@ -360,7 +359,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
 
 	// for each feature that fires on this arc
 	FastSparseVector<double> h;
-	FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+	FireFeatures(yI, yIM1, sentId, i, h);
 	for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
 
 	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
@@ -600,7 +599,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
 
       	// compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
-        FireFeatures(yI, yIM1, sentId, i, enabledFeatureTypes, h);
+        FireFeatures(yI, yIM1, sentId, i, h);
 
         // prepare -log \theta_{z_i|y_i}
         int zI = z[i];
@@ -858,7 +857,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     // compute feature aggregate values on the gold labels of this sentence
     FastSparseVector<double> goldFeatures;
     for(unsigned i = 0; i < x.size(); i++) {
-      model.FireFeatures(y[i], i==0? LatentCrfModel::START_OF_SENTENCE_Y_VALUE:y[i-1], sentId, i, model.enabledFeatureTypes, goldFeatures);
+      model.FireFeatures(y[i], i==0? LatentCrfModel::START_OF_SENTENCE_Y_VALUE:y[i-1], sentId, i, goldFeatures);
     }
     if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": size of gold features = " << goldFeatures.size() << endl; 

@@ -28,8 +28,6 @@
 #include "VocabEncoder.h"
 #include "Samplers.h"
 
-enum FeatureTemplate { LABEL_BIGRAM, SRC_BIGRAM, ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, PRECOMPUTED, DIAGONAL_DEVIATION, SYNC_START, SYNC_END };
-
 struct FeatureId {
 public:
   static VocabEncoder *vocabEncoder;
@@ -187,61 +185,6 @@ using unordered_map_featureId_int = boost::unordered_map<FeatureId, int, Feature
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj);
 std::istream& operator>>(std::istream& is, FeatureId& obj);
 
-struct AlignerFactorId 
-{ 
-public:
-  int yI, yIM1, i, srcWord, prevSrcWord, tgtWord, prevTgtWord, nextTgtWord; 
-  inline void Print() const {
-    std::cerr << "(yI=" << yI << ",yIM1=" << yIM1 << ",i=" << i << ",srcWord="  << srcWord << ",prevSrcWord=" << prevSrcWord << ",tgtWord=" <<  tgtWord << ",prevTgtWord=" << prevTgtWord << ",nextTgtWord=" << nextTgtWord << ")" << endl;
-  }
-  inline bool operator < (const AlignerFactorId &other) const {
-    if(yI != other.yI) {
-      return yI < other.yI;
-    } else if(yIM1 != other.yIM1) {
-      return yIM1 < other.yIM1;
-    } else if(i != other.i){
-      return i < other.i;
-    } else if(srcWord != other.srcWord) {
-      return srcWord < other.srcWord;
-    } else if(prevSrcWord != other.prevSrcWord) {
-      return prevSrcWord < other.prevSrcWord;
-    } else if(tgtWord != other.tgtWord) {
-      return tgtWord < other.tgtWord;
-    } else if(prevTgtWord != other.prevTgtWord) {
-      return prevTgtWord < other.prevTgtWord;
-    } else if(nextTgtWord != other.nextTgtWord){ 
-      return nextTgtWord < other.nextTgtWord;
-    } else {
-      return false;
-    }
-  }
-
-  struct AlignerFactorHash : public std::unary_function<AlignerFactorId, size_t> {
-    size_t operator()(const AlignerFactorId& x) const {
-      size_t seed = 0;
-      boost::hash_combine(seed, (unsigned char)x.i);
-      //boost::hash_combine(seed, x.nextTgtWord);
-      //boost::hash_combine(seed, x.prevSrcWord);
-      //boost::hash_combine(seed, x.prevTgtWord);
-      boost::hash_combine(seed, (unsigned short)x.srcWord);
-      boost::hash_combine(seed, (unsigned short)x.tgtWord);
-      boost::hash_combine(seed, (unsigned char)x.yI);
-      boost::hash_combine(seed, (unsigned char)x.yIM1);
-      return seed;
-      //return std::hash<int>()(x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1);
-    }
-  };
-
-  struct AlignerFactorEqual : public std::unary_function<AlignerFactorId, bool> {
-    bool operator()(const AlignerFactorId& left, const AlignerFactorId& right) const {
-      return left.i == right.i && left.nextTgtWord == right.nextTgtWord &&
-              left.prevSrcWord == right.prevSrcWord && left.prevTgtWord == right.prevTgtWord &&
-              left.srcWord == right.srcWord && left.tgtWord == right.tgtWord &&
-              left.yI == right.yI && left.yIM1 == right.yIM1;
-    }
-  };
-
-};
 
 class LogLinearParams {
 
@@ -278,15 +221,13 @@ class LogLinearParams {
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
-		    const std::vector<bool>& enabledFeatureTypes, unordered_map_featureId_double& activeFeatures);
+		    unordered_map_featureId_double& activeFeatures);
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
-		    const std::vector<bool> &enabledFeatureTypes, 
 		    FastSparseVector<double> &activeFeatures);
   
   void FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
-		    const std::vector<bool> &enabledFeatureTypes, 
 		    FastSparseVector<double> &activeFeatures);
 
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
@@ -372,8 +313,6 @@ class LogLinearParams {
   
   boost::unordered_map< int, boost::unordered_map< int, unordered_map_featureId_double > > precomputedFeaturesWithTwoInputs;
   
-  boost::unordered_map< AlignerFactorId, FastSparseVector<double>, AlignerFactorId::AlignerFactorHash, AlignerFactorId::AlignerFactorEqual > factorIdToFeatures;
-
 };
 
 #endif

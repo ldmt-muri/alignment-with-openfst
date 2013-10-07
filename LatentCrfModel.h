@@ -214,7 +214,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    FastSparseVector<double> &h);
 
   void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
-		    const std::vector<bool> &enabledFeatureTypes, 
 		    FastSparseVector<double> &activeFeatures);
 
   double GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId);
@@ -327,8 +326,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
  protected:
   static LatentCrfModel *instance;
   unordered_set<int> zDomain, yDomain;
-  // vectors specifiying which feature types to use (initialized in the constructor)
-  std::vector<bool> enabledFeatureTypes;
   unsigned countOfConstrainedLambdaParameters;
   double REWARD_FOR_CONSTRAINED_FEATURES, PENALTY_FOR_CONSTRAINED_FEATURES;
   GaussianSampler gaussianSampler;

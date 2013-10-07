@@ -22,7 +22,7 @@ task autoencoder_fwd_align :: test_sents_count=$test_sents_count prefix=$prefix 
   mpirun -np $procs /usr0/home/wammar/alignment-with-openfst/train-latentCrfAligner-copy \
   --train-data $data_file \
   --output-prefix "$prefix-fwd" \
-  --feat 103 --feat 105 --feat 107 --feat 108 \
+  --feat SRC0_TGT0 --feat LOG_ALIGNMENT_JUMP --feat DIAGONAL_DEVIATION --feat SYNC_START --feat SYNC_END \
   --test-size $test_sents_count \
   --max-em-iter-count 1 \
   --max-lbfgs-iter-count 1 \
