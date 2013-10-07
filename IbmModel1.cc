@@ -35,7 +35,7 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
   // read encoded training data
   vocabEncoder.useUnk = false;
   NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN, false);
-  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN);
+  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN, learningInfo.reverse);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());  
   assert(vocabEncoder.ConstEncode(NULL_SRC_TOKEN) != vocabEncoder.UnkInt());
   

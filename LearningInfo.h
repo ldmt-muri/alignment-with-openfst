@@ -422,6 +422,9 @@ class LearningInfo {
   double multinomialSymmetricDirichletAlpha;
 
   int expectedFeaturesCount;
+  
+  // train models for the reverse corpus direction
+  bool reverse;
 };
 
 

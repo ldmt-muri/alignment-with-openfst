@@ -20,7 +20,7 @@ HmmAligner::HmmAligner(const string& bitextFilename,
   // encode training data
   vocabEncoder.useUnk = false;
   NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN_STRING, false);
-  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN_STRING);
+  vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN_STRING, learningInfo.reverse);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());
 
   // initialize the model parameters
@@ -592,7 +592,7 @@ void HmmAligner::AlignTestSet(const string &testBitextFilename, const string &ou
   //const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename) {
 
   vector< vector<int> > srcTestSents, tgtTestSents;
-  vocabEncoder.ReadParallelCorpus(testBitextFilename, srcTestSents, tgtTestSents, NULL_SRC_TOKEN_STRING);
+  vocabEncoder.ReadParallelCorpus(testBitextFilename, srcTestSents, tgtTestSents, NULL_SRC_TOKEN_STRING, learningInfo.reverse);
   assert(srcTestSents.size() == tgtTestSents.size());
   
   ofstream outputAlignments(outputAlignmentsFilename.c_str(), ios::out);

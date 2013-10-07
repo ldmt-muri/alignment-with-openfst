@@ -132,8 +132,16 @@ class VocabEncoder {
     assert(ids.size() == tokens.size());
   }
   
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents) {
+    ReadParallelCorpus(textFilename, srcSents, tgtSents, "", false);
+  }
+  
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, bool reverse) {
+    ReadParallelCorpus(textFilename, srcSents, tgtSents, "", reverse);
+  }
+  
   // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken="") {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken, bool reverse) {
     assert(srcSents.size() == 0 && tgtSents.size() == 0);
     
     // open data file
@@ -174,9 +182,17 @@ class VocabEncoder {
 	  continue;
 	}
 	if(src) {
-	  srcSents[lineNumber].push_back(temp[i]);
+	  if(!reverse) {
+      srcSents[lineNumber].push_back(temp[i]);
+    } else {
+      tgtSents[lineNumber].push_back(temp[i]);
+    }
 	} else {
-	  tgtSents[lineNumber].push_back(temp[i]);
+    if(!reverse) {
+      tgtSents[lineNumber].push_back(temp[i]);
+    } else {
+      srcSents[lineNumber].push_back(temp[i]);
+    }
 	}
       }
     }
@@ -229,6 +245,16 @@ class VocabEncoder {
       return intToToken.find(wordId)->second;
     }
   }
+  
+  const std::string Decode(std::vector<int> &wordIds) const {
+    stringstream ss;
+    for(auto wordIdIter = wordIds.begin(); wordIdIter != wordIds.end(); ++wordIdIter) {
+      ss << Decode(*wordIdIter) << " ";
+    }
+    return ss.str();
+  } 
+  
+
 
 };
 

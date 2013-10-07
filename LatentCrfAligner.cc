@@ -97,9 +97,12 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   srcSents.clear();
   tgtSents.clear();
   if(learningInfo.allowNullAlignments) {
-    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, NULL_TOKEN_STR);
+    vocabEncoder.ReadParallelCorpus(
+      textFilename, srcSents, tgtSents, 
+      NULL_TOKEN_STR, learningInfo.reverse);
   } else {
-    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents);
+    vocabEncoder.ReadParallelCorpus(
+      textFilename, srcSents, tgtSents, learningInfo.reverse);
   }
   assert(srcSents.size() == tgtSents.size());
   assert(srcSents.size() > 0);
@@ -311,7 +314,12 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
       // determine the alignment (i.e. src position) for this tgt position (i)
       int alignment = labels[i] - FIRST_SRC_POSITION;
       assert(alignment >= 0);
-      ss << alignment << "-" << i << " ";
+      if(learningInfo.reverse) {
+        ss << i << "-" << alignment << " ";
+      } else {
+        ss << alignment << "-" << i << " ";
+      }
+      
     }
     ss << endl;
     if(learningInfo.mpiWorld->rank() == 0){

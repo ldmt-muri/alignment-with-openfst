@@ -531,7 +531,11 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
     yim1 -= FIRST_POSITION;
     // identify and explain a pathological situation
     if(nLogThetaGivenOneLabel.params.count( srcSent[yi] ) == 0) {
-      cerr << "yi = " << yi << ", srcSent[yi] == " << srcSent[yi] << ", nLogThetaGivenOneLabel.params.count(" << srcSent[yi] << ")=0" << " although nLogThetaGivenOneLabel.params.size() = " << nLogThetaGivenOneLabel.params.size() << endl << "keys available are: " << endl;
+      cerr << "yi = " << yi << ", srcSent[yi] == " << srcSent[yi] << \
+        ", nLogThetaGivenOneLabel.params.count(" << srcSent[yi] << ")=0" << \
+        " although nLogThetaGivenOneLabel.params.size() = " << \
+        nLogThetaGivenOneLabel.params.size() << endl << \
+        "keys available are: " << endl;
       for(auto contextIter = nLogThetaGivenOneLabel.params.begin();
           contextIter != nLogThetaGivenOneLabel.params.end();
           ++contextIter) {

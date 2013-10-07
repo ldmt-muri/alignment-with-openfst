@@ -93,9 +93,6 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::vocabEncoder = &types;
-  paramIndexes.reserve(learningInfo->expectedFeaturesCount);
-  paramWeights.reserve(learningInfo->expectedFeaturesCount);
-  paramIds.reserve(learningInfo->expectedFeaturesCount);
 }
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) : 
@@ -105,9 +102,6 @@ LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) :
   COUNT_OF_FEATURE_TYPES(100) {
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::vocabEncoder = &types;
-  paramIndexes.reserve(learningInfo->expectedFeaturesCount);
-  paramWeights.reserve(learningInfo->expectedFeaturesCount);
-  paramIds.reserve(learningInfo->expectedFeaturesCount);
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
@@ -172,6 +166,10 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
+  paramIndexes.reserve(learningInfo.expectedFeaturesCount);
+  paramWeights.reserve(learningInfo.expectedFeaturesCount);
+  paramIds.reserve(learningInfo.expectedFeaturesCount);
+
 }
 
 // initializes the parameter weight by drawing from a gaussian
@@ -933,6 +931,8 @@ void LogLinearParams::PersistParams(const string &outputFilename, bool humanFrie
 
   ofstream paramsFile(outputFilename.c_str());
   
+  assert(paramsFile.good());
+
   if(!humanFriendly) {
     // save data to archive
     archive::text_oarchive oa(paramsFile);
