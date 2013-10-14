@@ -215,10 +215,11 @@ class LogLinearParams {
     {
       assert(IsSealed());
       assert(paramIdsPtr->size() == paramWeightsPtr->size());
-      os << paramIdsPtr->size();
+      int count = paramIdsPtr->size();
+      os << count;
       for(int i = 0; i < paramIdsPtr->size(); i++) {
-	os << (*paramIdsPtr)[i];
-	os << (*paramWeightsPtr)[i];
+        os << (*paramIdsPtr)[i];
+        os << (*paramWeightsPtr)[i];
       }
     }
   
@@ -227,18 +228,18 @@ class LogLinearParams {
     {
       int count;
       is >> count;
-      for(int i = 0; i < count; ++i) {
-	FeatureId featureId;
-	is >> featureId;
-	paramIdsTemp.push_back(featureId);
-	double weight;
-	is >> weight;
-	paramWeightsTemp.push_back(weight);
+      for(int i = 0; i < 100; ++i) {
+        FeatureId featureId;
+        is >> featureId;
+        paramIdsTemp.push_back(featureId);
+        double weight;
+        is >> weight;
+        paramWeightsTemp.push_back(weight);
       }
     }
 
   BOOST_SERIALIZATION_SPLIT_MEMBER()  
-
+    
   // this method seals the set of parameters being used, not their weights
   void Seal(bool);
   bool IsSealed() const;

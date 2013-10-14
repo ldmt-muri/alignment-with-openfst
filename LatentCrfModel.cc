@@ -992,9 +992,6 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   // the master tells the slaves that he needs their help to collectively compute the gradient
   bool NEED_HELP = true;
   mpi::broadcast<bool>(*model.learningInfo.mpiWorld, NEED_HELP, 0);
-  // the master broadcasts its lambda parameters so that all processes are on the same page while 
-  // collectively computing the gradient
-  mpi::broadcast<vector<double> >( (*model.learningInfo.mpiWorld), (model.lambda->paramWeights), 0);
 
   // even the master needs to process its share of sentences
   vector<double> gradientPiece(model.lambda->GetParamsCount(), 0.0), reducedGradient;
@@ -1289,16 +1286,6 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   return lbfgsParams;
 }
 
-void LatentCrfModel::BroadcastLambdas(unsigned rankId)  {
-  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before executing BroadcastLambdas()" << endl;
-  }
-  lambda->Broadcast(*learningInfo.mpiWorld, rankId);
-  if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after executing BroadcastLambdas()" << endl;
-  }
-}
-
 void LatentCrfModel::BroadcastTheta(unsigned rankId) {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BroadcastTheta()" << endl;
@@ -1339,6 +1326,7 @@ void LatentCrfModel::PersistTheta(string thetaParamsFilename) {
 }
 
 void LatentCrfModel::BlockCoordinateDescent() {  
+  assert(lambda->IsSealed());
   
   // if you're not using mini batch, set the minibatch size to data.size()
   if(learningInfo.optimizationMethod.subOptMethod->miniBatchSize <= 0) {
@@ -1497,10 +1485,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     
     // make a copy of the lambda weights converged to in the previous iteration to use as
     // an initialization for ADAGRAD
-    vector<double> prevLambdaWeights;
-    if(learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
-      prevLambdaWeights = lambda->paramWeights;
-    }
+    auto endIterator = learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD?
+      lambda->paramWeightsPtr->end() : lambda->paramWeightsPtr->begin();
+    vector<double> prevLambdaWeights(lambda->paramWeightsPtr->begin(), endIterator);
     
     double Nll = 0;
     // note: batch == minibatch with size equals to data.size()
@@ -1558,9 +1545,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
             if(!masterNeedsHelp) {
               break;
             }
-            
-            // receive the latest parameter weights from the master
-            mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
             
             // process your share of examples
             vector<double> gradientPiece(lambda->GetParamsCount(), 0.0), dummy;
@@ -1659,9 +1643,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
             }
           }
           
-          // receive the latest parameter weights from the master
-          mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
-
           // convergence criterion for adagrad 
           int maxAdagradIter = 1;//learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
           adagradConverged = (adagradIter++ % maxAdagradIter == 0);
@@ -1894,20 +1875,13 @@ void LatentCrfModel::InitLambda() {
   }
 
   // master collects all feature ids fired on any sentence
-  unordered_set_featureId localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
+  assert(!lambda->IsSealed());
+  unordered_set_featureId localParamIds(lambda->paramIdsTemp.begin(), lambda->paramIdsTemp.end()), allParamIds;
   mpi::reduce< unordered_set_featureId >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done. |lambda| = " << allParamIds.size() << endl; 
   }
-
-  // now, only master knows the size of lambda. inform the rest!
-  int lambdaSize = allParamIds.size();
-  mpi::broadcast<int>(*learningInfo.mpiWorld, lambdaSize, 0);
-
-  lambda->paramIndexes.reserve(lambdaSize);
-  lambda->paramWeights.reserve(lambdaSize);
-  lambda->paramIds.reserve(lambdaSize);
 
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {
@@ -1916,12 +1890,36 @@ void LatentCrfModel::InitLambda() {
     }
   }
   
-  // master broadcasts the full set of features to all slaves
-  BroadcastLambdas(0);
-
+  // master seals his lambda params creating shared memory 
   if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "|lambda| = " << lambda->GetParamsCount() << endl;
+    assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
+    assert(lambda->paramIdsTemp.size() > 0);
+    assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
+    assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
+    lambda->Seal(true);
+    assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
+    assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0 \
+           && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() && \
+           lambda->paramIdsPtr->size() == lambda->paramIndexes.size());    
   }
+
+  // paramIndexes is out of sync. master must send it
+  mpi::broadcast<unordered_map_featureId_int>(*learningInfo.mpiWorld, lambda->paramIndexes, 0);
+
+  // slaves seal their lambda params, consuming the shared memory created by master
+  if(learningInfo.mpiWorld->rank() != 0) {
+    assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
+    assert(lambda->paramIdsTemp.size() > 0);
+    assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
+    assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
+    lambda->Seal(true);
+    assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
+    assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0 \
+           && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() \
+           && lambda->paramIdsPtr->size() == lambda->paramIndexes.size());    
+  }
+
+  cerr << "rank " << learningInfo.mpiWorld->rank() << ": |lambda| = " << lambda->GetParamsCount() << endl;
 }
 
 // returns -log p(z|x)
