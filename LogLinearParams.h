@@ -30,7 +30,7 @@
 
 struct FeatureId {
 public:
-  static VocabEncoder *vocabEncoder;
+  static VocabEncoder *precomputedFeaturesEncoder;
   FeatureTemplate type;
   union {
     struct { unsigned current, previous; } bigram;
@@ -39,16 +39,18 @@ public:
     int precomputed;
   };
   
+  
   // replace this with a copy constructor 
-  const string& DecodePrecomputedFeature() const {
-    assert(type == FeatureTemplate::PRECOMPUTED);
-    return vocabEncoder->Decode(precomputed);
-  }
+  //const string& DecodePrecomputedFeature() const {
+  //  assert(type == FeatureTemplate::PRECOMPUTED);
+  //  return precomputedFeaturesEncoder->Decode(precomputed);
+  //}
 
   void EncodePrecomputedFeature(const string& featureIdString) {
     assert(type == FeatureTemplate::PRECOMPUTED);
-    precomputed = vocabEncoder->Encode(featureIdString);
+    precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
   }
+  
   
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
@@ -193,12 +195,6 @@ class LogLinearParams {
 
  public:
 
-  // for the loglinear word alignment model
-  LogLinearParams(VocabEncoder &types, 
-		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
-		  const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
-		  double gaussianStdDev = 0.01);
-
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
@@ -298,11 +294,9 @@ class LogLinearParams {
   // maps a word id into a string
   VocabEncoder &types;
 
-  // TODO: inappropriate for this general class. consider adding to a derived class
-  // maps [srcTokenId][tgtTokenId] => forward logprob
-  // maps [tgtTokenId][srcTokenId] => backward logprob
-  const boost::unordered_map< int, boost::unordered_map< int, double > > &ibmModel1ForwardScores, &ibmModel1BackwardScores;
-  
+  // maps precomputed feature strings into ids
+  VocabEncoder precomputedFeaturesEncoder;
+
   const int COUNT_OF_FEATURE_TYPES;
   
   const LearningInfo *learningInfo;

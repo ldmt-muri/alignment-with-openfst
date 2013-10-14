@@ -64,7 +64,7 @@ struct LbfgsParams {
     maxIterations = 10;
     memoryBuffer = 6;
     precision = 0.000000000000001;
-    maxEvalsPerIteration = 20;
+    maxEvalsPerIteration = 3;
   }
 };
 
@@ -241,7 +241,6 @@ class LearningInfo {
     hiddenSequenceIsMarkovian = true;
     cacheActiveFeatures = false;
     multinomialSymmetricDirichletAlpha = 1.0;
-    expectedFeaturesCount = 1000 * 1000 * 1000;
   }
 
   bool IsModelConverged() {
@@ -423,8 +422,6 @@ class LearningInfo {
   
   double multinomialSymmetricDirichletAlpha;
 
-  int expectedFeaturesCount;
-  
   // train models for the reverse corpus direction
   bool reverse;
 };

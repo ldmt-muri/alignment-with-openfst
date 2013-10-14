@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <boost/unordered_map.hpp>
 #include <assert.h>
 #include <limits.h>
 
@@ -16,8 +17,8 @@ using namespace std;
 class VocabEncoder {
  public:
   int firstId, nextId;
-  map<string, int> tokenToInt;
-  map<int, string> intToToken;
+  boost::unordered_map<string, int> tokenToInt;
+  boost::unordered_map<int, string> intToToken;
   std::string UNK;
   bool useUnk;
   std::set<int> closedVocab;
@@ -74,6 +75,13 @@ class VocabEncoder {
       }
     }
     useUnk = true;
+  }
+
+  void ReserveVocabSize(int size) {
+    if(tokenToInt.size() < size && intToToken.size() < size) {
+      tokenToInt.reserve(size);
+      intToToken.reserve(size);
+    }
   }
 
   bool IsClosedVocab(int wordId) const {
@@ -230,7 +238,7 @@ class VocabEncoder {
   
   void PersistVocab(string filename) {
     std::ofstream vocabFile(filename.c_str(), std::ios::out);
-    for(map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
+    for(boost::unordered_map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
       bool inClosedVocab = closedVocab.find(intToTokenIter->first) != closedVocab.end();
       // c for closed, o for open
       vocabFile << intToTokenIter->first << " " << intToTokenIter->second << " " << (inClosedVocab? "c" : "o") << endl;
@@ -254,15 +262,18 @@ class VocabEncoder {
     return ss.str();
   } 
   
+  int Count() const {
+    return intToToken.size();
+  }
 
 
 };
 
 class VocabDecoder {
  public:
-  std::map<int, std::string> vocab;
+  boost::unordered_map<int, std::string> vocab;
   std::string UNK;
-  std::set<int> closedVocab;
+  set<int> closedVocab;
 
  public:
   VocabDecoder(const VocabDecoder& another) {
@@ -319,6 +330,7 @@ class VocabDecoder {
     bool x = (closedVocab.find(wordId) != closedVocab.end());
     return x;
   }
+
 
 };
 

@@ -1560,7 +1560,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
             }
             
             // receive the latest parameter weights from the master
-            // (TODO: can we assume that slaves already have the latest lambda parameter weights at this point?)
             mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
             
             // process your share of examples
@@ -1661,7 +1660,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
           }
           
           // receive the latest parameter weights from the master
-          // TODO-opt: can we assume that slaves already have the latest lambda parameter weights at this point?)
           mpi::broadcast<vector<double> >( *learningInfo.mpiWorld, lambda->paramWeights, 0);
 
           // convergence criterion for adagrad 
@@ -1867,7 +1865,7 @@ double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabels
 
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::InitLambda() {
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+  if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
   }
 
@@ -1891,9 +1889,21 @@ void LatentCrfModel::InitLambda() {
     BuildLambdaFst(sentId, lambdaFst);
   }
 
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master" << learningInfo.mpiWorld->rank() << ": each process extracted features from its respective examples. Now, master will reduce all of them...";
+  }
+
   // master collects all feature ids fired on any sentence
   unordered_set_featureId localParamIds(lambda->paramIds.begin(), lambda->paramIds.end()), allParamIds;
   mpi::reduce< unordered_set_featureId >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
+
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "done. |lambda| = " << allParamIds.size() << endl; 
+  }
+
+  lambda->paramIndexes.reserve(allParamIds.size());
+  lambda->paramWeights.reserve(allParamIds.size());
+  lambda->paramIds.reserve(allParamIds.size());
 
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {

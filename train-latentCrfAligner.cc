@@ -107,8 +107,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
-    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
-    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.01), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(500), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.000001), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
 //    (MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
@@ -130,6 +130,12 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << desc << endl;
     return false;
   }
+
+  if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
+    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
+      vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
+  }
+  
 
   if (vm.count(TRAIN_DATA.c_str()) == 0) {
     cerr << TRAIN_DATA << " option is mandatory" << endl;

@@ -1,6 +1,6 @@
 #include "LogLinearParams.h"
 
-VocabEncoder* FeatureId::vocabEncoder = 0;
+VocabEncoder* FeatureId::precomputedFeaturesEncoder = 0;
 
 using namespace std;
 using namespace boost;
@@ -22,7 +22,8 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << '|' << obj.wordPair.srcWord << '|' << obj.wordPair.tgtWord;
     break;
   case FeatureTemplate::PRECOMPUTED:
-    os << '|' << obj.DecodePrecomputedFeature();
+    //os << '|' << obj.DecodePrecomputedFeature();
+    os << '|' << obj.precomputed;
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
   case FeatureTemplate::SYNC_START:
@@ -64,8 +65,9 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
     assert(separator == '|');
     break;
   case FeatureTemplate::PRECOMPUTED:
-    is >> separator >> temp2;
-    obj.EncodePrecomputedFeature(temp2);
+    //is >> separator >> temp2;
+    //obj.EncodePrecomputedFeature(temp2);
+    is >> separator >> obj.precomputed;
     assert(separator == '|');
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
@@ -83,25 +85,12 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
 
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
-				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1ForwardLogProbs,
-				 const boost::unordered_map<int, boost::unordered_map<int, double> > &ibmModel1BackwardLogProbs,
 				 double gaussianStdDev) :
   types(types), 
-  ibmModel1ForwardScores(ibmModel1ForwardLogProbs), 
-  ibmModel1BackwardScores(ibmModel1BackwardLogProbs),
   COUNT_OF_FEATURE_TYPES(100) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
-  FeatureId::vocabEncoder = &types;
-}
-
-LogLinearParams::LogLinearParams(VocabEncoder &types, double gaussianStdDev) : 
-  types(types), 
-  ibmModel1ForwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
-  ibmModel1BackwardScores(boost::unordered_map<int, boost::unordered_map<int, double> >()),
-  COUNT_OF_FEATURE_TYPES(100) {
-  gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
-  FeatureId::vocabEncoder = &types;
+  FeatureId::precomputedFeaturesEncoder = &precomputedFeaturesEncoder;
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
@@ -114,61 +103,78 @@ void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2
 // example line in the precomputed features file:
 // madrasa ||| school ||| F52:editdistance=7 F53:capitalconsistency=1
 void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairFeaturesFilename) {
-  ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
-  string line;
-  while( getline(wordPairFeaturesFile, line) ) {
-    if(line.size() == 0) {
-      continue;
+  if(learningInfo->mpiWorld->rank() == 0) {
+    cerr << "rank 0 is going to read the word pair features file..." << endl;
+    cerr << "first, allocate an appropriate VocabEncoder size...";
+    precomputedFeaturesEncoder.ReserveVocabSize(17 * 1000 * 1000);
+    precomputedFeaturesWithTwoInputs.reserve( types.Count() );
+    cerr << "done." << endl;
+    ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
+    string line;
+    while( getline(wordPairFeaturesFile, line) ) {
+      if(line.size() == 0) {
+	continue;
+      }
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      // check format
+      if(splits.size() < 5) {
+	assert(false);
+	exit(1);
+      }
+      // splitsIter
+      vector<string>::iterator splitsIter = splits.begin();
+      // read the first input
+      string &input1String = *(splitsIter++);
+      int input1 = types.ConstEncode(input1String);
+      // skip |||
+      assert(*splitsIter == "|||");
+      splitsIter++;
+      // read the second input
+      string &input2String = *(splitsIter++);
+      int input2 = types.ConstEncode(input2String);
+      // skip |||
+      assert(*splitsIter == "|||");
+      splitsIter++;
+      // the remaining elements are precomputed features for (input1, input2)
+      while(splitsIter != splits.end()) {
+	// read feature id
+	std::vector<string> featureIdAndValue;
+	StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+	assert(featureIdAndValue.size() == 2);
+	FeatureId featureId;
+	featureId.type = FeatureTemplate::PRECOMPUTED;
+	// TODO: inistialize the vocab encoder's dictionary with a large size 
+	featureId.precomputed = precomputedFeaturesEncoder.Encode(featureIdAndValue[0]);
+	
+	// read feature value
+	double featureValue;
+	stringstream temp;
+	temp << featureIdAndValue[1];
+	temp >> featureValue;
+	
+	// store it for quick retrieval later on
+        //if(precomputedFeaturesWithTwoInputs.find(input1) == precomputedFeaturesWithTwoInputs.end()) {
+	//  precomputedFeaturesWithTwoInputs[input1].reserve(1000);
+	//}
+	precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+      }
     }
-    std::vector<string> splits;
-    StringUtils::SplitString(line, ' ', splits);
-    // check format
-    if(splits.size() < 5) {
-      assert(false);
-      exit(1);
-    }
-    // splitsIter
-    vector<string>::iterator splitsIter = splits.begin();
-    // read the first input
-    string &input1String = *(splitsIter++);
-    int input1 = types.ConstEncode(input1String);
-    // skip |||
-    assert(*splitsIter == "|||");
-    splitsIter++;
-    // read the second input
-    string &input2String = *(splitsIter++);
-    int input2 = types.ConstEncode(input2String);
-    // skip |||
-    assert(*splitsIter == "|||");
-    splitsIter++;
-    // the remaining elements are precomputed features for (input1, input2)
-    while(splitsIter != splits.end()) {
-      // read feature id
-      std::vector<string> featureIdAndValue;
-      StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
-      assert(featureIdAndValue.size() == 2);
-      FeatureId featureId;
-      featureId.type = FeatureTemplate::PRECOMPUTED;
-      featureId.precomputed = types.Encode(featureIdAndValue[0]);
-      
-      // read feature value
-      double featureValue;
-      stringstream temp;
-      temp << featureIdAndValue[1];
-      temp >> featureValue;
-      
-      // store it for quick retrieval later on
-      precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
-    }
+    wordPairFeaturesFile.close();
+    cerr << "rank 0 finished reading the word pair features file." << endl;
+
+    precomputedFeaturesEncoder.tokenToInt.clear();
+    precomputedFeaturesEncoder.intToToken.clear();
+    cerr << "rank 0 cleared the dictionaries of precomputedFeaturesEncoder." << endl;
   }
-  wordPairFeaturesFile.close();
+  // BROADCAST
+  cerr << "rank " << learningInfo->mpiWorld->rank() << ": broadcasting precomputed features." << endl;
+  boost::mpi::broadcast< boost::unordered_map< int, boost::unordered_map< int, unordered_map_featureId_double > > >(
+														    *(learningInfo->mpiWorld), precomputedFeaturesWithTwoInputs, 0);
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
-  paramIndexes.reserve(learningInfo.expectedFeaturesCount);
-  paramWeights.reserve(learningInfo.expectedFeaturesCount);
-  paramIds.reserve(learningInfo.expectedFeaturesCount);
 
 }
 
