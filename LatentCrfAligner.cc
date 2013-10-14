@@ -142,9 +142,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 
   // initialize the lambda parameters
   if(initialLambdaParamsFilename.size() == 0) {
-    // add all features in this data set to lambda.params
+    // add all features in this data set to lambda, and broadcast the final set
     InitLambda();
-    BroadcastLambdas(0);
   } else {
     assert(lambda->GetParamsCount() == 0);
     lambda->LoadParams(initialLambdaParamsFilename);

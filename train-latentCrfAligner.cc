@@ -366,8 +366,10 @@ int main(int argc, char **argv) {
 							wordPairFeaturesFilename);
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
-  // ibm model 1 initialization of theta params. also updates the lambda precomputed features by adding ibm model 1 probs
-  IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount);
+  if(initialThetaParamsFilename.size() == 0) {
+    // ibm model 1 initialization of theta params. 
+    IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount);
+  }
 
   latentCrfAligner.BroadcastTheta(0);
   latentCrfAligner.BroadcastLambdas(0);

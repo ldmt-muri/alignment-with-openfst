@@ -14,8 +14,9 @@ public:
   
   // update a single parameter's value (adds the parameter if necessary)
   inline void UpdateParam(const FeatureId &paramId, const double newValue) {
+    assert(sealed);
     if(!AddParam(paramId, newValue)) {
-      paramWeights[paramIndexes[paramId]] = newValue;
+      (*paramWeightsPtr)[paramIndexes[paramId]] = newValue;
     }
   }
 
@@ -23,10 +24,11 @@ public:
   // assumptions:
   // - there's a parameter with such index
   inline void UpdateParam(const unsigned paramIndex, const double newValue) {
-    if(paramWeights.size() <= paramIndex) {
+    assert(sealed);
+    if(paramWeightsPtr->size() <= paramIndex) {
       assert(false);
     }
-    paramWeights[paramIndex] = newValue;
+    (*paramWeightsPtr)[paramIndex] = newValue;
   }
 
   // checks whether a parameter exists
@@ -47,40 +49,39 @@ public:
 
   // returns the string identifier of the parameter given its int index in the weights array
   inline FeatureId GetParamId(const unsigned paramIndex) {
-    assert(paramIndex < paramWeights.size());
-    return paramIds[paramIndex];
+    assert(sealed);
+    assert(paramIndex < paramWeightsPtr->size());
+    return (*paramIdsPtr)[paramIndex];
   }
 
   // returns the current weight of this param (adds the parameter if necessary)
   inline double GetParamWeight(const FeatureId &paramId) {
+    assert(sealed);
     AddParam(paramId);
-    return paramWeights[paramIndexes[paramId]];
+    return (*paramWeightsPtr)[paramIndexes[paramId]];
   }
   
   // returns the current weight of this param (adds the parameter if necessary)
   inline double GetParamWeight(unsigned &paramIndex) {
-    assert(paramIndex < paramWeights.size());
-    return paramWeights[paramIndex];
+    assert(sealed);
+    assert(paramIndex < paramWeightsPtr->size());
+    return (*paramWeightsPtr)[paramIndex];
   }
   
   inline int GetParamsCount() {
-    if(paramWeights.size() != paramIndexes.size()) {
-      cerr << "paramWeights.size() = " << paramWeights.size() << endl;
+    assert(sealed);
+    if(paramWeightsPtr->size() != paramIndexes.size()) {
+      cerr << "paramWeightsPtr->size() = " << paramWeightsPtr->size() << endl;
       cerr << "paramIndexes.size() = " << paramIndexes.size() << endl;
     }
-    assert(paramWeights.size() == paramIndexes.size());
-    return paramWeights.size();
+    assert(paramWeightsPtr->size() == paramIndexes.size());
+    return paramWeightsPtr->size();
   }
 
   // returns a pointer to the array of parameter weights
    inline double* GetParamWeightsArray() { 
-     return paramWeights.data(); 
-   } 
-
-   // clear model parameters 
-   inline void Clear() { 
-     paramIndexes.clear(); 
-     paramWeights.clear(); 
+     assert(sealed);
+     return paramWeightsPtr->data(); 
    } 
 
 #endif

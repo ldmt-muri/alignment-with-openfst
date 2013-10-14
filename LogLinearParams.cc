@@ -83,7 +83,6 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
   return is;
 }
 
-
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
 				 double gaussianStdDev) :
   types(types), 
@@ -91,6 +90,99 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::precomputedFeaturesEncoder = &precomputedFeaturesEncoder;
+  sealed = false;
+  paramIdsPtr = 0;
+  paramWeightsPtr = 0;
+
+}
+
+bool LogLinearParams::IsSealed() const {
+  return sealed;
+}
+
+void LogLinearParams::ManageSharedMemory(bool create)
+{
+  using namespace boost::interprocess;
+  try{
+    // Shared memory front-end that is able to construct objects
+    // associated with a c-string. Erase previous shared memory with the name
+    // to be used and create the memory segment at the specified address and initialize resources
+    if(create) {
+      shared_memory_object::remove("paramIdsSegment");
+      shared_memory_object::remove("paramWeightsSegment");
+    }
+    // create or open the shared memory segments
+    int vectorOverheadInBytes = 10 * 1000;
+    int paramIdsSize = sizeof(FeatureId) * paramIdsTemp.size() + vectorOverheadInBytes;
+    int paramWeightsSize = sizeof(double) * paramWeightsTemp.size() + vectorOverheadInBytes;
+
+    // Initialize shared memory STL-compatible allocator
+    if(create) {
+      managed_shared_memory paramIdsSegment(create_only, "paramIdsSegment", paramIdsSize);
+      managed_shared_memory paramWeightsSegment(create_only, "paramWeightsSegment", paramWeightsSize);
+
+      const ShmemFeatureIdAllocator featureid_alloc_inst (paramIdsSegment.get_segment_manager());
+      const ShmemDoubleAllocator double_alloc_inst (paramWeightsSegment.get_segment_manager());
+      
+      // Construct a shared memory
+      paramIdsPtr = paramIdsSegment.construct<ShmemVectorOfFeatureId> ("paramIds") (featureid_alloc_inst);
+      cerr << "paramIdsPtr = " << paramIdsPtr << endl;
+      paramWeightsPtr = paramWeightsSegment.construct<ShmemVectorOfDouble> ("paramWeights") (double_alloc_inst);
+      cerr << "paramWeightsPtr = " << paramWeightsPtr << endl;
+    } else {
+      managed_shared_memory paramIdsSegment(open_only, "paramIdsSegment");
+      managed_shared_memory paramWeightsSegment(open_only, "paramWeightsSegment");
+      
+      //Find the vector using the c-string name
+      paramIdsPtr = paramIdsSegment.find<ShmemVectorOfFeatureId> ("paramIds").first;
+      cerr << "paramIdsPtr = " << paramIdsPtr << endl;
+      paramWeightsPtr = paramWeightsSegment.find<ShmemVectorOfDouble> ("paramWeights").first;
+      cerr << "paramWeightsPtr = " << paramWeightsPtr << endl;
+    }
+    // When done, destroy the vector from the segment
+    /*    if(destroy) {
+      paramIdsSegmentPtr->destroy<ShmemVectorOfFeatureId>("paramIds");
+      paramWeightsSegmentPtr->destroy<ShmemVectorOfDouble>("paramWeights");
+      boost::interprocess::shared_memory_object::remove("paramIdsSegment");
+      boost::interprocess::shared_memory_object::remove("paramWeightsSegment");
+      }*/
+  }
+  catch(...){
+    boost::interprocess::shared_memory_object::remove("paramIdsSegment");
+    boost::interprocess::shared_memory_object::remove("paramWeightsSegment");
+    throw;
+  }
+  
+}
+
+void LogLinearParams::Seal(bool createSharedMemory) {
+  assert(!sealed);
+  assert(paramIdsPtr == 0 && paramWeightsPtr == 0);
+  if(createSharedMemory) {
+    // this is done by the master
+    // create shared memory and map paramIds and paramWeights to it
+    ManageSharedMemory(true);
+     
+    // copy paramIdsTemp and paramWeightsTemp, and wipe off temporary parameters you had
+    assert(paramWeightsTemp.size() == paramIdsTemp.size());
+    for(int i = 0; i < paramWeightsTemp.size(); ++i) {
+      paramWeightsPtr->push_back(paramWeightsTemp[i]);
+      paramIdsPtr->push_back(paramIdsTemp[i]);
+    }
+    paramWeightsTemp.clear(); 
+    paramIdsTemp.clear(); 
+  } else {
+    // this is done by the slaves, not the master
+    // first, wipe off all the parameters you already have to save memory
+    paramIndexes.clear(); 
+    paramWeightsTemp.clear(); 
+    paramIdsTemp.clear(); 
+
+    // map paramIds and paramWeights to shared memory
+    ManageSharedMemory(false);
+  }
+  assert(paramIdsPtr != 0 && paramWeightsPtr != 0);
+  sealed = true;
 }
 
 // add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
@@ -205,24 +297,19 @@ bool LogLinearParams::AddParam(const FeatureId &paramId) {
 bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
   bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
-    if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
-      cerr << "rank #" << learningInfo->mpiWorld->rank() << ": paramId is new.\n";
-    }
     
-    // 
-    if(learningInfo->iterationsCount > 0) {
-      cerr << "ERRORRRRRRRRR " << learningInfo->mpiWorld->rank() << ": adding feature id " << paramId << " in iteration # " << learningInfo->iterationsCount << endl;
-      exit(1);
-    }
+    // new features are not allowed when the object is sealed
+    assert(!sealed);
 
-    // check class's integrity
-    assert(paramIndexes.size() == paramWeights.size());
-    assert(paramIndexes.size() == paramIds.size());
+    // check class's integrity -- the object is not sealed
+    assert(paramWeightsPtr == 0);
+    assert(paramIdsPtr == 0);
+    assert(paramIndexes.size() == paramIdsTemp.size());
+
     // do the work
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
-    paramWeights.push_back(paramWeight);
-    paramIds.push_back(paramId);
+    paramIdsTemp.push_back(paramId);
     returnValue = true;
   } else {
     returnValue = false;
@@ -231,11 +318,12 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
 }
 
 void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
+  assert(sealed);
   cerr << "active features are: " << endl;
   for(auto feat = feats.begin();
       feat != feats.end();
       ++feat) {
-    cerr << "  index=" << feat->first << ", id=" << paramIds[feat->first] << ", val=" << feat->second << endl;
+    cerr << "  index=" << feat->first << ", id=" << (*paramIdsPtr)[feat->first] << ", val=" << feat->second << endl;
   }
 }
 
@@ -759,8 +847,9 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
 */
 
 double LogLinearParams::Hash() {
+  assert(sealed);
   double hash = 0.0;
-  for(vector<double>::const_iterator paramIter = paramWeights.begin(); paramIter != paramWeights.end(); paramIter++) {
+  for(auto paramIter = paramWeightsPtr->begin(); paramIter != paramWeightsPtr->end(); paramIter++) {
     hash += *paramIter;
   }
   return hash;
@@ -912,6 +1001,8 @@ void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::PersistParams(const string &outputFilename, bool humanFriendly) {
 
+  assert(sealed);
+
   ofstream paramsFile(outputFilename.c_str());
   
   assert(paramsFile.good());
@@ -924,7 +1015,7 @@ void LogLinearParams::PersistParams(const string &outputFilename, bool humanFrie
     // archive and stream closed when destructors are called
   } else {
     for (auto paramsIter = paramIndexes.begin(); paramsIter != paramIndexes.end(); paramsIter++) {
-      paramsFile << paramsIter->first << " " << paramWeights[paramsIter->second] << endl;
+      paramsFile << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] << endl;
     }
   }
   paramsFile.close();
@@ -932,28 +1023,30 @@ void LogLinearParams::PersistParams(const string &outputFilename, bool humanFrie
 
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::LoadParams(const string &inputFilename) {
-  assert(paramIndexes.size() == paramWeights.size() && paramIndexes.size() == paramIds.size());
+  assert(!sealed);
+  assert(paramIndexes.size() == paramIdsTemp.size());
   ifstream paramsFile(inputFilename.c_str(), ios::in);
   boost::archive::text_iarchive oa(paramsFile);
   oa >> *this;
   int index = 0;
-  for(auto paramIdIter = paramIds.begin(); paramIdIter != paramIds.end(); ++paramIdIter, ++index) {
+  for(auto paramIdIter = paramIdsTemp.begin(); paramIdIter != paramIdsTemp.end(); ++paramIdIter, ++index) {
     paramIndexes[*paramIdIter] = index;
   }
-  cerr << "|paramIds|=" << paramIds.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeights|=" << paramWeights.size() << endl;
+  cerr << "|paramIdsTemp|=" << paramIdsTemp.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeightsTemp|=" << paramWeightsTemp.size() << endl;
   paramsFile.close();
-  assert(paramIndexes.size() == paramWeights.size() && paramIndexes.size() == paramIds.size());
+  assert(paramIndexes.size() == paramWeightsTemp.size() && paramIndexes.size() == paramIdsTemp.size());
 }
 
 void LogLinearParams::PrintFirstNParams(unsigned n) {
+  assert(sealed);
   for (auto paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
-    cerr << paramsIter->first << " " << paramWeights[paramsIter->second] << " at " << paramsIter->second << endl;
+    cerr << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] << " at " << paramsIter->second << endl;
   }
 }
 
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::PrintParams() {
-  assert(paramIndexes.size() == paramWeights.size());
+  assert(paramIndexes.size() == paramWeightsPtr->size());
   PrintFirstNParams(paramIndexes.size());
 }
 
@@ -966,6 +1059,7 @@ void LogLinearParams::PrintParams(unordered_map_featureId_double &tempParams) {
 
 // use gradient based methods to update the model parameter weights
 void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradient, const OptMethod& optMethod) {
+  assert(sealed);
   switch(optMethod.algorithm) {
   case OptAlgorithm::GRADIENT_DESCENT:
     for(auto gradientIter = gradient.begin(); gradientIter != gradient.end();
@@ -973,7 +1067,7 @@ void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradien
       // in case this parameter does not exist in paramWeights/paramIndexes
       AddParam(gradientIter->first);
       // update the parameter weight
-      paramWeights[ paramIndexes[gradientIter->first] ] -= optMethod.learningRate * gradientIter->second;
+      (*paramWeightsPtr)[ paramIndexes[gradientIter->first] ] -= optMethod.learningRate * gradientIter->second;
     }
     break;
   default:
@@ -984,12 +1078,13 @@ void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradien
 
 // override the member weights vector with this array
 void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
+  assert(sealed);
   cerr << "##################" << endl;
-  cerr << "pointer to internal weights: " << paramWeights.data() << ". pointer to external weights: " << array << endl;
-  assert(arrayLength == paramWeights.size());
-  assert(paramWeights.size() == paramIndexes.size());
+  cerr << "pointer to internal weights: " << paramWeightsPtr->data() << ". pointer to external weights: " << array << endl;
+  assert(arrayLength == paramWeightsPtr->size());
+  assert(paramWeightsPtr->size() == paramIndexes.size());
   for(int i = 0; i < arrayLength; i++) {
-    paramWeights[i] = array[i];
+    (*paramWeightsPtr)[i] = array[i];
   }
 }
 
@@ -1016,42 +1111,50 @@ void LogLinearParams::ConvertFeatureMapToFeatureArray(
 
 // 1/2 * sum of the squares 
 double LogLinearParams::ComputeL2Norm() { 
+  assert(sealed);
   double l2 = 0; 
-  for(int i = 0; i < paramWeights.size(); i++) { 
-    l2 += paramWeights[i] * paramWeights[i]; 
+  for(int i = 0; i < paramWeightsPtr->size(); i++) { 
+    l2 += (*paramWeightsPtr)[i] * (*paramWeightsPtr)[i]; 
   } 
   return l2/2; 
 } 
 
-// call boost::mpi::broadcast for the essential member variables of this object 
-void LogLinearParams::Broadcast(boost::mpi::communicator &world, unsigned root) { 
-  boost::mpi::broadcast< std::vector<FeatureId> >(world, paramIds, root); 
-  boost::mpi::broadcast< std::vector<double> >(world, paramWeights, root); 
-  boost::mpi::broadcast< unordered_map_featureId_int >(world, paramIndexes, root); 
-}   
-
 // checks whether the "otherParams" have the same parameters and values as this object 
 // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors 
 bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherParams) { 
+  if(IsSealed() != otherParams.IsSealed())
+    return false;
   if(paramIndexes.size() != otherParams.paramIndexes.size()) 
     return false; 
-  if(paramWeights.size() != otherParams.paramWeights.size()) 
+  if(paramWeightsPtr->size() != otherParams.paramWeightsPtr->size()) 
     return false; 
-  if(paramIds.size() != otherParams.paramIds.size())  
+  if(paramWeightsTemp.size() != otherParams.paramWeightsTemp.size()) 
+    return false; 
+  if(paramIdsPtr->size() != otherParams.paramIdsPtr->size())  
+    return false; 
+  if(paramIdsTemp.size() != otherParams.paramIdsTemp.size())  
     return false; 
   for(auto paramIndexesIter = paramIndexes.begin();  
       paramIndexesIter != paramIndexes.end(); 
       ++paramIndexesIter) { 
-    unordered_map_featureId_int::const_iterator otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
+    auto otherIter = otherParams.paramIndexes.find(paramIndexesIter->first); 
     if(paramIndexesIter->second != otherIter->second)  
       return false; 
   } 
-  for(unsigned i = 0; i < paramWeights.size(); i++){ 
-    if(paramWeights[i] != otherParams.paramWeights[i]) 
+  for(unsigned i = 0; i < paramWeightsPtr->size(); i++){ 
+    if((*paramWeightsPtr)[i] != (*otherParams.paramWeightsPtr)[i]) 
       return false; 
   } 
-  for(unsigned i = 0; i < paramIds.size(); i++) { 
-    if(paramIds[i] != otherParams.paramIds[i])  
+  for(unsigned i = 0; i < paramWeightsTemp.size(); i++){ 
+    if(paramWeightsTemp[i] != otherParams.paramWeightsTemp[i]) 
+      return false; 
+  } 
+  for(unsigned i = 0; i < paramIdsPtr->size(); i++) { 
+    if((*paramIdsPtr)[i] != (*otherParams.paramIdsPtr)[i])  
+      return false; 
+  } 
+  for(unsigned i = 0; i < paramIdsTemp.size(); i++) { 
+    if(paramIdsTemp[i] != otherParams.paramIdsTemp[i])  
       return false; 
   } 
   return true; 
@@ -1059,17 +1162,21 @@ bool LogLinearParams::LogLinearParamsIsIdentical(const LogLinearParams &otherPar
 
 // side effect: adds zero weights for parameter IDs present in values but not present in paramIndexes and paramWeights
 double LogLinearParams::DotProduct(const unordered_map_featureId_double& values) {
+  if(!sealed) {
+    return 0.0;
+  }
+  assert(sealed);
   double dotProduct = 0;
   // for each active feature
   for(auto valuesIter = values.begin(); valuesIter != values.end(); valuesIter++) {
     // make sure there's a corresponding feature in paramIndexes and paramWeights
     bool newParam = AddParam(valuesIter->first);
     // then update the dot product
-    dotProduct += valuesIter->second * paramWeights[paramIndexes[valuesIter->first]];
+    dotProduct += valuesIter->second * (*paramWeightsPtr)[paramIndexes[valuesIter->first]];
     if(std::isnan(dotProduct) || std::isinf(dotProduct)){
       cerr << "problematic param: " << valuesIter->first << " with index " << paramIndexes[valuesIter->first] << endl;
       cerr << "value = " << valuesIter->second << endl;
-      cerr << "weight = " << paramWeights[paramIndexes[valuesIter->first]] << endl;
+      cerr << "weight = " << (*paramWeightsPtr)[paramIndexes[valuesIter->first]] << endl;
       if(newParam) { cerr << "newParam." << endl; } else { cerr << "old param." << endl;}
       assert(false);
     }
@@ -1077,9 +1184,13 @@ double LogLinearParams::DotProduct(const unordered_map_featureId_double& values)
   return dotProduct;
 }
 
-double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights) {
+double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const ShmemVectorOfDouble& weights) {
+  if(!sealed) {
+    return 0.0;
+  }
+  assert(sealed);
   double dotProduct = 0;
-  for(FastSparseVector<double>::const_iterator valuesIter = values.begin(); valuesIter != values.end(); ++valuesIter) {
+  for(auto valuesIter = values.begin(); valuesIter != values.end(); ++valuesIter) {
     assert(ParamExists(valuesIter->first));
     dotProduct += valuesIter->second * weights[valuesIter->first];
   }
@@ -1087,13 +1198,17 @@ double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const
 }
 
 double LogLinearParams::DotProduct(const FastSparseVector<double> &values) {
-  return DotProduct(values, paramWeights);
+  return DotProduct(values, *paramWeightsPtr);
 }
 
 // compute dot product of two vectors
 // assumptions:
 // -both vectors are of the same size
-double LogLinearParams::DotProduct(const std::vector<double>& values, const std::vector<double>& weights) {
+double LogLinearParams::DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights) {
+  if(!sealed) {
+    return 0.0;
+  }
+  assert(sealed);
   assert(values.size() == weights.size());
   double dotProduct = 0;
   for(int i = 0; i < values.size(); i++) {
@@ -1106,6 +1221,6 @@ double LogLinearParams::DotProduct(const std::vector<double>& values, const std:
 // assumptions:
 // - values and paramWeights are both of the same size
 double LogLinearParams::DotProduct(const std::vector<double>& values) {
-  return DotProduct(values, paramWeights);
+  return DotProduct(values, *paramWeightsPtr);
 }
   

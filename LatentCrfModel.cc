@@ -1901,9 +1901,13 @@ void LatentCrfModel::InitLambda() {
     cerr << "done. |lambda| = " << allParamIds.size() << endl; 
   }
 
-  lambda->paramIndexes.reserve(allParamIds.size());
-  lambda->paramWeights.reserve(allParamIds.size());
-  lambda->paramIds.reserve(allParamIds.size());
+  // now, only master knows the size of lambda. inform the rest!
+  int lambdaSize = allParamIds.size();
+  mpi::broadcast<int>(*learningInfo.mpiWorld, lambdaSize, 0);
+
+  lambda->paramIndexes.reserve(lambdaSize);
+  lambda->paramWeights.reserve(lambdaSize);
+  lambda->paramIds.reserve(lambdaSize);
 
   // master updates its lambda object adding all those features
   if(learningInfo.mpiWorld->rank() == 0) {

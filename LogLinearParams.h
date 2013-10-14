@@ -8,6 +8,9 @@
 #include <math.h>
 #include <cmath>
 
+#include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/interprocess/containers/vector.hpp>
+#include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/serialization/map.hpp>
@@ -183,6 +186,15 @@ public:
 using unordered_map_featureId_double = boost::unordered_map<FeatureId, double, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
 using unordered_map_featureId_int = boost::unordered_map<FeatureId, int, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
 
+// Alias an STL compatible allocator of ints that allocates ints from the managed
+// shared memory segment.  This allocator will allow to place containers
+// in managed shared memory segments
+typedef boost::interprocess::allocator<double, boost::interprocess::managed_shared_memory::segment_manager> ShmemDoubleAllocator;
+typedef boost::interprocess::allocator<FeatureId, boost::interprocess::managed_shared_memory::segment_manager> ShmemFeatureIdAllocator;
+
+// Alias a vector that uses the previous STL-like allocator
+typedef vector<double, ShmemDoubleAllocator> ShmemVectorOfDouble;
+typedef vector<FeatureId, ShmemFeatureIdAllocator> ShmemVectorOfFeatureId;
 
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj);
 std::istream& operator>>(std::istream& is, FeatureId& obj);
@@ -197,11 +209,42 @@ class LogLinearParams {
 
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
+
+  template<class Archive>
+    void save(Archive & os, const unsigned int version) const
+    {
+      assert(IsSealed());
+      assert(paramIdsPtr->size() == paramWeightsPtr->size());
+      os << paramIdsPtr->size();
+      for(int i = 0; i < paramIdsPtr->size(); i++) {
+	os << (*paramIdsPtr)[i];
+	os << (*paramWeightsPtr)[i];
+      }
+    }
   
-  template<class Archive> void serialize(Archive & ar, const unsigned int version) {
-    ar & paramIds;
-    ar & paramWeights;
-  }
+  template<class Archive>
+    void load(Archive & is, const unsigned int version)
+    {
+      int count;
+      is >> count;
+      for(int i = 0; i < count; ++i) {
+	FeatureId featureId;
+	is >> featureId;
+	paramIdsTemp.push_back(featureId);
+	double weight;
+	is >> weight;
+	paramWeightsTemp.push_back(weight);
+      }
+    }
+
+  BOOST_SERIALIZATION_SPLIT_MEMBER()  
+
+  // this method seals the set of parameters being used, not their weights
+  void Seal(bool);
+  bool IsSealed() const;
+
+  // create shared memory object to hold the feature ids and weights
+  void ManageSharedMemory(bool);
 
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
@@ -237,11 +280,11 @@ class LogLinearParams {
 
   double DotProduct(const std::vector<double>& values);
 
-  double DotProduct(const std::vector<double>& values, const std::vector<double>& weights);
+  double DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights);
 
   double DotProduct(const FastSparseVector<double> &values);
 
-  double DotProduct(const FastSparseVector<double> &values, const std::vector<double>& weights);
+  double DotProduct(const FastSparseVector<double> &values, const ShmemVectorOfDouble& weights);
  
   // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const unordered_map_featureId_double &gradient, const OptMethod &optMethod);
@@ -276,9 +319,6 @@ class LogLinearParams {
   // loads the parameters
   void LoadParams(const std::string &inputFilename);
 
-  // call boost::mpi::broadcast for the essential member variables of this object 
-  void Broadcast(boost::mpi::communicator &world, unsigned root);
-  
   // checks whether the "otherParams" have the same parameters and values as this object 
   // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors 
   bool IsIdentical(const LogLinearParams &otherParams);
@@ -288,8 +328,10 @@ class LogLinearParams {
  public:
   // the actual parameters 
   unordered_map_featureId_int paramIndexes;
-  std::vector< double > paramWeights; 
-  std::vector< FeatureId > paramIds; 
+  ShmemVectorOfDouble *paramWeightsPtr; 
+  std::vector< double > paramWeightsTemp; 
+  ShmemVectorOfFeatureId *paramIdsPtr; 
+  std::vector< FeatureId > paramIdsTemp; 
   
   // maps a word id into a string
   VocabEncoder &types;
@@ -306,6 +348,9 @@ class LogLinearParams {
   const set< int > *englishClosedClassTypes;
   
   boost::unordered_map< int, boost::unordered_map< int, unordered_map_featureId_double > > precomputedFeaturesWithTwoInputs;
+
+ private:
+  bool sealed;
   
 };
 
