@@ -372,7 +372,8 @@ int main(int argc, char **argv) {
   }
 
   latentCrfAligner.BroadcastTheta(0);
-  latentCrfAligner.BroadcastLambdas(0);
+  
+  assert(model->lambda->IsSealed());
 
   // unsupervised training of the model
   model->Train();

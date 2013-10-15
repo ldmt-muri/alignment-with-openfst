@@ -171,9 +171,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			     boost::unordered_map<int, double> &mleMarginalsGivenOneLabel,
 			     boost::unordered_map<std::pair<int, int>, double> &mleMarginalsGivenTwoLabels);
   
-  // broadcasts the essential member variables in LogLinearParam
-  void BroadcastLambdas(unsigned rankId);
-    
   void BroadcastTheta(unsigned rankId);
 
   // SETUP
