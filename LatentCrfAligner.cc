@@ -132,13 +132,9 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     assert(nLogThetaGivenOneLabel.params.size() > 0);
   }
   
-  // populate the map of precomputed feature ids and feature values
-  //for(int rank = 0; rank < learningInfo.mpiWorld->size(); ++rank) {
-  //  mpi::broadcast<int>(*learningInfo.mpiWorld, rank, rank);
-  //  if(rank == learningInfo.mpiWorld->rank()) {
-      lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
-      //  }
-      //}
+  if(learningInfo.mpiWorld->rank() == 0) {
+    lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+  }
 
   // load saved parameters
   if(initialLambdaParamsFilename.size() > 0) {

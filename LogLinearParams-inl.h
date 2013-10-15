@@ -2,6 +2,7 @@
 #define _LOG_LINEAR_PARAMS_INL_H_
 
 public:
+
   // given description of an arc in the alignment transducer, compute the local arc probability
   inline double ComputeLogProb(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
 					 int srcSentLength, int tgtSentLength) {

@@ -7,9 +7,12 @@
 #include <assert.h>
 #include <math.h>
 #include <cmath>
+#include <functional>
+#include <utility>
 
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/containers/vector.hpp>
+#include <boost/interprocess/containers/map.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
@@ -30,6 +33,7 @@
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
 #include "Samplers.h"
+#include "tuple.h"
 
 struct FeatureId {
 public:
@@ -84,6 +88,35 @@ public:
         assert(false);
     }
   }
+
+  bool operator<(const FeatureId& rhs) const {
+    if(type < rhs.type) return true;
+    switch(type) {
+      case FeatureTemplate::LABEL_BIGRAM:
+      case FeatureTemplate::SRC_BIGRAM:
+        return bigram.current < rhs.bigram.current || bigram.previous < rhs.bigram.previous;
+        break;
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+        return alignmentJump < rhs.alignmentJump;
+        break;
+      case SRC0_TGT0:
+        return wordPair.srcWord < rhs.wordPair.srcWord || wordPair.tgtWord < rhs.wordPair.tgtWord;
+        break;
+      case PRECOMPUTED:
+        return precomputed < rhs.precomputed;
+        break;
+      case DIAGONAL_DEVIATION:
+      case SYNC_START:
+      case SYNC_END:
+        return false;
+        break;
+      default:
+        assert(false);
+    }
+  }
+  
 
   bool operator!=(const FeatureId& rhs) const {
     if(type != rhs.type) return true;
@@ -191,6 +224,15 @@ using unordered_map_featureId_int = boost::unordered_map<FeatureId, int, Feature
 // in managed shared memory segments
 typedef boost::interprocess::allocator<double, boost::interprocess::managed_shared_memory::segment_manager> ShmemDoubleAllocator;
 typedef boost::interprocess::allocator<FeatureId, boost::interprocess::managed_shared_memory::segment_manager> ShmemFeatureIdAllocator;
+typedef FeatureId InnerKeyType;
+typedef double InnerMappedType;
+typedef std::pair<const InnerKeyType, InnerMappedType> InnerValueType;
+typedef boost::interprocess::allocator<InnerValueType, boost::interprocess::managed_shared_memory::segment_manager> ShmemInnerValueAllocator;
+typedef std::tuple<int, int> OuterKeyType;
+typedef boost::interprocess::map<InnerKeyType, InnerMappedType, std::less<InnerKeyType>, ShmemInnerValueAllocator> OuterMappedType;
+typedef std::pair<const OuterKeyType, OuterMappedType*> OuterValueType;
+typedef boost::interprocess::allocator<OuterValueType, boost::interprocess::managed_shared_memory::segment_manager> ShmemOuterValueAllocator;
+typedef std::map<OuterKeyType, OuterMappedType*, std::less<OuterKeyType>, ShmemOuterValueAllocator> ShmemNestedMap;
 
 // Alias a vector that uses the previous STL-like allocator
 typedef vector<double, ShmemDoubleAllocator> ShmemVectorOfDouble;
@@ -209,6 +251,14 @@ class LogLinearParams {
 
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
+  
+  ~LogLinearParams();
+
+  OuterMappedType* MapWordPairFeaturesToSharedMemory(bool create, string& objectNickname);
+  
+  void* MapToSharedMemory(bool create, string name);
+
+  void SetSharedMemorySegment(bool create);
 
   template<class Archive>
     void save(Archive & os, const unsigned int version) const
@@ -241,7 +291,7 @@ class LogLinearParams {
   BOOST_SERIALIZATION_SPLIT_MEMBER()  
     
   // this method seals the set of parameters being used, not their weights
-  void Seal(bool);
+  void Seal();
   bool IsSealed() const;
 
   // create shared memory object to hold the feature ids and weights
@@ -338,7 +388,7 @@ class LogLinearParams {
   VocabEncoder &types;
 
   // maps precomputed feature strings into ids
-  VocabEncoder precomputedFeaturesEncoder;
+  //VocabEncoder precomputedFeaturesEncoder;
 
   const int COUNT_OF_FEATURE_TYPES;
   
@@ -348,7 +398,9 @@ class LogLinearParams {
 
   const set< int > *englishClosedClassTypes;
   
-  boost::unordered_map< int, boost::unordered_map< int, unordered_map_featureId_double > > precomputedFeaturesWithTwoInputs;
+  //ShmemNestedMap *precomputedFeaturesWithTwoInputsPtr;
+
+  boost::interprocess::managed_shared_memory *sharedMemorySegment;
 
  private:
   bool sealed;

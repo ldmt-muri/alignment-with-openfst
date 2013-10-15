@@ -1879,15 +1879,11 @@ void LatentCrfModel::InitLambda() {
     assert(lambda->paramIdsTemp.size() > 0);
     assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
     assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
-    lambda->Seal(true);
-    cerr << "timestamp 2" << endl;
+    lambda->Seal();
     assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
-    cerr << "timestamp 3" << endl;
     assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0);
-    cerr << "timestamp 4" << endl;                                      
     assert(lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() && \
            lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
-    cerr << "timestamp 5" << endl;
   }
 
   // paramIndexes is out of sync. master must send it
@@ -1898,7 +1894,7 @@ void LatentCrfModel::InitLambda() {
     assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
     assert(lambda->paramIdsTemp.size() > 0);
     assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
-    lambda->Seal(false);
+    lambda->Seal();
     assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
     assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0 \
            && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() \
