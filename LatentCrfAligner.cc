@@ -140,15 +140,14 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
       //  }
       //}
 
-  // initialize the lambda parameters
-  if(initialLambdaParamsFilename.size() == 0) {
-    // add all features in this data set to lambda, and broadcast the final set
-    InitLambda();
-  } else {
-    assert(lambda->GetParamsCount() == 0);
+  // load saved parameters
+  if(initialLambdaParamsFilename.size() > 0) {
     lambda->LoadParams(initialLambdaParamsFilename);
-    assert(lambda->GetParamsCount() > 0);
-  }
+  } 
+
+  // add all features in this data set to lambda, and broadcast the final set
+  InitLambda();
+
 }
 
 void LatentCrfAligner::InitTheta() {

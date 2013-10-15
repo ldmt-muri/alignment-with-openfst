@@ -29,8 +29,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
 							    UnsupervisedSequenceTaggingModel(textFilename) {
   
-  countOfConstrainedLambdaParameters = 0;
-
   AddEnglishClosedVocab();
   
   if(learningInfo.mpiWorld->rank() == 0) {
@@ -49,10 +47,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   this->learningInfo = learningInfo;
   this->lambda->SetLearningInfo(learningInfo);
   
-  // hand-crafted weights for constrained features
-  REWARD_FOR_CONSTRAINED_FEATURES = 10.0;
-  PENALTY_FOR_CONSTRAINED_FEATURES = -10.0;
-
   // by default, we are operating in the training (not testing) mode
   testingMode = false;
 
@@ -769,7 +763,7 @@ float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   // singleton
   LatentCrfModel &model = LatentCrfModel::GetInstance();
   // unconstrained lambda parameters count
-  unsigned lambdasCount = model.lambda->GetParamsCount() - model.countOfConstrainedLambdaParameters;
+  unsigned lambdasCount = model.lambda->GetParamsCount();
   // which sentences to work on?
   static int fromSentId = 0;
   if(fromSentId >= model.examplesCount) {
@@ -1027,9 +1021,6 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
     }
   }
   
-  // fill in the gradient array with respective values
-  assert(model.countOfConstrainedLambdaParameters == 0); // not implemented
-
   return reducedNll;
 }
 
@@ -1517,9 +1508,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
           // don't optimize all parameters. only optimize unconstrained ones
           double* lambdasArray;
           int lambdasArrayLength;
-          lambdasArray = lambda->GetParamWeightsArray() + countOfConstrainedLambdaParameters;
-          lambdasArrayLength = lambda->GetParamsCount() - countOfConstrainedLambdaParameters;
-          assert(countOfConstrainedLambdaParameters == 0); // not fully supported anymore. will require some changes.
+          lambdasArray = lambda->GetParamWeightsArray();
+          lambdasArrayLength = lambda->GetParamsCount();
           
           // only the master executes lbfgs
           int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNll, 
@@ -1572,8 +1562,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // don't optimize all parameters. only optimize unconstrained ones
         double* lambdasArray;
         int lambdasArrayLength;
-        lambdasArray = lambda->GetParamWeightsArray() + countOfConstrainedLambdaParameters;
-        lambdasArrayLength = lambda->GetParamsCount() - countOfConstrainedLambdaParameters;
+        lambdasArray = lambda->GetParamWeightsArray();
+        lambdasArrayLength = lambda->GetParamsCount();
         
         simulatedAnnealer.set_up(EvaluateNll, lambdasArrayLength);
         // initialize the parameters array
@@ -1850,13 +1840,6 @@ void LatentCrfModel::InitLambda() {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
   }
 
-  // only the master adds constrained features with hand-crafted weights depending on the feature type
-  if(learningInfo.mpiWorld->rank() == 0) {
-    // but first, make sure no features are fired yet. we need the constrained features to be 
-    assert(lambda->GetParamsCount() == 0);
-    AddConstrainedFeatures();
-  }
-
   // then, each process discovers the features that may show up in their sentences.
   for(int sentId = 0; sentId < examplesCount; sentId++) {
     
@@ -1897,10 +1880,14 @@ void LatentCrfModel::InitLambda() {
     assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
     assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
     lambda->Seal(true);
+    cerr << "timestamp 2" << endl;
     assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
-    assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0 \
-           && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() && \
-           lambda->paramIdsPtr->size() == lambda->paramIndexes.size());    
+    cerr << "timestamp 3" << endl;
+    assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0);
+    cerr << "timestamp 4" << endl;                                      
+    assert(lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() && \
+           lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
+    cerr << "timestamp 5" << endl;
   }
 
   // paramIndexes is out of sync. master must send it
@@ -1910,9 +1897,8 @@ void LatentCrfModel::InitLambda() {
   if(learningInfo.mpiWorld->rank() != 0) {
     assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
     assert(lambda->paramIdsTemp.size() > 0);
-    assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
     assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
-    lambda->Seal(true);
+    lambda->Seal(false);
     assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);
     assert(lambda->paramIdsPtr != 0 && lambda->paramWeightsPtr != 0 \
            && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() \

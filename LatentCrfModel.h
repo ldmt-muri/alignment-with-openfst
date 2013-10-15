@@ -194,9 +194,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   virtual void InitTheta() = 0;
 
-  // add constrained features with hand-crafted weights
-  virtual void AddConstrainedFeatures() = 0;
-
   // SUBSENT LEVEL
   ////////////////
 
@@ -323,8 +320,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
  protected:
   static LatentCrfModel *instance;
   unordered_set<int> zDomain, yDomain;
-  unsigned countOfConstrainedLambdaParameters;
-  double REWARD_FOR_CONSTRAINED_FEATURES, PENALTY_FOR_CONSTRAINED_FEATURES;
   GaussianSampler gaussianSampler;
   SimAnneal simulatedAnnealer;
   // during training time, and by default, this should be set to false. 

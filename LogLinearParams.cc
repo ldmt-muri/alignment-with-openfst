@@ -112,33 +112,41 @@ void LogLinearParams::ManageSharedMemory(bool create)
       shared_memory_object::remove("paramWeightsSegment");
     }
     // create or open the shared memory segments
-    int vectorOverheadInBytes = 10 * 1000;
+    int vectorOverheadInBytes = 1000;
+    vectorOverheadInBytes *= 1000;
+    vectorOverheadInBytes *= 1000;
     int paramIdsSize = sizeof(FeatureId) * paramIdsTemp.size() + vectorOverheadInBytes;
     int paramWeightsSize = sizeof(double) * paramWeightsTemp.size() + vectorOverheadInBytes;
 
     // Initialize shared memory STL-compatible allocator
     if(create) {
-      managed_shared_memory paramIdsSegment(create_only, "paramIdsSegment", paramIdsSize);
-      managed_shared_memory paramWeightsSegment(create_only, "paramWeightsSegment", paramWeightsSize);
-
-      const ShmemFeatureIdAllocator featureid_alloc_inst (paramIdsSegment.get_segment_manager());
-      const ShmemDoubleAllocator double_alloc_inst (paramWeightsSegment.get_segment_manager());
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": requesting " << paramIdsSize << " bytes for shared memory segment paramIds" << endl; 
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": requesting " << paramWeightsSize << " bytes for shared memory segment paramWeights" << endl; 
+      managed_shared_memory *paramIdsSegment = new managed_shared_memory(open_or_create, "paramIdsSegment", paramIdsSize);
+      managed_shared_memory *paramWeightsSegment = new managed_shared_memory(open_or_create, "paramWeightsSegment", paramWeightsSize);
+      cerr << "paramWeightsSegment.get_size() = " << paramWeightsSegment->get_size() << endl;
+      assert(paramWeightsSegment->get_size() == paramWeightsSize);
+      const ShmemFeatureIdAllocator featureid_alloc_inst (paramIdsSegment->get_segment_manager());
+      const ShmemDoubleAllocator double_alloc_inst (paramWeightsSegment->get_segment_manager());
       
       // Construct a shared memory
-      paramIdsPtr = paramIdsSegment.construct<ShmemVectorOfFeatureId> ("paramIds") (featureid_alloc_inst);
-      cerr << "paramIdsPtr = " << paramIdsPtr << endl;
-      paramWeightsPtr = paramWeightsSegment.construct<ShmemVectorOfDouble> ("paramWeights") (double_alloc_inst);
-      cerr << "paramWeightsPtr = " << paramWeightsPtr << endl;
+      paramIdsPtr = paramIdsSegment->construct<ShmemVectorOfFeatureId> ("paramIds") (featureid_alloc_inst);
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": paramIdsPtr = " << paramIdsPtr << endl;
+      paramWeightsPtr = paramWeightsSegment->construct<ShmemVectorOfDouble> ("paramWeights") (double_alloc_inst);
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": paramWeightsPtr = " << paramWeightsPtr << endl;
+
     } else {
-      managed_shared_memory paramIdsSegment(open_only, "paramIdsSegment");
-      managed_shared_memory paramWeightsSegment(open_only, "paramWeightsSegment");
+
+      managed_shared_memory *paramIdsSegment = new managed_shared_memory(open_only, "paramIdsSegment");
+      managed_shared_memory *paramWeightsSegment = new managed_shared_memory(open_only, "paramWeightsSegment");
       
       //Find the vector using the c-string name
-      paramIdsPtr = paramIdsSegment.find<ShmemVectorOfFeatureId> ("paramIds").first;
-      cerr << "paramIdsPtr = " << paramIdsPtr << endl;
-      paramWeightsPtr = paramWeightsSegment.find<ShmemVectorOfDouble> ("paramWeights").first;
-      cerr << "paramWeightsPtr = " << paramWeightsPtr << endl;
+      paramIdsPtr = paramIdsSegment->find<ShmemVectorOfFeatureId> ("paramIds").first;
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": paramIdsPtr = " << paramIdsPtr << endl;
+      paramWeightsPtr = paramWeightsSegment->find<ShmemVectorOfDouble> ("paramWeights").first;
+      cerr << "rank " << learningInfo->mpiWorld->rank() << ": paramWeightsPtr = " << paramWeightsPtr << endl;
     }
+    
     // When done, destroy the vector from the segment
     /*    if(destroy) {
       paramIdsSegmentPtr->destroy<ShmemVectorOfFeatureId>("paramIds");
@@ -146,13 +154,13 @@ void LogLinearParams::ManageSharedMemory(bool create)
       boost::interprocess::shared_memory_object::remove("paramIdsSegment");
       boost::interprocess::shared_memory_object::remove("paramWeightsSegment");
       }*/
-  }
-  catch(...){
-    boost::interprocess::shared_memory_object::remove("paramIdsSegment");
-    boost::interprocess::shared_memory_object::remove("paramWeightsSegment");
+
+  } catch(...) {
+    shared_memory_object::remove("paramIdsSegment");
+    shared_memory_object::remove("paramWeightsSegment");
     throw;
   }
-  
+  cerr << "timestamp 1" <<endl;
 }
 
 void LogLinearParams::Seal(bool createSharedMemory) {
@@ -174,7 +182,6 @@ void LogLinearParams::Seal(bool createSharedMemory) {
   } else {
     // this is done by the slaves, not the master
     // first, wipe off all the parameters you already have to save memory
-    paramIndexes.clear(); 
     paramWeightsTemp.clear(); 
     paramIdsTemp.clear(); 
 
@@ -203,16 +210,17 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     cerr << "done." << endl;
     ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
     string line;
+    int featsCounter = 0;
     while( getline(wordPairFeaturesFile, line) ) {
       if(line.size() == 0) {
-	continue;
+        continue;
       }
       std::vector<string> splits;
       StringUtils::SplitString(line, ' ', splits);
       // check format
       if(splits.size() < 5) {
-	assert(false);
-	exit(1);
+        assert(false);
+        exit(1);
       }
       // splitsIter
       vector<string>::iterator splitsIter = splits.begin();
@@ -230,26 +238,32 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       splitsIter++;
       // the remaining elements are precomputed features for (input1, input2)
       while(splitsIter != splits.end()) {
-	// read feature id
-	std::vector<string> featureIdAndValue;
-	StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
-	assert(featureIdAndValue.size() == 2);
-	FeatureId featureId;
-	featureId.type = FeatureTemplate::PRECOMPUTED;
-	// TODO: inistialize the vocab encoder's dictionary with a large size 
-	featureId.precomputed = precomputedFeaturesEncoder.Encode(featureIdAndValue[0]);
-	
-	// read feature value
-	double featureValue;
-	stringstream temp;
-	temp << featureIdAndValue[1];
-	temp >> featureValue;
-	
-	// store it for quick retrieval later on
+        // read feature id
+        std::vector<string> featureIdAndValue;
+        StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+        assert(featureIdAndValue.size() == 2);
+        FeatureId featureId;
+        featureId.type = FeatureTemplate::PRECOMPUTED;
+        // TODO: inistialize the vocab encoder's dictionary with a large size 
+        featureId.precomputed = precomputedFeaturesEncoder.Encode(featureIdAndValue[0]);
+        
+        // read feature value
+        double featureValue;
+        stringstream temp;
+        temp << featureIdAndValue[1];
+        temp >> featureValue;
+        
+        // store it for quick retrieval later on
         //if(precomputedFeaturesWithTwoInputs.find(input1) == precomputedFeaturesWithTwoInputs.end()) {
-	//  precomputedFeaturesWithTwoInputs[input1].reserve(1000);
-	//}
-	precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+        //  precomputedFeaturesWithTwoInputs[input1].reserve(1000);
+        //}
+        precomputedFeaturesWithTwoInputs[input1][input2][featureId] = featureValue;
+        if(++featsCounter % 10000 == 0) {
+          cerr << ".";
+        }
+        if(++featsCounter % 1000000 == 0) {
+          cerr << "featsCounter = " << featsCounter << endl;
+        }
       }
     }
     wordPairFeaturesFile.close();
@@ -310,6 +324,7 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramIdsTemp.push_back(paramId);
+    paramWeightsTemp.push_back(paramWeight);
     returnValue = true;
   } else {
     returnValue = false;
@@ -1024,19 +1039,23 @@ void LogLinearParams::PersistParams(const string &outputFilename, bool humanFrie
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::LoadParams(const string &inputFilename) {
   assert(!sealed);
-  assert(paramIndexes.size() == paramIdsTemp.size());
-  ifstream paramsFile(inputFilename.c_str(), ios::in);
-  boost::archive::text_iarchive oa(paramsFile);
-  oa >> *this;
-  int index = 0;
-  for(auto paramIdIter = paramIdsTemp.begin(); paramIdIter != paramIdsTemp.end(); ++paramIdIter, ++index) {
-    paramIndexes[*paramIdIter] = index;
+  
+  // master is in charge of laoding params
+  if(learningInfo->mpiWorld->rank() == 0){ 
+    assert(paramIndexes.size() == paramIdsTemp.size());
+    ifstream paramsFile(inputFilename.c_str(), ios::in);
+    boost::archive::text_iarchive oa(paramsFile);
+    oa >> *this;
+    int index = 0;
+    for(auto paramIdIter = paramIdsTemp.begin(); paramIdIter != paramIdsTemp.end(); ++paramIdIter, ++index) {
+      paramIndexes[*paramIdIter] = index;
+    }
+    cerr << "|paramIdsTemp|=" << paramIdsTemp.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeightsTemp|=" << paramWeightsTemp.size() << endl;
+    paramsFile.close();
+    assert(paramIndexes.size() == paramWeightsTemp.size() && paramIndexes.size() == paramIdsTemp.size());
   }
-  cerr << "|paramIdsTemp|=" << paramIdsTemp.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeightsTemp|=" << paramWeightsTemp.size() << endl;
-  paramsFile.close();
-  assert(paramIndexes.size() == paramWeightsTemp.size() && paramIndexes.size() == paramIdsTemp.size());
+  
 }
-
 void LogLinearParams::PrintFirstNParams(unsigned n) {
   assert(sealed);
   for (auto paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {

@@ -69,17 +69,18 @@ public:
   }
   
   inline int GetParamsCount() {
-    assert(sealed);
-    if(paramWeightsPtr->size() != paramIndexes.size()) {
-      cerr << "paramWeightsPtr->size() = " << paramWeightsPtr->size() << endl;
-      cerr << "paramIndexes.size() = " << paramIndexes.size() << endl;
+    if(sealed) {
+      assert(paramWeightsPtr->size() == paramIdsPtr->size());
+      assert(paramWeightsPtr->size() == paramIndexes.size());
+    } else {
+      assert(paramWeightsTemp.size() == paramIdsTemp.size());
+      assert(paramWeightsTemp.size() == paramIndexes.size());
     }
-    assert(paramWeightsPtr->size() == paramIndexes.size());
-    return paramWeightsPtr->size();
+    return paramIndexes.size();
   }
 
   // returns a pointer to the array of parameter weights
-   inline double* GetParamWeightsArray() { 
+  inline double* GetParamWeightsArray() { 
      assert(sealed);
      return paramWeightsPtr->data(); 
    } 
