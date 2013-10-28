@@ -53,8 +53,7 @@ public:
     assert(type == FeatureTemplate::PRECOMPUTED);
     precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
   }
-  
-  
+    
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
     ar & type;
@@ -213,6 +212,7 @@ class LogLinearParams {
   template<class Archive>
     void save(Archive & os, const unsigned int version) const
     {
+      cerr << "inside LogLinearParams::save()" << endl;
       assert(IsSealed());
       assert(paramIdsPtr->size() == paramWeightsPtr->size());
       int count = paramIdsPtr->size();
@@ -226,9 +226,10 @@ class LogLinearParams {
   template<class Archive>
     void load(Archive & is, const unsigned int version)
     {
+      cerr << "inside LogLinearParams::load()" << endl;
       int count;
       is >> count;
-      for(int i = 0; i < 100; ++i) {
+      for(int i = 0; i < count; ++i) {
         FeatureId featureId;
         is >> featureId;
         paramIdsTemp.push_back(featureId);
@@ -340,8 +341,6 @@ class LogLinearParams {
   // maps precomputed feature strings into ids
   VocabEncoder precomputedFeaturesEncoder;
 
-  const int COUNT_OF_FEATURE_TYPES;
-  
   const LearningInfo *learningInfo;
 
   const GaussianSampler *gaussianSampler;

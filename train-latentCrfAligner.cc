@@ -107,8 +107,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
-    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(500), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
-    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.000001), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.001), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
 //    (MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
@@ -269,6 +269,11 @@ void endOfKIterationsCallbackFunction() {
     //  return;
   } 
 
+  // fix learningInfo.test_size
+  if(aligner.learningInfo.firstKExamplesToLabel == 0) {
+    aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
+  }
+
   // find viterbi alignment for the top K examples of the training set (i.e. our test set)
   stringstream labelsFilename;
   labelsFilename << aligner.outputPrefix << ".labels.iter" << aligner.learningInfo.iterationsCount;
@@ -349,12 +354,6 @@ int main(int argc, char **argv) {
                       learningInfo, ibmModel1MaxIterCount)){
     assert(false);
   }
-
-  // add constraints
-  learningInfo.constraints.clear();
-  if(world.rank() == 0) {
-    cerr << "done." << endl;
-  }
   
   // initialize the model
   LatentCrfModel* model = LatentCrfAligner::GetInstance(textFilename, 
@@ -379,7 +378,7 @@ int main(int argc, char **argv) {
   model->Train();
 
   // print best params
-  if(learningInfo.mpiWorld->rank() == 0) {
+  if(world.rank() == 0) {
     model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
     model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
     model->PersistTheta(outputFilenamePrefix + string(".final.theta"));

@@ -12,6 +12,7 @@ LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename,
 					      const string &initialLambdaParamsFilename, 
 					      const string &initialThetaParamsFilename,
 					      const string &wordPairFeaturesFilename) {
+
   if(!instance) {
     instance = new LatentCrfAligner(textFilename, 
 				    outputPrefix,
@@ -26,9 +27,9 @@ LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename,
 
 LatentCrfModel* LatentCrfAligner::GetInstance() {
   if(!instance) {
-    cerr << "no instance was found!" << endl;
     assert(false);
   }
+
   return instance;
 }
 
@@ -43,6 +44,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 											    learningInfo,
 											    FIRST_LABEL_ID,
 											    LatentCrfAligner::Task::WORD_ALIGNMENT) {
+
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -68,25 +70,25 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     bool src = true;
     // for each token in the line
     for(std::vector<string>::const_iterator tokenIter = splits.begin(); 
-	tokenIter != splits.end();
-	tokenIter++) {
+        tokenIter != splits.end();
+        tokenIter++) {
       if(*tokenIter == "|||") {
-	// then the target sentence
-	src = false;
-	continue;
+        // then the target sentence
+        src = false;
+        continue;
       }
       // either add it to source vocab or target vocab
       if(src) {
-	x_sDomain.insert(vocabEncoder.Encode(*tokenIter));
+        x_sDomain.insert(vocabEncoder.Encode(*tokenIter));
       } else {
-	zDomain.insert(vocabEncoder.Encode(*tokenIter));
+        zDomain.insert(vocabEncoder.Encode(*tokenIter));
       }
     }
   }
   
   // zero is reserved for FST epsilon (I don't think this is a problem since we don't use the x_i nor the z_i as fst labels)
   assert(this->x_sDomain.count(0) == 0 && this->zDomain.count(0) == 0);
-
+  
   // encode the null token which is conventionally added to the beginning of the src sentnece. 
   NULL_TOKEN_STR = "__null__token__";
   bool explicitUseUnk = false;
@@ -97,30 +99,14 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   srcSents.clear();
   tgtSents.clear();
   if(learningInfo.allowNullAlignments) {
-    vocabEncoder.ReadParallelCorpus(
-      textFilename, srcSents, tgtSents, 
-      NULL_TOKEN_STR, learningInfo.reverse);
+    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, 
+                                    NULL_TOKEN_STR, learningInfo.reverse);
   } else {
-    vocabEncoder.ReadParallelCorpus(
-      textFilename, srcSents, tgtSents, learningInfo.reverse);
+    vocabEncoder.ReadParallelCorpus(textFilename, srcSents, tgtSents, learningInfo.reverse);
   }
   assert(srcSents.size() == tgtSents.size());
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
- 
-  // TODO-REFACTOR: use indicative strings to refer to feature templates instead of those cryptic int ids
-  /*
-  enabledFeatureTypes[101] = true;  // (bool) // id = y_i-y_{i-1} 
-  enabledFeatureTypes[102] = true;  // (bool) // id = floor( ln(y_i - y_{i-1}) )
-  enabledFeatureTypes[103] = true;  // (bool) // id = tgt[i] aligns_to src[y_i]
-  enabledFeatureTypes[104] = false;  // precomputed features (src-tgt word pair), including model1.   this is the features chris used in his 2011 paper with Gimpel
-  enabledFeatureTypes[105] = true;  // (bool) // id = y_i - y_{i-1} captures the intuition that certain jump distances are more common than others
-  enabledFeatureTypes[106] = true;  // (bool) // id = src[y_{i-1}]:src[y_{i}]  captures the intuition that certain src side transitions are more common than others
-  enabledFeatureTypes[107] = true;  // (real) // value = |y_i/len(src) - i/len(tgt)| the positional features used by dyer in several WA papers
-  enabledFeatureTypes[108] = true;  // (bool) // value = I( i==0 && y_i==0 )
-                                    // (bool) // value = I( i==len(tgt) && y_i==len(src) ) captures the intuition that the first and last word in the target sentence usually aligns to the first and last word in the src sentence, respectively.  
-  enabledFeatureTypes[109] = true; // dummy features for debugging purposes
-   */
   
   // initialize (and normalize) the log theta params to gaussians
   if(initialThetaParamsFilename.size() == 0) {
@@ -128,26 +114,28 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     BroadcastTheta(0);
   } else {
     assert(nLogThetaGivenOneLabel.params.size() == 0);
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "initializing theta params from " << initialThetaParamsFilename << endl;
+    }
     MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
     assert(nLogThetaGivenOneLabel.params.size() > 0);
   }
   
-  // populate the map of precomputed feature ids and feature values
-  //for(int rank = 0; rank < learningInfo.mpiWorld->size(); ++rank) {
-  //  mpi::broadcast<int>(*learningInfo.mpiWorld, rank, rank);
-  //  if(rank == learningInfo.mpiWorld->rank()) {
-      lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
-      //  }
-      //}
-
+  lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+  
   // load saved parameters
   if(initialLambdaParamsFilename.size() > 0) {
     lambda->LoadParams(initialLambdaParamsFilename);
-  } 
+    assert(lambda->paramWeightsTemp.size() == lambda->paramIndexes.size());
+    assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
+  }
 
-  // add all features in this data set to lambda, and broadcast the final set
+  // add all features in this data set to lambda
   InitLambda();
 
+  assert(lambda->paramWeightsTemp.size() == 0 && lambda->paramIdsTemp.size() == 0);
+  assert(lambda->paramWeightsPtr->size() == lambda->paramIndexes.size());
+  assert(lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
 }
 
 void LatentCrfAligner::InitTheta() {
@@ -219,10 +207,6 @@ vector<int>& LatentCrfAligner::GetObservableContext(int exampleId) {
   }   
 }
 
-void LatentCrfAligner::AddConstrainedFeatures() { 
-  // no constrained features to add
-}
-
 void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
   testSrcSents.clear();
   testSrcSents.push_back(x_s);
@@ -257,7 +241,7 @@ void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<i
 
   assert(labels.size() == tokens.size());  
 }
-  
+
 void LatentCrfAligner::Label(const string &labelsFilename) {
   // run viterbi (and write alignments in giza format)
   ofstream labelsFile(labelsFilename.c_str());

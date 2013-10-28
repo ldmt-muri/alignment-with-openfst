@@ -52,13 +52,13 @@ namespace serialization{
 
 template<class Archive, typename T, typename H, typename P, typename A>
 void save(Archive &ar,
-          const unordered_set<T,H,P,A> &s, const unsigned int) {
+          const std::tr1::unordered_set<T,H,P,A> &s, const unsigned int) {
     vector<T> vec(s.begin(),s.end());   
     ar<<vec;    
 }
 template<class Archive, typename T, typename H, typename P, typename A>
 void load(Archive &ar,
-          unordered_set<T,H,P,A> &s, const unsigned int) {
+          std::tr1::unordered_set<T,H,P,A> &s, const unsigned int) {
     vector<T> vec;  
     ar>>vec;   
     std::copy(vec.begin(),vec.end(),    
@@ -67,23 +67,26 @@ void load(Archive &ar,
 
 template<class Archive, typename T, typename H, typename P, typename A>
 void serialize(Archive &ar,
-               unordered_set<T,H,P,A> &s, const unsigned int version) {
+               std::tr1::unordered_set<T,H,P,A> &s, const unsigned int version) {
     boost::serialization::split_free(ar,s,version);
 }
 
 }
 }
 
-using unordered_set_featureId = unordered_set<FeatureId, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
+using unordered_set_featureId = std::tr1::unordered_set<FeatureId, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
 
 struct AggregateSets2 {
-   unordered_set_featureId operator()(const unordered_set_featureId &v1, 
+  unordered_set_featureId operator()(const unordered_set_featureId &v1, 
                                       const unordered_set_featureId &v2) {
-    unordered_set_featureId vTotal(v2);
-    for(auto v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
-      vTotal.insert(*v1Iter);
+    const unordered_set_featureId &small = v1.size() < v2.size()? v1 : v2;
+    const unordered_set_featureId &large = v1.size() < v2.size()? v2 : v1; 
+    unordered_set_featureId vTotal(large);
+    vTotal.rehash( ceil( (large.size() + small.size()) / vTotal.max_load_factor()));
+    for(auto smallIter = small.begin(); smallIter != small.end(); ++smallIter) {
+      vTotal.insert(*smallIter);
     }
-    return vTotal; 
+    return vTotal;
   }
 };
 
@@ -319,7 +322,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   
  protected:
   static LatentCrfModel *instance;
-  unordered_set<int> zDomain, yDomain;
+  std::tr1::unordered_set<int> zDomain, yDomain;
   GaussianSampler gaussianSampler;
   SimAnneal simulatedAnnealer;
   // during training time, and by default, this should be set to false. 

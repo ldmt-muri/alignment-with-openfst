@@ -1,7 +1,7 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS=-L/opt/tools/boost_1_54_0/lib -ldl -Wl,-rpath,/opt/tools/boost_1_54_0/lib -llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lboost_program_options -lrt
+LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lboost_program_options -lrt
 OPT=-g
 
 all: train-latentCrfAligner
