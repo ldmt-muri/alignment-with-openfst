@@ -78,14 +78,19 @@ using unordered_set_featureId = std::tr1::unordered_set<FeatureId, FeatureId::Fe
 
 struct AggregateSets2 {
   unordered_set_featureId operator()(const unordered_set_featureId &v1, 
-                                      const unordered_set_featureId &v2) {
-    const unordered_set_featureId &small = v1.size() < v2.size()? v1 : v2;
-    const unordered_set_featureId &large = v1.size() < v2.size()? v2 : v1; 
-    unordered_set_featureId vTotal(large);
-    vTotal.rehash( ceil( (large.size() + small.size()) / vTotal.max_load_factor()));
-    for(auto smallIter = small.begin(); smallIter != small.end(); ++smallIter) {
-      vTotal.insert(*smallIter);
+                                     const unordered_set_featureId &v2) {
+    cerr << "aggregating unordered sets of featureIds |v1| = " << v1.size() << ", |v2| = " << v2.size() << " ...";
+    unordered_set_featureId vTotal;
+    cerr << ", vTotal.max_load_factor() = " << vTotal.max_load_factor();
+    vTotal.rehash( ceil( (v1.size() + v2.size()) / vTotal.max_load_factor()));
+    
+    for(auto v1Iter = v1.begin(); v1Iter != v1.end(); ++v1Iter) {
+      vTotal.insert(*v1Iter);
     }
+    for(auto v2Iter = v2.begin(); v2Iter != v2.end(); ++v2Iter) {
+      vTotal.insert(*v2Iter);
+    }
+    cerr << ", |vTotal| = " << vTotal.size() << endl;
     return vTotal;
   }
 };

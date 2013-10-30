@@ -270,6 +270,20 @@ void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
 
 }
 
+int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
+  paramIndexes.reserve(paramIndexes.size() + paramIds.size());
+  paramIdsTemp.reserve(paramIdsTemp.size() + paramIds.size());
+  paramWeightsTemp.reserve(paramWeightsTemp.size() + paramIds.size());
+  cerr << "paramIdsTemp.capacity() = " << paramIdsTemp.capacity() << endl;
+  int newParamsCount = 0;
+  for(int i = 0; i < paramIds.size(); ++i) {
+    if(AddParam(paramIds[i])) {
+      newParamsCount++;
+    }
+  }
+  return newParamsCount;
+}
+
 // initializes the parameter weight by drawing from a gaussian
 bool LogLinearParams::AddParam(const FeatureId &paramId) {
   // does the parameter already exist?

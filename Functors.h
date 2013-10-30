@@ -26,4 +26,17 @@ struct AggregateVectors2 {
   }  
 };
 
+struct AggregateVectorsVertically {
+  std::vector<double> operator()(std::vector<double> &v1, const std::vector<double> &v2) {
+    std::vector<double> vTotal(v1.size()+v2.size());
+    for(unsigned i = 0; i < v1.size(); i++) {
+      vTotal[i] = v1[i];
+    }
+    for(unsigned j = 0; j < v2.size(); j++) {
+      vTotal[j + v1.size()] = v2[j]; 
+    }
+    return vTotal;
+  }  
+};
+
 #endif

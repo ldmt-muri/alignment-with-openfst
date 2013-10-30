@@ -53,7 +53,7 @@ public:
     assert(type == FeatureTemplate::PRECOMPUTED);
     precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
   }
-    
+  
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
     ar & type;
@@ -270,6 +270,8 @@ class LogLinearParams {
   void FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 		    FastSparseVector<double> &activeFeatures);
+
+  int AddParams(const std::vector< FeatureId > &paramIds);
 
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
   bool AddParam(const FeatureId &paramId);
