@@ -58,7 +58,6 @@ public:
     precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
   }
   
-  
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
     ar & type;
@@ -263,6 +262,7 @@ class LogLinearParams {
   template<class Archive>
     void save(Archive & os, const unsigned int version) const
     {
+      cerr << "inside LogLinearParams::save()" << endl;
       assert(IsSealed());
       assert(paramIdsPtr->size() == paramWeightsPtr->size());
       int count = paramIdsPtr->size();
@@ -276,9 +276,10 @@ class LogLinearParams {
   template<class Archive>
     void load(Archive & is, const unsigned int version)
     {
+      cerr << "inside LogLinearParams::load()" << endl;
       int count;
       is >> count;
-      for(int i = 0; i < 100; ++i) {
+      for(int i = 0; i < count; ++i) {
         FeatureId featureId;
         is >> featureId;
         paramIdsTemp.push_back(featureId);
@@ -319,6 +320,8 @@ class LogLinearParams {
   void FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 		    FastSparseVector<double> &activeFeatures);
+
+  int AddParams(const std::vector< FeatureId > &paramIds);
 
   // if the paramId does not exist, add it with weight drawn from gaussian. otherwise, do nothing. 
   bool AddParam(const FeatureId &paramId);
@@ -390,8 +393,6 @@ class LogLinearParams {
   // maps precomputed feature strings into ids
   //VocabEncoder precomputedFeaturesEncoder;
 
-  const int COUNT_OF_FEATURE_TYPES;
-  
   const LearningInfo *learningInfo;
 
   const GaussianSampler *gaussianSampler;

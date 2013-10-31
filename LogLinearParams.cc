@@ -91,8 +91,7 @@ LogLinearParams::~LogLinearParams() {
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
 				 double gaussianStdDev) :
-  types(types), 
-  COUNT_OF_FEATURE_TYPES(100) {
+  types(types) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   //FeatureId::precomputedFeaturesEncoder = &precomputedFeaturesEncoder;
@@ -188,6 +187,7 @@ void LogLinearParams::Seal() {
     paramIdsTemp.clear(); 
   } else {
     // this is done by the slaves, not the master
+    assert(learningInfo->mpiWorld->rank() != 0);
     // first, wipe off all the parameters you already have to save memory
     paramWeightsTemp.clear(); 
     paramIdsTemp.clear(); 
@@ -292,16 +292,25 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     wordPairFeaturesFile.close();
     cerr << "rank " << learningInfo->mpiWorld->rank() << " finished reading the word pair features file." << endl;
 
-    //cerr << "precomputedFeaturesEncoder.tokenToInt.size() = " << precomputedFeaturesEncoder.tokenToInt.size() << endl;
-    //precomputedFeaturesEncoder.tokenToInt.clear();
-    //precomputedFeaturesEncoder.intToToken.clear();
-    //cerr << "rank 0 cleared the dictionaries of precomputedFeaturesEncoder." << endl;
-  
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
   SetSharedMemorySegment(learningInfo.mpiWorld->rank() == 0);
+}
+
+int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
+  paramIndexes.reserve(paramIndexes.size() + paramIds.size());
+  paramIdsTemp.reserve(paramIdsTemp.size() + paramIds.size());
+  paramWeightsTemp.reserve(paramWeightsTemp.size() + paramIds.size());
+  cerr << "paramIdsTemp.capacity() = " << paramIdsTemp.capacity() << endl;
+  int newParamsCount = 0;
+  for(int i = 0; i < paramIds.size(); ++i) {
+    if(AddParam(paramIds[i])) {
+      newParamsCount++;
+    }
+  }
+  return newParamsCount;
 }
 
 // initializes the parameter weight by drawing from a gaussian
@@ -1071,12 +1080,18 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
     assert(paramIndexes.size() == paramIdsTemp.size());
     ifstream paramsFile(inputFilename.c_str(), ios::in);
     boost::archive::text_iarchive oa(paramsFile);
+    
+    cerr << "rank " << learningInfo->mpiWorld->rank() << ": before deserializing parameters, paramWeightsTemp.size() = " << paramWeightsTemp.size() << ", paramIdsTemp.size() = " << paramIdsTemp.size() << ", paramIndexes.size() = " << paramIndexes.size() << endl;
+
     oa >> *this;
+
     int index = 0;
     for(auto paramIdIter = paramIdsTemp.begin(); paramIdIter != paramIdsTemp.end(); ++paramIdIter, ++index) {
       paramIndexes[*paramIdIter] = index;
     }
-    cerr << "|paramIdsTemp|=" << paramIdsTemp.size() << ", |paramIndexes|=" << paramIndexes.size() << ", |paramWeightsTemp|=" << paramWeightsTemp.size() << endl;
+   
+    cerr << "rank " << learningInfo->mpiWorld->rank() << ": after deserializing parameters, paramWeightsTemp.size() = " << paramWeightsTemp.size() << ", paramIdsTemp.size() = " << paramIdsTemp.size() << ", paramIndexes.size() = " << paramIndexes.size() << endl;
+
     paramsFile.close();
     assert(paramIndexes.size() == paramWeightsTemp.size() && paramIndexes.size() == paramIdsTemp.size());
   }

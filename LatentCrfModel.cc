@@ -10,7 +10,6 @@ unsigned LatentCrfModel::NULL_POSITION = -100;
 
 LatentCrfModel& LatentCrfModel::GetInstance() {
   if(!instance) {
-    cerr << "no instance found at LatentCrfModel::GetInstance()" << endl;
     assert(false);
   }
   return *instance;
@@ -28,6 +27,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       unsigned FIRST_LABEL_ID,
 			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
 							    UnsupervisedSequenceTaggingModel(textFilename) {
+  
   
   AddEnglishClosedVocab();
   
@@ -203,7 +203,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
   assert(fst.NumStates() > 0);
   
   // a schedule for visiting states such that we know the timestep for each arc
-  unordered_set<int> iStates, iP1States;
+  std::tr1::unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -326,7 +326,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
   assert(DXZk.size() == 0);
 
   // schedule for visiting states such that we know the timestep for each arc
-  unordered_set<int> iStates, iP1States;
+  std::tr1::unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -335,7 +335,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
     int zI = z[i];
     
     // from each state at timestep i
-    for(unordered_set<int>::const_iterator iStatesIter = iStates.begin(); 
+    for(std::tr1::unordered_set<int>::const_iterator iStatesIter = iStates.begin(); 
 	iStatesIter != iStates.end(); 
 	iStatesIter++) {
       int fromState = *iStatesIter;
@@ -400,7 +400,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
-  unordered_set<int> iStates, iP1States;
+  std::tr1::unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -457,7 +457,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   const vector<int> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
-  unordered_set<int> iStates, iP1States;
+  std::tr1::unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
 
   // for each timestep
@@ -647,7 +647,6 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   // compute forward/backward state potentials
   assert(alphas.size() == 0);
   assert(betas.size() == 0);
-  //cerr << FstUtils::PrintFstSummary(fst);
   ShortestDistance(fst, &alphas, false);
   ShortestDistance(fst, &betas, true);  
 
@@ -832,7 +831,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     double nLogZ = model.ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     if(std::isnan(nLogZ) || std::isinf(nLogZ)) {
       if(model.learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
+        cerr << "ERROR: nLogZ = " << nLogZ << ". my mistake. will halt!" << endl;
       }
       assert(false);
     } 
@@ -1348,6 +1347,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
     
     if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
 
+
+
       // run a few EM iterations to update thetas
       for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
     
@@ -1859,20 +1860,23 @@ void LatentCrfModel::InitLambda() {
 
   // master collects all feature ids fired on any sentence
   assert(!lambda->IsSealed());
-  unordered_set_featureId localParamIds(lambda->paramIdsTemp.begin(), lambda->paramIdsTemp.end()), allParamIds;
-  mpi::reduce< unordered_set_featureId >(*learningInfo.mpiWorld, localParamIds, allParamIds, AggregateSets2(), 0);
 
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "done. |lambda| = " << allParamIds.size() << endl; 
-  }
-
-  // master updates its lambda object adding all those features
-  if(learningInfo.mpiWorld->rank() == 0) {
-    for(auto paramIdIter = allParamIds.begin(); paramIdIter != allParamIds.end(); ++paramIdIter) {
-      lambda->AddParam(*paramIdIter);
+  if (learningInfo.mpiWorld->rank() == 0) {
+    std::vector< std::vector< FeatureId > > localFeatureVectors;
+    cerr << "master: gathering ... ";
+    mpi::gather<std::vector< FeatureId > >(*learningInfo.mpiWorld, lambda->paramIdsTemp, localFeatureVectors, 0);
+    cerr << "done gathering." << endl;
+    for (int proc = 0; proc < learningInfo.mpiWorld->size(); ++proc) {
+      cerr << "master: adding features of proc " << proc << " ... " << endl;
+      lambda->AddParams(localFeatureVectors[proc]);
     }
+    cerr << "master: done aggregating all features.  |lambda| = " << lambda->paramIndexes.size() << endl; 
+  } else {
+    cerr << "rank " << learningInfo.mpiWorld->rank() << ": sending my paramIdsTemp to master ... ";
+    gather(*learningInfo.mpiWorld, lambda->paramIdsTemp, 0);
+    cerr << "done." << endl;
   }
-  
+
   // master seals his lambda params creating shared memory 
   if(learningInfo.mpiWorld->rank() == 0) {
     assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
@@ -1900,8 +1904,6 @@ void LatentCrfModel::InitLambda() {
            && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() \
            && lambda->paramIdsPtr->size() == lambda->paramIndexes.size());    
   }
-
-  cerr << "rank " << learningInfo.mpiWorld->rank() << ": |lambda| = " << lambda->GetParamsCount() << endl;
 }
 
 // returns -log p(z|x)
