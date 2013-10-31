@@ -150,7 +150,7 @@ OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create,
 
 void LogLinearParams::SetSharedMemorySegment(bool create)
 {
-  int segmentSize = 30 * 1024; // in GBs
+  size_t segmentSize = 30 * 1024; // in GBs
   segmentSize *= 1024 * 1024;
   string SEGMENT_NAME = "segment";
   using namespace boost::interprocess;
@@ -158,12 +158,23 @@ void LogLinearParams::SetSharedMemorySegment(bool create)
   // associated with a c-string. Erase previous shared memory with the name
   // to be used and create the memory segment at the specified address and initialize resources
   if(create) {
+    cerr << "remove any shared memory object with the same name '" << SEGMENT_NAME << "'...";
     shared_memory_object::remove(SEGMENT_NAME.c_str());
-    
+    cerr << "done" << endl;
+
     // create or open the shared memory segments
+    cerr << "requesting " << segmentSize << " bytes of managed shared memory for segment " << SEGMENT_NAME << "..." << endl;
     sharedMemorySegment = new managed_shared_memory(open_or_create, SEGMENT_NAME.c_str(), segmentSize);
+    cerr << "done." << endl;
+    bool dummy = true;
+    mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
   } else {
+    // master must 
+    bool dummy;
+    mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
+    cerr << "opening segment " << SEGMENT_NAME << " ...";
     sharedMemorySegment = new managed_shared_memory(open_only, SEGMENT_NAME.c_str());      
+    cerr << "done.";
   }
   assert(sharedMemorySegment->get_size() == segmentSize);
 }
