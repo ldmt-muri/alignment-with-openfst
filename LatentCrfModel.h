@@ -222,9 +222,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   double GetNLogTheta(const std::pair<int,int> context, int event);
   double GetNLogTheta(int context, int event);
 
-  virtual std::vector<int>& GetObservableSequence(int exampleId) = 0;
+  virtual std::vector<int64_t>& GetObservableSequence(int exampleId) = 0;
 
-  virtual std::vector<int>& GetObservableContext(int exampleId) = 0;
+  virtual std::vector<int64_t>& GetObservableContext(int exampleId) = 0;
 
   // SENT LEVEL
   ///////////
@@ -314,11 +314,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   ~LatentCrfModel();
 
  public:
-  std::vector<std::vector<int> > labels;
+  std::vector<std::vector<int64_t> > labels;
   LearningInfo learningInfo;
   LogLinearParams *lambda;
-  MultinomialParams::ConditionalMultinomialParam<int> nLogThetaGivenOneLabel;
-  MultinomialParams::ConditionalMultinomialParam< std::pair<int, int> > nLogThetaGivenTwoLabels;
+  MultinomialParams::ConditionalMultinomialParam<int64_t> nLogThetaGivenOneLabel;
+  MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > nLogThetaGivenTwoLabels;
   static int START_OF_SENTENCE_Y_VALUE;
   static unsigned NULL_POSITION;
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;

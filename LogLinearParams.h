@@ -43,16 +43,10 @@ public:
     struct { unsigned current, previous; } bigram;
     int alignmentJump;
     struct { unsigned srcWord, tgtWord; } wordPair;
-    int precomputed;
+    int64_t precomputed;
   };
   
   
-  // replace this with a copy constructor 
-  //const string& DecodePrecomputedFeature() const {
-  //  assert(type == FeatureTemplate::PRECOMPUTED);
-  //  return precomputedFeaturesEncoder->Decode(precomputed);
-  //}
-
   void EncodePrecomputedFeature(const string& featureIdString) {
     assert(type == FeatureTemplate::PRECOMPUTED);
     precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
@@ -314,10 +308,10 @@ class LogLinearParams {
 		    int srcSentLength, int tgtSentLength, 
 		    unordered_map_featureId_double& activeFeatures);
   
-  void FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
+  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
 		    FastSparseVector<double> &activeFeatures);
   
-  void FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
+  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 		    FastSparseVector<double> &activeFeatures);
 

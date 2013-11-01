@@ -90,7 +90,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
   PrepareExample(sentId);
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -175,7 +175,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
   clock_t timestamp = clock();
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
 
   // first, build the fst
   BuildLambdaFst(sentId, fst);
@@ -197,7 +197,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 			      FastSparseVector<LogVal<double> > &FXk) {
   clock_t timestamp = clock();
   
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
 
   assert(FXk.size() == 0);
   assert(fst.NumStates() > 0);
@@ -321,7 +321,7 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int> &z,
 			      FastSparseVector<LogVal<double> > &DXZk) {
   clock_t timestamp = clock();
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
   // enforce assumptions
   assert(DXZk.size() == 0);
 
@@ -397,7 +397,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
   std::tr1::unordered_set<int> iStates, iP1States;
@@ -454,7 +454,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int> &z,
   // \sum_y [ \prod_i \theta_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ] \sum_i \delta_{y_i=y^*,z_i=z^*}
   assert(BXZ.size() == 0);
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
 
   // schedule for visiting states such that we know the timestep for each arc
   std::tr1::unordered_set<int> iStates, iP1States;
@@ -516,8 +516,8 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int zi, unsigned exampleId
   if(task == Task::POS_TAGGING) {
     return nLogThetaGivenOneLabel[yi][zi]; 
   } else if(task == Task::WORD_ALIGNMENT) {
-    vector<int> &srcSent = GetObservableContext(exampleId);
-    vector<int> &tgtSent = GetObservableSequence(exampleId);
+    vector<int64_t> &srcSent = GetObservableContext(exampleId);
+    vector<int64_t> &tgtSent = GetObservableSequence(exampleId);
     assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
     unsigned FIRST_POSITION = learningInfo.allowNullAlignments? NULL_POSITION: NULL_POSITION+1;
     yi -= FIRST_POSITION;
@@ -552,7 +552,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int> &z,
   //  cerr << "starting LatentCrfModel::BuildThetaLambdaFst" << endl;
   PrepareExample(sentId);
 
-  const vector<int> &x = GetObservableSequence(sentId);
+  const vector<int64_t> &x = GetObservableSequence(sentId);
 
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
@@ -684,17 +684,17 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   // for each sentence
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     // collect number of times each theta parameter has been used
-    vector<int> &x_s = GetObservableContext(sentId);
-    vector<int> &z = GetObservableSequence(sentId);
-    vector<int> &y = labels[sentId];
+    vector<int64_t> &x_s = GetObservableContext(sentId);
+    vector<int64_t> &z = GetObservableSequence(sentId);
+    vector<int64_t> &y = labels[sentId];
     assert(z.size() == y.size());
     for(unsigned i = 0; i < z.size(); i++) {
       if(task == Task::POS_TAGGING) {
-	thetaMle[y[i]][z[i]] += 1;
+        thetaMle[y[i]][z[i]] += 1;
       } else if(task == Task::WORD_ALIGNMENT) {
-	thetaMle[ x_s[y[i]] ][ z[i] ] += 1;
+        thetaMle[ x_s[y[i]] ][ z[i] ] += 1;
       } else {
-	assert(false);
+        assert(false);
       }
     }
   }
@@ -705,7 +705,7 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   for(auto contextIter = thetaMle.params.begin();
       contextIter != thetaMle.params.end();
       ++contextIter) {
-    for(MultinomialParams::MultinomialParam::const_iterator probIter = contextIter->second.begin();
+    for(auto probIter = contextIter->second.begin();
         probIter != contextIter->second.end();
         ++probIter) {
       nLogThetaGivenOneLabel[contextIter->first][probIter->first] = probIter->second;
@@ -715,8 +715,8 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   // compute likelihood of \theta for z|y
   double NllZGivenY = 0; 
   for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
-    vector<int> &z = GetObservableSequence(sentId);
-    vector<int> &y = labels[sentId];
+    vector<int64_t> &z = GetObservableSequence(sentId);
+    vector<int64_t> &y = labels[sentId];
     for(unsigned i = 0; i < z.size(); i++){ 
       int DONT_CARE = -100;
       NllZGivenY += GetNLogTheta(DONT_CARE, y[i], z[i], sentId);
@@ -816,11 +816,11 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
 
     // Make |y| = |x|
     assert(model.GetObservableSequence(sentId).size() == model.labels[sentId].size());
-    const vector<int> &x = model.GetObservableSequence(sentId);
+    const vector<int64_t> &x = model.GetObservableSequence(sentId);
     if(x.size() > model.learningInfo.maxSequenceLength) {
       continue;
     }
-    vector<int> &y = model.labels[sentId];
+    vector<int64_t> &y = model.labels[sentId];
 
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> lambdaFst;
@@ -1207,10 +1207,10 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
 }
 
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
-					     MultinomialParams::ConditionalMultinomialParam<int> &mleGivenOneLabel, 
-					     boost::unordered_map<int, double> &mleMarginalsGivenOneLabel,
-					     MultinomialParams::ConditionalMultinomialParam< pair<int, int> > &mleGivenTwoLabels, 
-					     boost::unordered_map< pair<int, int>, double> &mleMarginalsGivenTwoLabels) {
+					     MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
+					     boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
+					     MultinomialParams::ConditionalMultinomialParam< pair<int64_t, int64_t> > &mleGivenTwoLabels, 
+					     boost::unordered_map< pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels) {
   
   // in the word alignment model, yDomain depends on the example
   PrepareExample(sentId);
@@ -1360,10 +1360,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
         
         // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
         // data structure to hold theta MLE estimates
-        MultinomialParams::ConditionalMultinomialParam<int> mleGivenOneLabel;
-        MultinomialParams::ConditionalMultinomialParam< pair<int, int> > mleGivenTwoLabels;
-        boost::unordered_map<int, double> mleMarginalsGivenOneLabel;
-        boost::unordered_map<std::pair<int, int>, double> mleMarginalsGivenTwoLabels;
+        MultinomialParams::ConditionalMultinomialParam<int64_t> mleGivenOneLabel;
+        MultinomialParams::ConditionalMultinomialParam< pair<int64_t, int64_t> > mleGivenTwoLabels;
+        boost::unordered_map<int64_t, double> mleMarginalsGivenOneLabel;
+        boost::unordered_map<std::pair<int64_t, int64_t>, double> mleMarginalsGivenTwoLabels;
         
         // update the mle for each sentence
         assert(examplesCount > 0);
@@ -1435,13 +1435,13 @@ void LatentCrfModel::BlockCoordinateDescent() {
         
         cerr << "at the beginning of gradient descent iteration " << gradientDescentIter << ", EvaluateNll() = " << EvaluateNll() << endl;
         
-        MultinomialParams::ConditionalMultinomialParam<int> gradientOfNll;
+        MultinomialParams::ConditionalMultinomialParam<int64_t> gradientOfNll;
         ComputeNllZGivenXThetaGradient(gradientOfNll);
-        for(boost::unordered_map< int, boost::unordered_map<int, double> >::iterator yIter = nLogThetaGivenOneLabel.params.begin(); 
+        for(auto yIter = nLogThetaGivenOneLabel.params.begin(); 
             yIter != nLogThetaGivenOneLabel.params.end(); 
             ++yIter) {
           double marginal = 0.0;
-          for(boost::unordered_map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+          for(auto zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
             double oldTheta = MultinomialParams::nExp(zIter->second);
             double newTheta = oldTheta - learningInfo.thetaOptMethod->learningRate * gradientOfNll[yIter->first][zIter->first];
             if(newTheta <= 0) {
@@ -1453,7 +1453,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           } // end of theta updates for a particular event
           
           // now project (i.e. renormalize)
-          for(boost::unordered_map<int, double>::iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
+          for(auto zIter = yIter->second.begin(); zIter != yIter->second.end(); ++zIter) {
             double newTheta = zIter->second;
             double projectedNewTheta = newTheta / marginal;
             double nlogProjectedNewTheta = MultinomialParams::nLog(projectedNewTheta);

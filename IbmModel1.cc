@@ -72,11 +72,11 @@ void IbmModel1::CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFst
 
   for(unsigned i = 0; i < tgtSents.size(); i++) {
     // read the list of integers representing target tokens
-    vector< int > &intTokens  =tgtSents[i];
+    vector< int64_t > &intTokens  =tgtSents[i];
     
     // create the fst
     VectorFst< FstUtils::LogArc > tgtFst;
-    int statesCount = intTokens.size() + 1;
+    size_t statesCount = intTokens.size() + 1;
     for(int stateId = 0; stateId < intTokens.size()+1; stateId++) {
       int temp = tgtFst.AddState();
       assert(temp == stateId);
@@ -110,17 +110,17 @@ void IbmModel1::PersistParams(const string& outputFilename) {
 void IbmModel1::InitParams() {
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
     // read the list of integers representing target tokens
-    vector< int > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
+    vector< int64_t > &tgtTokens = tgtSents[sentId], &srcTokens = srcSents[sentId];
     
     // for each srcToken
-    for(int i=0; i<srcTokens.size(); i++) {
-      int srcToken = srcTokens[i];
+    for(size_t i=0; i<srcTokens.size(); i++) {
+      int64_t srcToken = srcTokens[i];
       // get the corresponding map of tgtTokens (and the corresponding probabilities)
-      boost::unordered_map<int, double> &translations = params.params[srcToken];
+      boost::unordered_map<int64_t, double> &translations = params.params[srcToken];
       
       // for each tgtToken
-      for (int j=0; j<tgtTokens.size(); j++) {
-	int tgtToken = tgtTokens[j];
+      for (size_t j=0; j<tgtTokens.size(); j++) {
+        int64_t tgtToken = tgtTokens[j];
 	// if this the first time the pair(tgtToken, srcToken) is experienced, give it a value of 1 (i.e. prob = exp(-1) ~= 1/3)
 	if( translations.count(tgtToken) == 0) {
 	  translations[tgtToken] = FstUtils::nLog(1/3.0);
@@ -151,8 +151,8 @@ void IbmModel1::CreateGrammarFst() {
   int fromState = 0, toState = 0;
   for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
     for(auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-      int tgtToken = tgtIter->first;
-      int srcToken = srcIter->first;
+      int64_t tgtToken = tgtIter->first;
+      int64_t srcToken = srcIter->first;
       double paramValue = tgtIter->second;
       grammarFst.AddArc(fromState, FstUtils::LogArc(tgtToken, srcToken, paramValue, toState));
     }
@@ -164,9 +164,9 @@ void IbmModel1::CreateGrammarFst() {
 void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >& perSentGrammarFsts) {
   
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
-    vector<int> &srcTokens = srcSents[sentId];
-    vector<int> &tgtTokensVector = tgtSents[sentId];
-    set<int> tgtTokens(tgtTokensVector.begin(), tgtTokensVector.end());
+    vector<int64_t> &srcTokens = srcSents[sentId];
+    vector<int64_t> &tgtTokensVector = tgtSents[sentId];
+    set<int64_t> tgtTokens(tgtTokensVector.begin(), tgtTokensVector.end());
 
     // allow null alignments
     assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
@@ -175,8 +175,8 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >
     VectorFst< FstUtils::LogArc > grammarFst;
     int stateId = grammarFst.AddState();
     assert(stateId == 0);
-    for(vector<int>::const_iterator srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
-      for(set<int>::const_iterator tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
+    for(auto srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
+      for(auto tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
 	grammarFst.AddArc(stateId, FstUtils::LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));	
       }
     }
@@ -251,7 +251,7 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
         for (ArcIterator<VectorFst< FstUtils::LogArc > > arcIter(alignmentFst, stateId);
              !arcIter.Done();
              arcIter.Next()) {
-          int srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
+          int64_t srcToken = arcIter.Value().olabel, tgtToken = arcIter.Value().ilabel;
           int fromState = stateId, toState = arcIter.Value().nextstate;
           
           // probability of using this parameter given this sentence pair and the previous model
@@ -368,11 +368,11 @@ void IbmModel1::Align(const string &alignmentsFilename) {
   assert(tgtSents.size() == srcSents.size());
 
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
-    vector<int> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+    vector<int64_t> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
     VectorFst< FstUtils::LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
     
     // given a src token id, what are the possible src position (in this sentence)
-    boost::unordered_map<int, set<int> > srcTokenToSrcPos;
+    boost::unordered_map<int64_t, set<int> > srcTokenToSrcPos;
     for(unsigned srcPos = 0; srcPos < srcSent.size(); srcPos++) {
       srcTokenToSrcPos[ srcSent[srcPos] ].insert(srcPos);
     }

@@ -7,32 +7,50 @@ using namespace boost;
 
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
 {
-  os << obj.type;
+
+enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGNMENT_JUMP=3, ALIGNMENT_JUMP_IS_ZERO=4, SRC0_TGT0=5, PRECOMPUTED=6, DIAGONAL_DEVIATION=7, SYNC_START=8, SYNC_END=9 };
+
   switch(obj.type) {
   case FeatureTemplate::LABEL_BIGRAM:
+    os << "LABEL_BIGRAM";
+    os << '|' << obj.bigram.previous << '|' << obj.bigram.current;
+    break;
   case FeatureTemplate::SRC_BIGRAM:
+    os << "SRC_BIGRAM";
     os << '|' << obj.bigram.previous << '|' << obj.bigram.current;
     break;
   case FeatureTemplate::ALIGNMENT_JUMP:
+    os << "ALIGNMENT_JUMP";
+    os << '|' << obj.alignmentJump;
+    break;
   case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+    os << "LOG_ALIGNMENT_JUMP";
+    os << '|' << obj.alignmentJump;
+    break;
   case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+    os << "ALIGNMENT_JUMP_IS_ZERO";
     os << '|' << obj.alignmentJump;
     break;
   case FeatureTemplate::SRC0_TGT0:
+    os << "SRC0_TGT0";
     os << '|' << obj.wordPair.srcWord << '|' << obj.wordPair.tgtWord;
     break;
   case FeatureTemplate::PRECOMPUTED:
-    //os << '|' << obj.DecodePrecomputedFeature();
+    os << "PRECOMPUTED";
     os << '|' << obj.precomputed;
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
+    os << "DIAGONAL_DEVIATION";
+    break;
   case FeatureTemplate::SYNC_START:
+    os << "SYNC_START";
+    break;
   case FeatureTemplate::SYNC_END:
+    os << "SYNC_END";
     break;
   default:
     assert(false);
   }
-  os << '|';
   return os;
 }
 
@@ -140,10 +158,23 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
 OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, string& objectNickname) {
   ShmemInnerValueAllocator sharedMemorySimpleMapAllocator(sharedMemorySegment->get_segment_manager()); 
   if(create) {
-    //return 0;
-    return sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
+    try { 
+      auto temp = sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
+      if(temp) {
+        return temp;
+      } 
+    } catch(std::exception const&  ex) {
+      cerr << ex.what() << endl;
+      assert(false);
+    }
+
+    try {
+      return sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
+    } catch(std::exception const& ex) {
+      cerr << ex.what();
+      assert(false);
+    }
   } else {
-    //return 0;
     return sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
   }
 }
@@ -267,7 +298,9 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       srcTgtPairKey << input1 << " " << input2;
       string srcTgtPairKeyString = srcTgtPairKey.str();
       //offset_ptr<std::_Rb_tree_node<std::pair<const FeatureId, double> >, long, unsigned long, 0UL> *tempMap = MapWordPa
+      cerr << "timestamp88" << endl;
       auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPairKeyString);
+      cerr << "timestamp89" << endl;
       // the remaining elements are precomputed features for (input1, input2)
       while(splitsIter != splits.end()) {
         // read feature id
@@ -352,6 +385,9 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
   bool returnValue;
   if(paramIndexes.count(paramId) == 0) {
     
+    if(sealed) {
+      cerr << "trying to add the followign paramId after class is sealed: " << paramId << endl;
+    }
     // new features are not allowed when the object is sealed
     assert(!sealed);
 
@@ -383,7 +419,7 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
 }
 
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, const vector<int> &x_s, int i, 
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
 				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
 				   FastSparseVector<double> &activeFeatures) {
   // debug info
@@ -403,11 +439,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x_t, con
   assert(yIM1 < (int)x_s.size()); 
   assert(yI >= 0);
   assert(yIM1 >= -2);
-  int srcToken = x_s[yI];
-  int prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
-  int tgtToken = x_t[i];
-  int prevTgtToken = i > 0? x_t[i-1] : -1;
-  int nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : -1;
+  auto srcToken = x_s[yI];
+  auto prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
+  auto tgtToken = x_t[i];
+  auto prevTgtToken = i > 0? x_t[i-1] : -1;
+  auto nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : (int64_t) -1;
   //std::tuple<int, int> srcTgtPair(srcToken, tgtToken);
   std::stringstream srcTgtPairKey;
   srcTgtPairKey << srcToken << " " << tgtToken;

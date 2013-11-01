@@ -23,7 +23,7 @@
 namespace MultinomialParams {
 
   // parameters for describing a multinomial distribution p(x)=y such that x is the key and y is a log probability
-  typedef boost::unordered_map<int, double> MultinomialParam;
+  typedef boost::unordered_map<int64_t, double> MultinomialParam;
 
   // forward declarations
   double nLog(double prob);
@@ -70,7 +70,7 @@ namespace MultinomialParams {
     // refactor variable names here (e.g. translations)
     void PrintParams() {
       // iterate over src tokens in the model
-      int counter = 0;
+      int64_t counter = 0;
       for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
@@ -83,7 +83,7 @@ namespace MultinomialParams {
     // refactor variable names here (e.g. translations)
     void PrintParams(const VocabEncoder &encoder) {
       // iterate over src tokens in the model
-      int counter = 0;
+      int64_t counter = 0;
       for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
@@ -106,12 +106,12 @@ namespace MultinomialParams {
   // event context logP(event|context)
   // event and/or context can be an integer or a string
   inline void PersistParams(const std::string &paramsFilename, 
-			    const ConditionalMultinomialParam<int> &params, 
+			    const ConditionalMultinomialParam<int64_t> &params, 
 			    const VocabEncoder &vocabEncoder,
 			    bool decodeContext=false,
 			    bool decodeEvent=false) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (boost::unordered_map<int, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
+    for (boost::unordered_map<int64_t, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
 	 srcIter != params.params.end(); 
 	 srcIter++) {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
@@ -139,7 +139,7 @@ namespace MultinomialParams {
   // event context nlogP(event|context)
   // event and/or context can be an integer or a string
   inline void LoadParams(const std::string &paramsFilename,
-			 ConditionalMultinomialParam<int> &params,
+			 ConditionalMultinomialParam<int64_t> &params,
 			 const VocabEncoder &vocabEncoder,
 			 bool encodeContext=false,
 			 bool encodeEvent=false) {
@@ -163,7 +163,7 @@ namespace MultinomialParams {
       double nlogP;
       nlogPString >> nlogP;
       // event
-      int event = -1;
+      int64_t event = -1;
       if(encodeEvent) {
 	event = vocabEncoder.ConstEncode(splits[0]);
 	assert(event != vocabEncoder.UnkInt());
@@ -174,7 +174,7 @@ namespace MultinomialParams {
       }
       assert(event >= 0);
       // context
-      int context = -1;
+      int64_t context = -1;
       if(encodeContext) {
 	context = vocabEncoder.ConstEncode(splits[1]);
       } else {
@@ -190,20 +190,18 @@ namespace MultinomialParams {
   }
 
   inline void PersistParams(const std::string &paramsFilename, 
-			    const ConditionalMultinomialParam< std::pair<int, int> > &params, 
+			    const ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &params, 
 			    const VocabEncoder &vocabEncoder) {
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (boost::unordered_map< std::pair<int, int>, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
-	 srcIter != params.params.end(); 
-	 srcIter++) {
-      for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// line format: 
-	// srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-	paramsFile << srcIter->first.first << "->" << srcIter->first.second << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
+    for (auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+      for (auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
+        // line format: 
+        // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
+        paramsFile << srcIter->first.first << "->" << srcIter->first.second << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
       }
     }
     paramsFile.close();
-
+    
   }
   
   template <typename ContextType>
@@ -313,19 +311,19 @@ namespace MultinomialParams {
   }
   
   // sample an integer from a multinomial
-  inline int SampleFromMultinomial(const MultinomialParam params) {
+  inline int64_t SampleFromMultinomial(const MultinomialParam params) {
     // generate a pseudo random number between 0 and 1
     double randomProb = ((double) rand() / (RAND_MAX));
     
     // find the lucky value
     for(MultinomialParam::const_iterator paramIter = params.begin(); 
-	paramIter != params.end(); 
-	paramIter++) {
+        paramIter != params.end(); 
+        paramIter++) {
       double valueProb = nExp(paramIter->second);
       if(randomProb <= valueProb) {
-	return paramIter->first;
+        return paramIter->first;
       } else {
-	randomProb -= valueProb;
+        randomProb -= valueProb;
       }
     }
     

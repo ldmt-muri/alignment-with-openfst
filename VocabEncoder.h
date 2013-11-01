@@ -16,12 +16,12 @@ using namespace std;
 
 class VocabEncoder {
  public:
-  int firstId, nextId;
-  boost::unordered_map<string, int> tokenToInt;
-  boost::unordered_map<int, string> intToToken;
+  int64_t firstId, nextId;
+  boost::unordered_map<string, int64_t> tokenToInt;
+  boost::unordered_map<int64_t, string> intToToken;
   std::string UNK;
   bool useUnk;
-  std::set<int> closedVocab;
+  std::set<int64_t> closedVocab;
   
  public:
   VocabEncoder() {
@@ -70,30 +70,30 @@ class VocabEncoder {
 	if(tokenToInt.count(*tokenIter) == 0) {
 	  tokenToInt[*tokenIter] = nextId;
 	  intToToken[nextId++] = *tokenIter;
-	  assert(nextId != INT_MAX);
+	  assert(nextId != LONG_MAX);
 	}
       }
     }
     useUnk = true;
   }
 
-  void ReserveVocabSize(int size) {
+  void ReserveVocabSize(int64_t size) {
     if(tokenToInt.size() < size && intToToken.size() < size) {
       tokenToInt.reserve(size);
       intToToken.reserve(size);
     }
   }
 
-  bool IsClosedVocab(int wordId) const {
+  bool IsClosedVocab(int64_t wordId) const {
     return (closedVocab.find(wordId) != closedVocab.end());
   }
 
   void AddToClosedVocab(std::string &word) {
-    int code = Encode(word, false);
+    int64_t code = Encode(word, false);
     closedVocab.insert(code);
   }
 
-  int UnkInt() const {
+  int64_t UnkInt() const {
     return tokenToInt.find(UNK)->second;
   }
 
@@ -103,7 +103,7 @@ class VocabEncoder {
 
   // a constant version of the encode function which guarantees that the underlying object state does not change
   // i.e. you cannot add new words to the vocab using this method
-  int ConstEncode(const string &token) const {
+  int64_t ConstEncode(const string &token) const {
     if(tokenToInt.count(token) == 0) {
       return tokenToInt.find(UNK)->second;
     } else {
@@ -111,14 +111,14 @@ class VocabEncoder {
     }    
   }
 
-  int Encode(const string& token, bool explicitUseUnk) {
+  int64_t Encode(const string& token, bool explicitUseUnk) {
     if(tokenToInt.count(token) == 0) {
       if(explicitUseUnk) {
         return tokenToInt[UNK];
       }	else {
         tokenToInt[token] = nextId;
         intToToken[nextId++] = token;
-        assert(nextId != INT_MAX);
+        assert(nextId != LONG_MAX);
         return tokenToInt[token];
       }
     } else {
@@ -126,11 +126,11 @@ class VocabEncoder {
     }
   }
   
-  int Encode(const string& token) {
+  int64_t Encode(const string& token) {
     return Encode(token, useUnk);
   }
   
-  void Encode(const std::vector<std::string>& tokens, vector<int>& ids) {
+  void Encode(const std::vector<std::string>& tokens, vector<int64_t>& ids) {
     assert(ids.size() == 0);
     for(vector<string>::const_iterator tokenIter = tokens.begin();
 	tokenIter != tokens.end();
@@ -140,16 +140,16 @@ class VocabEncoder {
     assert(ids.size() == tokens.size());
   }
   
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents) {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int64_t> > &srcSents, vector<vector<int64_t> > &tgtSents) {
     ReadParallelCorpus(textFilename, srcSents, tgtSents, "", false);
   }
   
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, bool reverse) {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int64_t> > &srcSents, vector<vector<int64_t> > &tgtSents, bool reverse) {
     ReadParallelCorpus(textFilename, srcSents, tgtSents, "", reverse);
   }
   
   // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int> > &srcSents, vector<vector<int> > &tgtSents, const string &nullToken, bool reverse) {
+  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int64_t> > &srcSents, vector<vector<int64_t> > &tgtSents, const string &nullToken, bool reverse) {
     assert(srcSents.size() == 0 && tgtSents.size() == 0);
     
     // open data file
@@ -173,7 +173,7 @@ class VocabEncoder {
       // encode tokens
       srcSents.resize(lineNumber+1);
       tgtSents.resize(lineNumber+1);
-      vector<int> temp;
+      vector<int64_t> temp;
       Encode(splits, temp);
       assert(splits.size() == temp.size());
       // src sent is written before tgt sent
@@ -208,7 +208,7 @@ class VocabEncoder {
   
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
-  void Read(const std::string &textFilename, vector<vector<int> > &data) {
+  void Read(const std::string &textFilename, vector<vector<int64_t> > &data) {
     
     assert(data.size() == 0);
     
@@ -217,7 +217,7 @@ class VocabEncoder {
     
     // for each line
     std::string line;
-    int lineNumber = -1;
+    int64_t lineNumber = -1;
     while(getline(textFile, line)) {
       
       // skip empty lines
@@ -238,7 +238,7 @@ class VocabEncoder {
   
   void PersistVocab(string filename) {
     std::ofstream vocabFile(filename.c_str(), std::ios::out);
-    for(boost::unordered_map<int, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
+    for(boost::unordered_map<int64_t, string>::const_iterator intToTokenIter = intToToken.begin(); intToTokenIter != intToToken.end(); intToTokenIter++) {
       bool inClosedVocab = closedVocab.find(intToTokenIter->first) != closedVocab.end();
       // c for closed, o for open
       vocabFile << intToTokenIter->first << " " << intToTokenIter->second << " " << (inClosedVocab? "c" : "o") << endl;
@@ -246,7 +246,7 @@ class VocabEncoder {
     vocabFile.close();
   }
 
-  const std::string& Decode(int wordId) const {
+  const std::string& Decode(int64_t wordId) const {
     if(intToToken.count(wordId) == 0) {
       return this->UNK;
     } else {
@@ -254,7 +254,7 @@ class VocabEncoder {
     }
   }
   
-  const std::string Decode(std::vector<int> &wordIds) const {
+  const std::string Decode(std::vector<int64_t> &wordIds) const {
     stringstream ss;
     for(auto wordIdIter = wordIds.begin(); wordIdIter != wordIds.end(); ++wordIdIter) {
       ss << Decode(*wordIdIter) << " ";
@@ -262,7 +262,7 @@ class VocabEncoder {
     return ss.str();
   } 
   
-  int Count() const {
+  int64_t Count() const {
     return intToToken.size();
   }
 
@@ -271,9 +271,9 @@ class VocabEncoder {
 
 class VocabDecoder {
  public:
-  boost::unordered_map<int, std::string> vocab;
+  boost::unordered_map<int64_t, std::string> vocab;
   std::string UNK;
-  set<int> closedVocab;
+  set<int64_t> closedVocab;
 
  public:
   VocabDecoder(const VocabDecoder& another) {
@@ -299,7 +299,7 @@ class VocabDecoder {
       std::vector<std::string> splits;
       StringUtils::SplitString(line, ' ', splits);
       stringstream ss(splits[0]);
-      int wordId;
+      int64_t wordId;
       ss >> wordId;
       vocab[wordId].assign(splits[1]);
       if(splits[2] == string("c")) {
@@ -318,7 +318,7 @@ class VocabDecoder {
     //vocab[0] = "_zero_"; // shouldn't happen!
   }
   
-  const std::string& Decode(int wordId) const {
+  const std::string& Decode(int64_t wordId) const {
     if(vocab.find(wordId) == vocab.end()) {
       return this->UNK;
     } else {
@@ -326,7 +326,7 @@ class VocabDecoder {
     }
   }
 
-  bool IsClosedVocab(int wordId) const {
+  bool IsClosedVocab(int64_t wordId) const {
     bool x = (closedVocab.find(wordId) != closedVocab.end());
     return x;
   }

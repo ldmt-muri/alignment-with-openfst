@@ -72,11 +72,11 @@ class IbmModel1 : public IAlignmentModel {
   string bitextFilename, outputPrefix;
   VectorFst<FstUtils::LogArc> grammarFst;
   LearningInfo learningInfo;
-  vector< vector<int> > srcSents, tgtSents;
+  vector< vector<int64_t> > srcSents, tgtSents;
 
  public:  
   // nlog prob(tgt word|src word)
-  MultinomialParams::ConditionalMultinomialParam<int> params;
+  MultinomialParams::ConditionalMultinomialParam<int64_t> params;
   int NULL_SRC_TOKEN_ID;
   VocabEncoder vocabEncoder;
 

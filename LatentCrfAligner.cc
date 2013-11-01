@@ -186,7 +186,7 @@ void LatentCrfAligner::PrepareExample(unsigned exampleId) {
   }
 }
 
-vector<int>& LatentCrfAligner::GetObservableSequence(int exampleId) {
+vector<int64_t>& LatentCrfAligner::GetObservableSequence(int exampleId) {
   if(testingMode) {
     assert(exampleId < testTgtSents.size());
     return testTgtSents[exampleId];
@@ -199,7 +199,7 @@ vector<int>& LatentCrfAligner::GetObservableSequence(int exampleId) {
   }
 }
 
-vector<int>& LatentCrfAligner::GetObservableContext(int exampleId) { 
+vector<int64_t>& LatentCrfAligner::GetObservableContext(int exampleId) { 
   if(testingMode) {
     assert(exampleId < testSrcSents.size());
     return testSrcSents[exampleId];

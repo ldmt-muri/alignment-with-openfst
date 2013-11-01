@@ -16,9 +16,9 @@ class LatentCrfAligner : public LatentCrfModel {
 
   ~LatentCrfAligner();
 
-  std::vector<int>& GetObservableSequence(int exampleId);
+  std::vector<int64_t>& GetObservableSequence(int exampleId);
 
-  std::vector<int>& GetObservableContext(int exampleId);
+  std::vector<int64_t>& GetObservableContext(int exampleId);
 
   void InitTheta();
 
