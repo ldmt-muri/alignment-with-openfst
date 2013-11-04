@@ -24,7 +24,7 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void PrepareExample(unsigned exampleId);
 
-  int GetContextOfTheta(unsigned sentId, int y);
+  int64_t GetContextOfTheta(unsigned sentId, int y);
 
  public:
 
@@ -38,23 +38,23 @@ class LatentCrfAligner : public LatentCrfModel {
 				     const std::string &initialThetaParamsFilename,
 				     const std::string &wordPairFeaturesFilename);
 
-  void Label(std::vector<int> &tokens, std::vector<int> &labels) { assert(false); /* cannot label without context */ }
+  void Label(std::vector<int64_t> &tokens, std::vector<int> &labels) { assert(false); /* cannot label without context */ }
 
-  void Label(std::vector<int> &tokens, std::vector<int> &context, std::vector<int> &labels);
+  void Label(std::vector<int64_t> &tokens, std::vector<int64_t> &context, std::vector<int> &labels);
 
   void Label(const string &labelsFilename);
 
-  void SetTestExample(std::vector<int> &x_t, std::vector<int> &x_s);
+  void SetTestExample(std::vector<int64_t> &x_t, std::vector<int64_t> &x_s);
 
  private:
   // vocabulary of src language
-  std::set<int> x_sDomain;
+  std::set<int64_t> x_sDomain;
 
   // data
-  std::vector< std::vector<int> > srcSents, tgtSents, testSrcSents, testTgtSents;
+  std::vector< std::vector<int64_t> > srcSents, tgtSents, testSrcSents, testTgtSents;
 
   // null token
-  static int NULL_TOKEN;
+  static int64_t NULL_TOKEN;
 
  public:
   // the value of y_i that indicates an alignment to the NULL source token, and to the first token in the source sentence, respectively.

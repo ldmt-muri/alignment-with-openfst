@@ -15,7 +15,7 @@ void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialPar
     BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
 
     // compute the B matrix for this sentence
-    boost::unordered_map< ContextType, boost::unordered_map< int, LogVal<double> > > B;
+    boost::unordered_map< ContextType, boost::unordered_map< int64_t, LogVal<double> > > B;
     B.clear();
     ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
     
@@ -23,9 +23,9 @@ void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialPar
     double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);    
 
     // update the gradient for every theta used in this sentence
-    for(typename boost::unordered_map< ContextType, boost::unordered_map<int, LogVal<double> > >::const_iterator yIter = B.begin(); yIter != B.end(); yIter++) {
+    for(auto yIter = B.begin(); yIter != B.end(); yIter++) {
       int context = GetContextOfTheta(sentId, yIter->first);
-      for(boost::unordered_map<int, LogVal<double> >::const_iterator zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
+      for(auto zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
 	int z_ = zIter->first;
 	double nLogb = -log<double>(zIter->second);
 	assert(zIter->second.s_ == false); //  all B values are supposed to be positive

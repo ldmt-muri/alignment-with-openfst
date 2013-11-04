@@ -1,7 +1,7 @@
 #include "LatentCrfAligner.h"
 
 string LatentCrfAligner::NULL_TOKEN_STR = "REDICULOUS";
-int LatentCrfAligner::NULL_TOKEN = -1000000;
+int64_t LatentCrfAligner::NULL_TOKEN = -1000000;
 unsigned LatentCrfAligner::FIRST_SRC_POSITION =  100000;
 
 // singleton
@@ -151,12 +151,12 @@ void LatentCrfAligner::InitTheta() {
   // first initialize nlogthetas to unnormalized gaussians
   nLogThetaGivenOneLabel.params.clear();
   for(unsigned sentId = 0; sentId < srcSents.size(); ++sentId) {
-    vector<int> &srcSent = srcSents[sentId];
-    vector<int> &tgtSent = tgtSents[sentId];
+    vector<int64_t> &srcSent = srcSents[sentId];
+    vector<int64_t> &tgtSent = tgtSents[sentId];
     for(unsigned i = 0; i < srcSent.size(); ++i) {
-      int srcToken = srcSent[i];
+      auto srcToken = srcSent[i];
       for(unsigned j = 0; j < tgtSent.size(); ++j) {
-	int tgtToken = tgtSent[j];
+	auto tgtToken = tgtSent[j];
 	if(learningInfo.initializeThetasWithGaussian) {
 	  nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
 	} else if (learningInfo.initializeThetasWithUniform || learningInfo.initializeThetasWithModel1) {
@@ -209,7 +209,7 @@ vector<int64_t>& LatentCrfAligner::GetObservableContext(int exampleId) {
   }   
 }
 
-void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
+void LatentCrfAligner::SetTestExample(vector<int64_t> &x_t, vector<int64_t> &x_s) {
   testSrcSents.clear();
   testSrcSents.push_back(x_s);
   testTgtSents.clear();
@@ -217,7 +217,7 @@ void LatentCrfAligner::SetTestExample(vector<int> &x_t, vector<int> &x_s) {
 }
 
 // tokens = target sentence
-void LatentCrfAligner::Label(vector<int> &tokens, vector<int> &context, vector<int> &labels) {
+void LatentCrfAligner::Label(vector<int64_t> &tokens, vector<int64_t> &context, vector<int> &labels) {
 
   // set up
   assert(labels.size() == 0); 
@@ -248,27 +248,21 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   // run viterbi (and write alignments in giza format)
   ofstream labelsFile(labelsFilename.c_str());
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
-  //cerr << "labeling the first " << examplesCount << " in the corpus" << endl;
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
-    //cerr << "rank" << learningInfo.mpiWorld->rank() << ": started processing exampleId " << exampleId << endl;
-    // if this example does not belong to this process, skip it (except for the master who receives its output)
     if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       if(learningInfo.mpiWorld->rank() == 0){
         string labelSequence;
-        //cerr << "master is waiting for the result of exampleId " << exampleId << " from rank " << exampleId % learningInfo.mpiWorld->size() << endl;
         learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
         labelsFile << labelSequence;
-        //cerr << "master received the reuslt of exampleId " << exampleId << " and printed it to disk" << endl;
       }
-      //cerr << "rank" << learningInfo.mpiWorld->rank() << " is done with exampleId" << endl;
       continue;
     }
-    std::vector<int> &srcSent = GetObservableContext(exampleId);
-    std::vector<int> &tgtSent = GetObservableSequence(exampleId);
+    std::vector<int64_t> &srcSent = GetObservableContext(exampleId);
+    std::vector<int64_t> &tgtSent = GetObservableSequence(exampleId);
     std::vector<int> labels;
     // run viterbi
     Label(tgtSent, srcSent, labels);
-    //
+    
     stringstream ss;
     for(unsigned i = 0; i < labels.size(); ++i) {
       // dont write null alignments
@@ -298,8 +292,8 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   labelsFile.close();
 }
 
-int LatentCrfAligner::GetContextOfTheta(unsigned sentId, int y) {
-  vector<int> &srcSent = GetObservableContext(sentId);
+int64_t LatentCrfAligner::GetContextOfTheta(unsigned sentId, int y) {
+  vector<int64_t> &srcSent = GetObservableContext(sentId);
   if(y == NULL_POSITION) {
     return NULL_TOKEN;
   } else {

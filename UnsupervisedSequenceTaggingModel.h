@@ -17,19 +17,19 @@ class UnsupervisedSequenceTaggingModel {
 
   virtual void Train() = 0;
 
-  virtual void Label(vector<int> &tokens, vector<int> &labels) = 0;
+  virtual void Label(vector<int64_t> &tokens, vector<int> &labels) = 0;
 
   void Label(vector<string> &tokens, vector<int> &labels) {
     assert(labels.size() == 0);
     assert(tokens.size() > 0);
-    vector<int> tokensInt;
+    vector<int64_t> tokensInt;
     for(int i = 0; i < tokens.size(); i++) {
       tokensInt.push_back(vocabEncoder.Encode(tokens[i]));
     }
     Label(tokensInt, labels);
   }
 
-  void Label(vector<vector<int> > &tokens, vector<vector<int> > &labels) {
+  void Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
     for(int i = 0; i < tokens.size(); i++) {
