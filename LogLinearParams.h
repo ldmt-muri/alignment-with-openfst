@@ -14,10 +14,10 @@
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/containers/map.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
-#include <boost/mpi/environment.hpp>
-#include <boost/mpi/communicator.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
 #include <boost/mpi/collectives.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/unordered_map.hpp>
@@ -34,6 +34,14 @@
 #include "VocabEncoder.h"
 #include "Samplers.h"
 #include "tuple.h"
+
+struct LogLinearParamsException : public std::exception
+{
+  std::string s;
+ LogLinearParamsException(std::string ss) : s(ss) {}
+  ~LogLinearParamsException() throw () {} // Updated
+  const char* what() const throw() { return s.c_str(); }
+};
 
 struct FeatureId {
 public:
@@ -245,13 +253,9 @@ class LogLinearParams {
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
-  ~LogLinearParams();
-
-  OuterMappedType* MapWordPairFeaturesToSharedMemory(bool create, string& objectNickname);
+  OuterMappedType* MapWordPairFeaturesToSharedMemory(bool create, const string& objectNickname);
   
   void* MapToSharedMemory(bool create, string name);
-
-  void SetSharedMemorySegment(bool create);
 
   template<class Archive>
     void save(Archive & os, const unsigned int version) const
@@ -288,9 +292,6 @@ class LogLinearParams {
   // this method seals the set of parameters being used, not their weights
   void Seal();
   bool IsSealed() const;
-
-  // create shared memory object to hold the feature ids and weights
-  void ManageSharedMemory(bool);
 
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);
 
@@ -393,10 +394,6 @@ class LogLinearParams {
 
   const set< int > *englishClosedClassTypes;
   
-  //ShmemNestedMap *precomputedFeaturesWithTwoInputsPtr;
-
-  boost::interprocess::managed_shared_memory *sharedMemorySegment;
-
  private:
   bool sealed;
   

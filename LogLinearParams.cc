@@ -101,14 +101,8 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
   return is;
 }
 
-LogLinearParams::~LogLinearParams() {
-  if(sharedMemorySegment != 0) {
-    delete sharedMemorySegment;
-  }
-}
-
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
-				 double gaussianStdDev) :
+                                 double gaussianStdDev) :
   types(types) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
@@ -116,7 +110,6 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   sealed = false;
   paramIdsPtr = 0;
   paramWeightsPtr = 0;
-  sharedMemorySegment = 0;
 }
 
 bool LogLinearParams::IsSealed() const {
@@ -128,19 +121,19 @@ bool LogLinearParams::IsSealed() const {
 void* LogLinearParams::MapToSharedMemory(bool create, const string objectNickname) {
 
   if(string(objectNickname) == string("paramWeights")) {
-    ShmemDoubleAllocator sharedMemoryDoubleAllocator(sharedMemorySegment->get_segment_manager()); 
+    ShmemDoubleAllocator sharedMemoryDoubleAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
     if(create) {
-      return sharedMemorySegment->construct<ShmemVectorOfDouble> (objectNickname.c_str()) (sharedMemoryDoubleAllocator);
+      return learningInfo->sharedMemorySegment->construct<ShmemVectorOfDouble> (objectNickname.c_str()) (sharedMemoryDoubleAllocator);
     } else {
-      return sharedMemorySegment->find<ShmemVectorOfDouble> (objectNickname.c_str()).first;
+      return learningInfo->sharedMemorySegment->find<ShmemVectorOfDouble> (objectNickname.c_str()).first;
     }
 
   } else if (string(objectNickname) == string("paramIds")) {
-    ShmemFeatureIdAllocator sharedMemoryFeatureIdAllocator(sharedMemorySegment->get_segment_manager());
+    ShmemFeatureIdAllocator sharedMemoryFeatureIdAllocator(learningInfo->sharedMemorySegment->get_segment_manager());
     if(create) {
-      return sharedMemorySegment->construct<ShmemVectorOfFeatureId> (objectNickname.c_str()) (sharedMemoryFeatureIdAllocator);
+      return learningInfo->sharedMemorySegment->construct<ShmemVectorOfFeatureId> (objectNickname.c_str()) (sharedMemoryFeatureIdAllocator);
     } else {
-      return sharedMemorySegment->find<ShmemVectorOfFeatureId> (objectNickname.c_str()).first;
+      return learningInfo->sharedMemorySegment->find<ShmemVectorOfFeatureId> (objectNickname.c_str()).first;
     }
 
   } /*else if (string(objectNickname) == string("precomputedFeaturesWithTwoInputs")) {
@@ -155,59 +148,39 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
   }
 }
 
-OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, string& objectNickname) {
-  ShmemInnerValueAllocator sharedMemorySimpleMapAllocator(sharedMemorySegment->get_segment_manager()); 
+// disclaimer: may return zeros
+OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, const string& objectNickname) {
+  ShmemInnerValueAllocator sharedMemorySimpleMapAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
   if(create) {
     try { 
-      auto temp = sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
+      auto temp = learningInfo->sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
       if(temp) {
         return temp;
       } 
     } catch(std::exception const&  ex) {
-      cerr << ex.what() << endl;
+      cerr << "create == True, sharedMemorySegment->find( " << objectNickname << " ) threw " << ex.what() << endl;
       assert(false);
     }
 
     try {
-      return sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
+      return learningInfo->sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
     } catch(std::exception const& ex) {
-      cerr << ex.what();
+      cerr << "sharedMemorySegment->construct( " << objectNickname << " ) threw " << ex.what() << endl;
       assert(false);
     }
   } else {
-    return sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
+    try {
+      auto temp = learningInfo->sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
+      if(temp) { 
+        return temp;
+      } else {
+        return 0;
+      }
+    } catch (std::exception const& ex) {
+      cerr << "create == false, sharedMemorySegment->find( " << objectNickname << " ) threw " << ex.what() << endl;
+      assert(false);
+    }
   }
-}
-
-void LogLinearParams::SetSharedMemorySegment(bool create)
-{
-  size_t segmentSize = 30 * 1024; // in GBs
-  segmentSize *= 1024 * 1024;
-  string SEGMENT_NAME = "segment";
-  using namespace boost::interprocess;
-  // Shared memory front-end that is able to construct objects
-  // associated with a c-string. Erase previous shared memory with the name
-  // to be used and create the memory segment at the specified address and initialize resources
-  if(create) {
-    cerr << "remove any shared memory object with the same name '" << SEGMENT_NAME << "'...";
-    shared_memory_object::remove(SEGMENT_NAME.c_str());
-    cerr << "done" << endl;
-
-    // create or open the shared memory segments
-    cerr << "requesting " << segmentSize << " bytes of managed shared memory for segment " << SEGMENT_NAME << "..." << endl;
-    sharedMemorySegment = new managed_shared_memory(open_or_create, SEGMENT_NAME.c_str(), segmentSize);
-    cerr << "done." << endl;
-    bool dummy = true;
-    mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
-  } else {
-    // master must 
-    bool dummy;
-    mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
-    cerr << "opening segment " << SEGMENT_NAME << " ...";
-    sharedMemorySegment = new managed_shared_memory(open_only, SEGMENT_NAME.c_str());      
-    cerr << "done.";
-  }
-  assert(sharedMemorySegment->get_size() == segmentSize);
 }
 
 void LogLinearParams::Seal() {
@@ -258,89 +231,88 @@ void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2
 void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairFeaturesFilename) {
   assert(learningInfo->mpiWorld->rank() == 0);
 
-  // create the map
-  //precomputedFeaturesWithTwoInputsPtr = (ShmemNestedMap *) MapToSharedMemory(true, "precomputedFeaturesWithTwoInputs");
-  //assert(precomputedFeaturesWithTwoInputsPtr != 0);
-  
   cerr << "rank " << learningInfo->mpiWorld->rank() << " is going to read the word pair features file..." << endl;
-  //int expectedSrcTgtPairs = 25 * 1000; expectedSrcTgtPairs *= 1000;
-    //precomputedFeaturesEncoder.ReserveVocabSize(expectedVocabSize);
-    //precomputedFeaturesWithTwoInputsPtr->reserve( expectedSrcTgtPairs );
-    //cerr << "precomputedFeaturesWithTwoInputs.reserve(" << expectedSrcTgtPairs << ") done." << endl;
-    ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
-    string line;
-    int featsCounter = 0;
-    std::hash<std::string> str_hash;
-    while( getline(wordPairFeaturesFile, line) ) {
-      if(line.size() == 0) {
-        continue;
-      }
-      std::vector<string> splits;
-      StringUtils::SplitString(line, ' ', splits);
-      // check format
-      if(splits.size() < 5) {
-        assert(false);
-        exit(1);
-      }
-      // splitsIter
-      vector<string>::iterator splitsIter = splits.begin();
-      // read the first input
-      string &input1String = *(splitsIter++);
-      int input1 = types.ConstEncode(input1String);
-      // skip |||
-      splitsIter++;
-      // read the second input
-      string &input2String = *(splitsIter++);
-      int input2 = types.ConstEncode(input2String);
-      // skip |||
-      splitsIter++;
-      std::stringstream srcTgtPairKey;
-      srcTgtPairKey << input1 << " " << input2;
-      string srcTgtPairKeyString = srcTgtPairKey.str();
-      //offset_ptr<std::_Rb_tree_node<std::pair<const FeatureId, double> >, long, unsigned long, 0UL> *tempMap = MapWordPa
-      cerr << "timestamp88" << endl;
-      auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPairKeyString);
-      cerr << "timestamp89" << endl;
-      // the remaining elements are precomputed features for (input1, input2)
-      while(splitsIter != splits.end()) {
-        // read feature id
-        std::vector<string> featureIdAndValue;
-        StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
-        assert(featureIdAndValue.size() == 2);
-        FeatureId featureId;
-        featureId.type = FeatureTemplate::PRECOMPUTED;
-        //featureId.precomputed = precomputedFeaturesEncoder.Encode(featureIdAndValue[0]);
-        featureId.precomputed = str_hash(featureIdAndValue[0]);
+  ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
+  string line;
+  int featsCounter = 0;
+  while( getline(wordPairFeaturesFile, line) ) {
+    if(line.size() == 0) {
+      continue;
+    }
+    std::vector<string> splits;
+    StringUtils::SplitString(line, ' ', splits);
+    // check format
+    if(splits.size() < 5) {
+      assert(false);
+      exit(1);
+    }
+    // splitsIter
+    vector<string>::iterator splitsIter = splits.begin();
+    // read the first input
+    string &input1String = *(splitsIter++);
+    int input1 = types.ConstEncode(input1String);
+    // skip |||
+    splitsIter++;
+    // read the second input
+    string &input2String = *(splitsIter++);
+    int input2 = types.ConstEncode(input2String);
+    // skip |||
+    splitsIter++;
+    std::stringstream srcTgtPairKey;
+    srcTgtPairKey << input1 << " " << input2;
+    auto srcTgtPairKeyStr = srcTgtPairKey.str();
+    string dummyStr("166 132");
+    bool debugOnly = (dummyStr == srcTgtPairKeyStr);
+    auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPairKeyStr);
+    if(debugOnly) {
+      cerr << "ALERT: map is created in shared memory for word pair " << srcTgtPairKeyStr << endl;
+    }
+    assert(tempMap);
+    // the remaining elements are precomputed features for (input1, input2)
+    while(splitsIter != splits.end()) {
+      // read feature id
+      std::vector<string> featureIdAndValue;
+      StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+      assert(featureIdAndValue.size() == 2);
+      FeatureId featureId;
+      featureId.type = FeatureTemplate::PRECOMPUTED;
+      featureId.precomputed = types.Encode(featureIdAndValue[0], false);
 
-        // read feature value
-        double featureValue;
-        stringstream temp;
-        temp << featureIdAndValue[1];
-        temp >> featureValue;
+      if(debugOnly) {
+        cerr << "ALERT: adding featureId.precomputed = " << featureId.precomputed << " for word pair " << srcTgtPairKeyStr << " ... ";
+        cerr << "types.Decode(featureId.precomputed) = " << types.Decode(featureId.precomputed) << endl;
+      }
+      
+      // read feature value
+      double featureValue;
+      stringstream temp;
+      temp << featureIdAndValue[1];
+      temp >> featureValue;
+      
+      try {
+        auto insertSuccess = tempMap->insert( std::pair<FeatureId, double>( featureId, featureValue ));
         
-        // store it for quick retrieval later on
-        //std::tuple<int, int> srcTgtPair(input1, input2);
-        //if(precomputedFeaturesWithTwoInputsPtr->find(srcTgtPair) == precomputedFeaturesWithTwoInputsPtr->end() && \
-        //   precomputedFeaturesWithTwoInputsPtr->size() % 1000000 == 0) {
-        //  cerr << "precomputedFeaturesWithTwoInputs.size() == " << precomputedFeaturesWithTwoInputsPtr->size() << endl;
-        //}
-        //(*precomputedFeaturesWithTwoInputsPtr)[srcTgtPair][featureId] = featureValue;
-        tempMap->insert( std::pair<FeatureId, double>( featureId, featureValue ));
-        
-        //if(++featsCounter % 10000000 == 0) {
-        //  cerr << "total featsCounter (including repetitions) = " << featsCounter << endl;
-        //}
+        if(debugOnly) {
+          if(insertSuccess.second) {
+            cerr << "success." << endl;
+          } else {
+            cerr << "failure." << endl;
+          }
+        }
+      } catch(std::exception const&  ex) {
+        cerr << "tempMap->insert( pair (" << featureId << ", " << featureValue << ") ) threw exception: "  << ex.what() << endl;
+        assert(false);
       }
     }
-    
-    wordPairFeaturesFile.close();
-    cerr << "rank " << learningInfo->mpiWorld->rank() << " finished reading the word pair features file." << endl;
-
+  }
+  
+  wordPairFeaturesFile.close();
+  cerr << "rank " << learningInfo->mpiWorld->rank() << " finished reading the word pair features file." << endl;
+  
 }
 
 void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
-  SetSharedMemorySegment(learningInfo.mpiWorld->rank() == 0);
 }
 
 int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
@@ -386,7 +358,8 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
   if(paramIndexes.count(paramId) == 0) {
     
     if(sealed) {
-      cerr << "trying to add the followign paramId after class is sealed: " << paramId << endl;
+      cerr << "trying to add the followign paramId after object is sealed: " << paramId << endl;
+      throw LogLinearParamsException("adding new parameter after object is sealed!");
     }
     // new features are not allowed when the object is sealed
     assert(!sealed);
@@ -447,7 +420,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
   //std::tuple<int, int> srcTgtPair(srcToken, tgtToken);
   std::stringstream srcTgtPairKey;
   srcTgtPairKey << srcToken << " " << tgtToken;
-  string srcTgtPairKeyStr = srcTgtPairKey.str();
+  auto srcTgtPairKeyStr = srcTgtPairKey.str();
   auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, srcTgtPairKeyStr);
   //  precomputedFeaturesWithTwoInputsPtr->size() != 0?
   //  &(  (*precomputedFeaturesWithTwoInputsPtr)[srcTgtPair] ) : 0;
@@ -486,7 +459,12 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
           for(auto precomputedIter = precomputedFeatures->begin();
               precomputedIter != precomputedFeatures->end();
               precomputedIter++) {
-            AddParam(precomputedIter->first);
+            try {
+              AddParam(precomputedIter->first);
+            } catch (LogLinearParamsException &ex) {
+              cerr << "LogLinearParamsException " << ex.what() << " -- thrown at LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, int START_OF_SENTENCE_Y_VALUE, int FIRST_POS, FastSparseVector<double> &activeFeatures) where yI = " << yI << ", yIM1 = " << yIM1 << ", i = " << i << ", x_t[i] = " << x_t[i] << ", x_s[yI] = " << x_s[yI] << ", types.Decode(x_t[i]) = " << types.Decode(x_t[i]) << ", types.Decode(x_s[yI]) = " << types.Decode(x_s[yI]) << ", precomputedFeatures->size() = " << precomputedFeatures->size() << ", precomputedIter->first = " << precomputedIter->first << ", precomputedIter->second = " << precomputedIter->second << ", srcTgtPairKey = " << srcTgtPairKey.str() << ", types.Decode(precomputedIter->first.precomputed) = " << types.Decode(precomputedIter->first.precomputed) << endl;
+              throw;
+            }
             activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
           }
         }

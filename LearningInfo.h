@@ -7,11 +7,12 @@
 #include <assert.h>
 #include <map>
 
+#include <boost/mpi/collectives.hpp>
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
 
 #include "IAlignmentSampler.h"
-#include "VocabEncoder.h"
 
 using namespace std;
 
@@ -194,9 +195,9 @@ struct Constraint {
 
 class LearningInfo {
  public:
- 
 
   LearningInfo() {
+    SetSharedMemorySegment(mpiWorld->rank() == 0);
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
     useEarlyStopping = false;
@@ -296,6 +297,42 @@ class LearningInfo {
     // none of the convergence conditions apply!
     return false;
   }
+
+  ~LearningInfo() {
+    if(sharedMemorySegment != 0 && mpiWorld->rank() == 0) {
+      delete sharedMemorySegment;
+    }
+  }
+  
+  void SetSharedMemorySegment(bool create) {
+    size_t segmentSize = 30 * 1024; // in GBs
+    segmentSize *= 1024 * 1024;
+    string SEGMENT_NAME = "segment";
+    using namespace boost::interprocess;
+    // Shared memory front-end that is able to construct objects
+    // associated with a c-string. Erase previous shared memory with the name
+    // to be used and create the memory segment at the specified address and initialize resources
+    if(create) {
+      cerr << "remove any shared memory object with the same name '" << SEGMENT_NAME << "'...";
+      shared_memory_object::remove(SEGMENT_NAME.c_str());
+      cerr << "done" << endl;
+      
+      // create or open the shared memory segments
+      cerr << "requesting " << segmentSize << " bytes of managed shared memory for segment " << SEGMENT_NAME << "..." << endl;
+      sharedMemorySegment = new managed_shared_memory(open_or_create, SEGMENT_NAME.c_str(), segmentSize);
+      cerr << "done." << endl;
+      bool dummy = true;
+      boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
+    } else {
+      // master must 
+      bool dummy;
+      boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
+      cerr << "opening segment " << SEGMENT_NAME << " ...";
+      sharedMemorySegment = new managed_shared_memory(open_only, SEGMENT_NAME.c_str());      
+      cerr << "done.";
+    }
+    assert(sharedMemorySegment->get_size() == segmentSize);
+  }
   
   // criteria 1
   bool useMaxIterationsCount;
@@ -340,12 +377,6 @@ class LearningInfo {
 
   // when using a proposal distribution for p(a,T|S), would you like to union the alignments of p(a|T,S) as well?
   bool unionAllCompatibleAlignments;
-
-  // map src type IDs to strings
-  VocabDecoder *srcVocabDecoder;
-
-  // map tgt type IDs to strings
-  VocabDecoder *tgtVocabDecoder;
 
   // ibm 1 forward log probs
   // [srcToken][tgtToken]
@@ -424,6 +455,11 @@ class LearningInfo {
 
   // train models for the reverse corpus direction
   bool reverse;
+
+  // shared memory segment to efficiently share objects across processes
+  boost::interprocess::managed_shared_memory *sharedMemorySegment;
+
+
 };
 
 

@@ -8,6 +8,7 @@
 #include "ClustersComparer.h"
 #include "StringUtils.h"
 #include "VocabEncoder.h"
+#include "LearningInfo.h"
 
 using namespace std;
 
@@ -88,14 +89,20 @@ class UnsupervisedSequenceTaggingModel {
 
  protected:
   
- UnsupervisedSequenceTaggingModel(const string &vocabEncoderFilenameInitializer) : vocabEncoder(vocabEncoderFilenameInitializer)  { 
+ UnsupervisedSequenceTaggingModel(const string &vocabEncoderFilenameInitializer, 
+                                  LearningInfo &learningInfo) : 
+  vocabEncoder(vocabEncoderFilenameInitializer, learningInfo),
+    learningInfo(learningInfo)
+  { 
   }
-  ~UnsupervisedSequenceTaggingModel() { }
 
+  ~UnsupervisedSequenceTaggingModel() { }
+  
  public:
   // vocab encoders
   VocabEncoder vocabEncoder;
-
+  LearningInfo &learningInfo;
+  
 };
 
 #endif

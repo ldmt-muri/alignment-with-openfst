@@ -17,7 +17,7 @@ IbmModel1::IbmModel1(const string& bitextFilename,
 
 IbmModel1::IbmModel1(const string& bitextFilename, 
                      const string& outputFilenamePrefix, 
-                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename) {
+                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename, learningInfo) {
   
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__");
 }

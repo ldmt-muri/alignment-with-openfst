@@ -26,7 +26,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       LearningInfo &learningInfo, 
 			       unsigned FIRST_LABEL_ID,
 			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
-							    UnsupervisedSequenceTaggingModel(textFilename) {
+                                          UnsupervisedSequenceTaggingModel(textFilename, learningInfo) {
   
   
   AddEnglishClosedVocab();
@@ -656,7 +656,7 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
   assert(task != Task::WORD_ALIGNMENT); // the latent variable y_ needs to be re-interpreted for the word alignment task while using mle[] or theta[]
   // encode labels
   assert(goldLabelsFilename.size() != 0);
-  VocabEncoder labelsEncoder(goldLabelsFilename, FIRST_ALLOWED_LABEL_VALUE);
+  VocabEncoder labelsEncoder(goldLabelsFilename, learningInfo, FIRST_ALLOWED_LABEL_VALUE);
   labels.clear();
   labelsEncoder.Read(goldLabelsFilename, labels);
   
