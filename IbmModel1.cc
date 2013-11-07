@@ -11,13 +11,13 @@ IbmModel1::IbmModel1(const string& bitextFilename,
                      const string& outputFilenamePrefix, 
                      const LearningInfo& learningInfo,
                      const string &NULL_SRC_TOKEN,
-                     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder) {
+                     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder), learningInfo(learningInfo) {
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN);
 }
 
 IbmModel1::IbmModel1(const string& bitextFilename, 
                      const string& outputFilenamePrefix, 
-                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename, learningInfo) {
+                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename, learningInfo), learningInfo(learningInfo) {
   
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__");
 }
@@ -30,11 +30,9 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
   // set member variables
   this->bitextFilename = bitextFilename;
   this->outputPrefix = outputFilenamePrefix;
-  this->learningInfo = learningInfo;
   
   // read encoded training data
-  vocabEncoder.useUnk = false;
-  NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN, false);
+  NULL_SRC_TOKEN_ID = vocabEncoder.Encode(NULL_SRC_TOKEN);
   vocabEncoder.ReadParallelCorpus(bitextFilename, srcSents, tgtSents, NULL_SRC_TOKEN, learningInfo.reverse);
   assert(srcSents.size() > 0 && srcSents.size() == tgtSents.size());  
   assert(vocabEncoder.ConstEncode(NULL_SRC_TOKEN) != vocabEncoder.UnkInt());

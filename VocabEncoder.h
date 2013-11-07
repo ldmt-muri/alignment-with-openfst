@@ -59,7 +59,6 @@ class VocabEncoder {
   ShmemIntToTokenMap *intToToken;
   std::string UNK;
   char_string *UNK_char_string;
-  bool useUnk;
   std::set<int64_t> closedVocab;
   const LearningInfo &learningInfo;
   void_allocator *alloc_inst;
@@ -67,15 +66,27 @@ class VocabEncoder {
  public:
 
   void Init(unsigned firstId) {
-    useUnk = false;
     nextId = firstId;
     UNK = "_unk_";
 
     alloc_inst = new void_allocator(learningInfo.sharedMemorySegment->get_segment_manager());
 
-    // managed shared memory objects
-    MapToSharedMemory(learningInfo.mpiWorld->rank() == 0, "VocabEncoder::intToToken");
-    MapToSharedMemory(learningInfo.mpiWorld->rank() == 0, "VocabEncoder::tokenToInt");
+    // create/find managed shared memory objects
+    if(learningInfo.mpiWorld->rank() == 0) {
+      // create
+      intToToken = (ShmemIntToTokenMap *) MapToSharedMemory(true, "VocabEncoder::intToToken");
+      tokenToInt = (ShmemTokenToIntMap *) MapToSharedMemory(true, "VocabEncoder::tokenToInt");
+      // then sync
+      bool dummy = false;
+      boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+    } else {
+      // sync
+      bool dummy = false;
+      boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+      // then find
+      intToToken = (ShmemIntToTokenMap *) MapToSharedMemory(false, "VocabEncoder::intToToken");
+      tokenToInt = (ShmemTokenToIntMap *) MapToSharedMemory(false, "VocabEncoder::tokenToInt");
+    }
 
     // encode unk 
     UNK_char_string = new char_string(UNK.c_str(), *alloc_inst);
@@ -85,17 +96,6 @@ class VocabEncoder {
   
  VocabEncoder(const LearningInfo &learningInfo, unsigned firstId = 2): learningInfo(learningInfo) {
     Init(firstId);
-  }
-
-  // copy constructor (deep)
- VocabEncoder(const VocabEncoder &original) : learningInfo(original.learningInfo) {
-    this->firstId = original.firstId;
-    this->nextId = original.nextId;
-    this->tokenToInt = original.tokenToInt;
-    this->intToToken = original.intToToken;
-    this->UNK = original.UNK;
-    this->useUnk = original.useUnk;
-    this->closedVocab = original.closedVocab;
   }
 
  VocabEncoder(const std::string& textFilename, const LearningInfo &learningInfo, unsigned firstId = 2) : learningInfo(learningInfo) {
@@ -121,7 +121,6 @@ class VocabEncoder {
         }
       }
     }
-    useUnk = true;
   }
 
   void ReserveVocabSize(int64_t size) {
@@ -139,7 +138,7 @@ class VocabEncoder {
   }
 
   void AddToClosedVocab(std::string &word) {
-    int64_t code = Encode(word, false);
+    int64_t code = ConstEncode(word);
     closedVocab.insert(code);
   }
 
@@ -162,31 +161,23 @@ class VocabEncoder {
     }    
   }
 
-  int64_t Encode(const string& token, bool explicitUseUnk) {
+  int64_t Encode(const string& token) {
     char_string token_char_string(token.c_str(), *alloc_inst);
     if((*tokenToInt).count(token_char_string) == 0) {
-      if(explicitUseUnk) {
-        return (*tokenToInt)[*UNK_char_string];
-      }	else {
-        tokenToInt->insert(TokenToIntPair(token_char_string, nextId));
-        intToToken->insert(IntToTokenPair(nextId++, token_char_string));
-        assert(nextId != LONG_MAX);
-        return (*tokenToInt)[token_char_string];
-      }
+      tokenToInt->insert(TokenToIntPair(token_char_string, nextId));
+      intToToken->insert(IntToTokenPair(nextId++, token_char_string));
+      assert(nextId != LONG_MAX);
+      return (*tokenToInt)[token_char_string];
     } else {
       return (*tokenToInt)[token_char_string];
     }
   }
   
-  int64_t Encode(const string& token) {
-    return Encode(token, useUnk);
-  }
-  
   void Encode(const std::vector<std::string>& tokens, vector<int64_t>& ids) {
     assert(ids.size() == 0);
     for(vector<string>::const_iterator tokenIter = tokens.begin();
-	tokenIter != tokens.end();
-	tokenIter++) {
+        tokenIter != tokens.end();
+        tokenIter++) {
       ids.push_back(Encode(*tokenIter));
     }
     assert(ids.size() == tokens.size());
@@ -231,29 +222,29 @@ class VocabEncoder {
       // src sent is written before tgt sent
       bool src = true;
       if(nullToken.size() > 0) {
-	// insert null token at the beginning of src sentence
-	srcSents[lineNumber].push_back(Encode(nullToken, false));
+        // insert null token at the beginning of src sentence
+        srcSents[lineNumber].push_back(Encode(nullToken));
       }
       for(unsigned i = 0; i < temp.size(); i++) {
-	if(splits[i] == "|||") {
-	  // done with src sent. 
-	  src = false;
-	  // will now read tgt sent.
-	  continue;
-	}
-	if(src) {
-	  if(!reverse) {
-      srcSents[lineNumber].push_back(temp[i]);
-    } else {
-      tgtSents[lineNumber].push_back(temp[i]);
-    }
-	} else {
-    if(!reverse) {
-      tgtSents[lineNumber].push_back(temp[i]);
-    } else {
-      srcSents[lineNumber].push_back(temp[i]);
-    }
-	}
+        if(splits[i] == "|||") {
+          // done with src sent. 
+          src = false;
+          // will now read tgt sent.
+          continue;
+        }
+        if(src) {
+          if(!reverse) {
+            srcSents[lineNumber].push_back(temp[i]);
+          } else {
+            tgtSents[lineNumber].push_back(temp[i]);
+          }
+        } else {
+          if(!reverse) {
+            tgtSents[lineNumber].push_back(temp[i]);
+          } else {
+            srcSents[lineNumber].push_back(temp[i]);
+          }
+        }
       }
     }
   }
@@ -319,92 +310,40 @@ class VocabEncoder {
   }
 
   void* MapToSharedMemory(bool create, const string objectNickname) {
+    cerr << "rank " << learningInfo.mpiWorld->rank() << ": entering VocabEncoder::MapToSharedMemory()" << endl;
     if(string(objectNickname) == string("VocabEncoder::tokenToInt")) {
       ShmemTokenToIntPairAllocator allocator(learningInfo.sharedMemorySegment->get_segment_manager()); 
       if(create) {
-        return learningInfo.sharedMemorySegment->construct<ShmemTokenToIntMap> (objectNickname.c_str()) (std::less<char_string>(), allocator);
+        cerr << "constructing VocabEncoder::tokenToInt...";
+        auto temp = learningInfo.sharedMemorySegment->construct<ShmemTokenToIntMap> (objectNickname.c_str()) (std::less<char_string>(), allocator);
+        cerr << "done." << endl;
+        return temp;
       } else {
-        return learningInfo.sharedMemorySegment->find<ShmemTokenToIntMap> (objectNickname.c_str()).first;
+        cerr << "finding VocabEncoder::tokenToInt...";
+        auto temp = learningInfo.sharedMemorySegment->find<ShmemTokenToIntMap> (objectNickname.c_str()).first;
+        cerr << "done." << endl;
+        return temp;
       }
     } else if (string(objectNickname) == string("VocabEncoder::intToToken")) {
       ShmemIntToTokenPairAllocator allocator(learningInfo.sharedMemorySegment->get_segment_manager()); 
       if(create) {
-        return learningInfo.sharedMemorySegment->construct<ShmemIntToTokenMap> (objectNickname.c_str()) (std::less<int64_t>(), allocator);
+        cerr << "constructing VocabEncoder::intToToken...";
+        auto temp = learningInfo.sharedMemorySegment->construct<ShmemIntToTokenMap> (objectNickname.c_str()) (std::less<int64_t>(), allocator);
+        cerr << "done.";
+        return temp;
       } else {
-        return learningInfo.sharedMemorySegment->find<ShmemIntToTokenMap> (objectNickname.c_str()).first;
+        cerr << "finding VocabEncoder::intToToken...";
+        auto temp = learningInfo.sharedMemorySegment->find<ShmemIntToTokenMap> (objectNickname.c_str()).first;
+        cerr << "done.";
+        return temp;
       }
     } else {
       assert(false);
     }
+    cerr << "rank " << learningInfo.mpiWorld->rank() << ": exiting VocabEncoder::MapToSharedMemory()" << endl;
+    
   }
 };
 
-  /*
-class VocabDecoder {
- public:
-  boost::unordered_map<int64_t, std::string> vocab;
-  std::string UNK;
-  set<int64_t> closedVocab;
-
- public:
-  VocabDecoder(const VocabDecoder& another) {
-    vocab = another.vocab;
-    UNK = another.UNK;
-    closedVocab = another.closedVocab;
-  }
-
-  VocabDecoder(VocabDecoder& another) {
-    vocab = another.vocab;
-    UNK = another.UNK;
-    closedVocab = another.closedVocab;
-  }
-
-  VocabDecoder(const std::string& vocabFilename) {
-    std::ifstream vocabFile(vocabFilename.c_str(), std::ios::in);
-    std::string line;
-    UNK = "_unk_";
-    while(getline(vocabFile, line)) {
-      if(line.size() == 0) {
-	continue;
-      }
-      std::vector<std::string> splits;
-      StringUtils::SplitString(line, ' ', splits);
-      stringstream ss(splits[0]);
-      int64_t wordId;
-      ss >> wordId;
-      vocab[wordId].assign(splits[1]);
-      if(splits[2] == string("c")) {
-	closedVocab.insert(wordId);
-      } else if(splits[2] == string("o")) {
-	// do nothing
-      } else {
-	// format error!
-	assert(false);
-      }
-      
-    }
-    vocabFile.close();
-    vocab[1] = "_null_";
-    vocab[-1] = "_<s>_";
-    //vocab[0] = "_zero_"; // shouldn't happen!
-  }
-  
-  const std::string& Decode(int64_t wordId) const {
-    if(vocab.find(wordId) == vocab.end()) {
-      return this->UNK;
-    } else {
-      return vocab.find(wordId)->second;
-    }
-  }
-
-  bool IsClosedVocab(int64_t wordId) const {
-    bool x = (closedVocab.find(wordId) != closedVocab.end());
-    return x;
-  }
-
-
-};
-
-  */
 #endif
 

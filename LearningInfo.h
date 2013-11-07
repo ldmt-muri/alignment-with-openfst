@@ -196,8 +196,11 @@ struct Constraint {
 class LearningInfo {
  public:
 
-  LearningInfo() {
+ LearningInfo(boost::mpi::communicator *mpiWorld) : mpiWorld(mpiWorld)  {
+    responsibleForDeletingSharedMemory = false;
+    cerr << "timestamp 1.01" << endl;
     SetSharedMemorySegment(mpiWorld->rank() == 0);
+    cerr << "timestamp 1.02" << endl;
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
     useEarlyStopping = false;
@@ -299,12 +302,17 @@ class LearningInfo {
   }
 
   ~LearningInfo() {
-    if(sharedMemorySegment != 0 && mpiWorld->rank() == 0) {
+    if(sharedMemorySegment != 0 && responsibleForDeletingSharedMemory) {
+      cerr << "deleting shared memory" << endl;
       delete sharedMemorySegment;
+      sharedMemorySegment = 0;
     }
   }
   
   void SetSharedMemorySegment(bool create) {
+    if(create) {
+      responsibleForDeletingSharedMemory = true;
+    }
     size_t segmentSize = 30 * 1024; // in GBs
     segmentSize *= 1024 * 1024;
     string SEGMENT_NAME = "segment";
@@ -312,6 +320,7 @@ class LearningInfo {
     // Shared memory front-end that is able to construct objects
     // associated with a c-string. Erase previous shared memory with the name
     // to be used and create the memory segment at the specified address and initialize resources
+    cerr << "rank " << mpiWorld->rank() << ": timestamp 1.1" << endl;
     if(create) {
       cerr << "remove any shared memory object with the same name '" << SEGMENT_NAME << "'...";
       shared_memory_object::remove(SEGMENT_NAME.c_str());
@@ -325,7 +334,7 @@ class LearningInfo {
       boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
     } else {
       // master must 
-      bool dummy;
+      bool dummy = false;
       boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
       cerr << "opening segment " << SEGMENT_NAME << " ...";
       sharedMemorySegment = new managed_shared_memory(open_only, SEGMENT_NAME.c_str());      
@@ -459,9 +468,8 @@ class LearningInfo {
   // shared memory segment to efficiently share objects across processes
   boost::interprocess::managed_shared_memory *sharedMemorySegment;
 
+  bool responsibleForDeletingSharedMemory;
 
 };
-
-
 
 #endif

@@ -94,6 +94,7 @@ class UnsupervisedSequenceTaggingModel {
   vocabEncoder(vocabEncoderFilenameInitializer, learningInfo),
     learningInfo(learningInfo)
   { 
+    cerr << "rank " << learningInfo.mpiWorld->rank() << ": entering UnsupervisedSequenceTaggingModel::constructor()" << endl;
   }
 
   ~UnsupervisedSequenceTaggingModel() { }

@@ -67,6 +67,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
                      LearningInfo &learningInfo, int &maxModel1IterCount) {
   
+  cerr << "rank: " << learningInfo.mpiWorld->rank() << "entered ParseParameters." << endl;
+  
   string HELP = "help",
     TRAIN_DATA = "train-data", 
     INIT_LAMBDA = "init-lambda",
@@ -211,7 +213,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 }
 
 // returns the rank of the process which have found the best HMM parameters
-void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount) {
+void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount, LearningInfo& originalLearningInfo) {
 
   // only the master does this
   if(world.rank() != 0){
@@ -224,7 +226,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   // configurations
   cerr << "rank #" << world.rank() << ": training the ibm model 1 to initialize latentCrfAligner parameters..." << endl;
 
-  LearningInfo learningInfo;
+  LearningInfo learningInfo = originalLearningInfo;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = maxIterCount;
   learningInfo.useMinLikelihoodRelativeDiff = true;
@@ -235,7 +237,9 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
+  cerr << "about to initialize IbmModel1." << endl;
   IbmModel1 ibmModel1(textFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN, latentCrfAligner.vocabEncoder);
+  cerr << "finished initializing IbmModel1." << endl;
 
   // train model parameters
   cerr << "rank #" << world.rank() << ": train the model..." << endl;
@@ -247,13 +251,12 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
     // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
     cerr << "rank #" << world.rank() << ": now update the multinomial params of the latentCrfALigner model." << endl;
     for(auto contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
-	contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
-	contextIter++) {
+        contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
+        contextIter++) {
       
       for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-	
-	assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
-	probIter->second = ibmModel1.params[contextIter->first][probIter->first];
+        assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
+        probIter->second = ibmModel1.params[contextIter->first][probIter->first];
       }
     }
   }
@@ -289,15 +292,9 @@ int main(int argc, char **argv) {
   mpi::environment env(argc, argv);
   mpi::communicator world;
 
-  // parse arguments
-  if(world.rank() == 0) {
-    cerr << "master" << world.rank() << ": parsing arguments...";
-  }
-  LearningInfo learningInfo;
-  if(world.rank() == 0) {
-    cerr << "done." << endl;
-  }
+  cerr << "rank: " << world.rank() << " is born." << endl;
 
+  LearningInfo learningInfo(&world);
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -305,10 +302,12 @@ int main(int argc, char **argv) {
   srand(seed);
 
   // configurations
+  cerr << "rank: " << world.rank() << " timestamp2." << endl;
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": setting configurations...";
   }
   // general 
+  cerr << "rank: " << world.rank() << " timestamp3." << endl;
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.mpiWorld = &world;
@@ -349,13 +348,16 @@ int main(int argc, char **argv) {
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
   int ibmModel1MaxIterCount = 15;
+  cerr << "rank: " << world.rank() << " timestamp3." << endl;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
                       learningInfo, ibmModel1MaxIterCount)){
     assert(false);
   }
+  cerr << "rank: " << world.rank() << " timestamp4." << endl;
   
   // initialize the model
+  cerr << "rank: " << world.rank() << " timestamp5." << endl;
   LatentCrfModel* model = LatentCrfAligner::GetInstance(textFilename, 
 							outputFilenamePrefix, 
 							learningInfo, 
@@ -363,11 +365,12 @@ int main(int argc, char **argv) {
 							initialLambdaParamsFilename, 
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);
+  cerr << "rank: " << world.rank() << " timestamp6." << endl;
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
   if(initialThetaParamsFilename.size() == 0) {
     // ibm model 1 initialization of theta params. 
-    IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount);
+    IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount, learningInfo);
   }
 
   latentCrfAligner.BroadcastTheta(0);

@@ -15,12 +15,12 @@ LatentCrfModel* LatentCrfAligner::GetInstance(const string &textFilename,
 
   if(!instance) {
     instance = new LatentCrfAligner(textFilename, 
-				    outputPrefix,
-				    learningInfo, 
-				    FIRST_LABEL_ID, 
-				    initialLambdaParamsFilename, 
-				    initialThetaParamsFilename,
-				    wordPairFeaturesFilename);
+                                    outputPrefix,
+                                    learningInfo, 
+                                    FIRST_LABEL_ID, 
+                                    initialLambdaParamsFilename, 
+                                    initialThetaParamsFilename,
+                                    wordPairFeaturesFilename);
   }
   return instance;
 }
@@ -40,11 +40,12 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 				   const string &initialLambdaParamsFilename, 
 				   const string &initialThetaParamsFilename,
 				   const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename,
-											    outputPrefix,
-											    learningInfo,
-											    FIRST_LABEL_ID,
-											    LatentCrfAligner::Task::WORD_ALIGNMENT) {
-
+                                                                    outputPrefix,
+                                                                    learningInfo,
+                                                                    FIRST_LABEL_ID,
+                                                                    LatentCrfAligner::Task::WORD_ALIGNMENT) {
+  
+  cerr << "rank " << learningInfo.mpiWorld->rank() << ": entered LatentCrfAligner::LatentCrfAligner()" << endl;
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -55,44 +56,15 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   // unlike POS tagging, yDomain depends on the src sentence length. we will set it on a per-sentence basis.
   this->yDomain.clear();
 
-  // populate zDomain (tgt language vocabulary) and x_sDomain (src language vocabulary), by reading the parallel-data file
-  std::ifstream textFile(textFilename.c_str(), std::ios::in);
-  std::string line;
-  while(getline(textFile, line)) {
-    // skip empty lines
-    if(line.size() == 0) {
-      continue;
-    }
-    // convert "the src sent ||| the tgt sent" into one string vector
-    std::vector<string> splits;
-    StringUtils::SplitString(line, ' ', splits);
-    // each line starts with the source sentence
-    bool src = true;
-    // for each token in the line
-    for(std::vector<string>::const_iterator tokenIter = splits.begin(); 
-        tokenIter != splits.end();
-        tokenIter++) {
-      if(*tokenIter == "|||") {
-        // then the target sentence
-        src = false;
-        continue;
-      }
-      // either add it to source vocab or target vocab
-      if(src) {
-        x_sDomain.insert(vocabEncoder.Encode(*tokenIter));
-      } else {
-        zDomain.insert(vocabEncoder.Encode(*tokenIter));
-      }
-    }
+  // slaves wait for master
+  if(learningInfo.mpiWorld->rank() != 0) {
+    bool dummy;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
   }
-  
-  // zero is reserved for FST epsilon (I don't think this is a problem since we don't use the x_i nor the z_i as fst labels)
-  assert(this->x_sDomain.count(0) == 0 && this->zDomain.count(0) == 0);
-  
+
   // encode the null token which is conventionally added to the beginning of the src sentnece. 
   NULL_TOKEN_STR = "__null__token__";
-  bool explicitUseUnk = false;
-  NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR, explicitUseUnk);
+  NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR);
   assert(NULL_TOKEN != vocabEncoder.UnkInt());
   
   // read and encode data
@@ -107,6 +79,12 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(srcSents.size() == tgtSents.size());
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
+
+  // master signals to slaves that he's done
+  if(learningInfo.mpiWorld->rank() == 0) {
+    bool dummy;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+  }
   
   // initialize (and normalize) the log theta params to gaussians
   if(initialThetaParamsFilename.size() == 0) {
@@ -138,6 +116,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(lambda->paramWeightsTemp.size() == 0 && lambda->paramIdsTemp.size() == 0);
   assert(lambda->paramWeightsPtr->size() == lambda->paramIndexes.size());
   assert(lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
+
+  cerr << "rank " << learningInfo.mpiWorld->rank() << ": exiting LatentCrfAligner::LatentCrfAligner()" << endl;
 }
 
 void LatentCrfAligner::InitTheta() {

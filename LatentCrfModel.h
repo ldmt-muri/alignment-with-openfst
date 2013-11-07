@@ -328,7 +328,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   
  protected:
   static LatentCrfModel *instance;
-  std::tr1::unordered_set<int> zDomain, yDomain;
+  std::tr1::unordered_set<int> /*zDomain, */yDomain;
   GaussianSampler gaussianSampler;
   SimAnneal simulatedAnnealer;
   // during training time, and by default, this should be set to false. 

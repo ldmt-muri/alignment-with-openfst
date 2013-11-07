@@ -48,7 +48,7 @@ class LatentCrfAligner : public LatentCrfModel {
 
  private:
   // vocabulary of src language
-  std::set<int64_t> x_sDomain;
+  //std::set<int64_t> x_sDomain;
 
   // data
   std::vector< std::vector<int64_t> > srcSents, tgtSents, testSrcSents, testTgtSents;

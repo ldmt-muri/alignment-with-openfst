@@ -26,8 +26,10 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       LearningInfo &learningInfo, 
 			       unsigned FIRST_LABEL_ID,
 			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
-                                          UnsupervisedSequenceTaggingModel(textFilename, learningInfo) {
+                                          UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
+                                          learningInfo(learningInfo) {
   
+  cerr << "rank " << learningInfo.mpiWorld->rank() << ": entering LatentCrfModel::LatentCrfModel()" << endl;
   
   AddEnglishClosedVocab();
   
@@ -52,6 +54,8 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 
   // what task is this core being used for? pos tagging? word alignment?
   this->task = task;
+
+  cerr << "rank " << learningInfo.mpiWorld->rank() << ": exiting LatentCrfModel::LatentCrfModel()" << endl;
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {

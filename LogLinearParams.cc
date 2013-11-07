@@ -192,6 +192,10 @@ void LogLinearParams::Seal() {
     paramIdsPtr = (ShmemVectorOfFeatureId *) MapToSharedMemory(true, "paramIds");
     assert(paramIdsPtr != 0);
     
+    // sync
+    bool dummy = true;
+    boost::mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
+    
     // copy paramIdsTemp and paramWeightsTemp, and wipe off temporary parameters you had
     assert(paramWeightsTemp.size() == paramIdsTemp.size());
     for(int i = 0; i < paramWeightsTemp.size(); ++i) {
@@ -200,17 +204,22 @@ void LogLinearParams::Seal() {
     }
     paramWeightsTemp.clear(); 
     paramIdsTemp.clear(); 
+
   } else {
+
     // this is done by the slaves, not the master
     assert(learningInfo->mpiWorld->rank() != 0);
     // first, wipe off all the parameters you already have to save memory
     paramWeightsTemp.clear(); 
     paramIdsTemp.clear(); 
 
+    // sync
+    bool dummy = true;
+    boost::mpi::broadcast<bool>(*learningInfo->mpiWorld, dummy, 0);
+
     // map paramIds and paramWeights to shared memory
     paramWeightsPtr = (ShmemVectorOfDouble *)MapToSharedMemory(false, "paramWeights");
     paramIdsPtr = (ShmemVectorOfFeatureId *)MapToSharedMemory(false, "paramIds");
-    //precomputedFeaturesWithTwoInputsPtr = (ShmemNestedMap *)MapToSharedMemory(false, "precomputedFeaturesWithTwoInputs");
   }
   assert(paramIdsPtr != 0 && paramWeightsPtr != 0);
   sealed = true;
@@ -235,6 +244,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
   ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
   string line;
   int featsCounter = 0;
+
   while( getline(wordPairFeaturesFile, line) ) {
     if(line.size() == 0) {
       continue;
@@ -261,12 +271,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     std::stringstream srcTgtPairKey;
     srcTgtPairKey << input1 << " " << input2;
     auto srcTgtPairKeyStr = srcTgtPairKey.str();
-    string dummyStr("166 132");
-    bool debugOnly = (dummyStr == srcTgtPairKeyStr);
     auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPairKeyStr);
-    if(debugOnly) {
-      cerr << "ALERT: map is created in shared memory for word pair " << srcTgtPairKeyStr << endl;
-    }
     assert(tempMap);
     // the remaining elements are precomputed features for (input1, input2)
     while(splitsIter != splits.end()) {
@@ -276,13 +281,8 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       assert(featureIdAndValue.size() == 2);
       FeatureId featureId;
       featureId.type = FeatureTemplate::PRECOMPUTED;
-      featureId.precomputed = types.Encode(featureIdAndValue[0], false);
+      featureId.precomputed = types.Encode(featureIdAndValue[0]);
 
-      if(debugOnly) {
-        cerr << "ALERT: adding featureId.precomputed = " << featureId.precomputed << " for word pair " << srcTgtPairKeyStr << " ... ";
-        cerr << "types.Decode(featureId.precomputed) = " << types.Decode(featureId.precomputed) << endl;
-      }
-      
       // read feature value
       double featureValue;
       stringstream temp;
@@ -291,14 +291,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       
       try {
         auto insertSuccess = tempMap->insert( std::pair<FeatureId, double>( featureId, featureValue ));
-        
-        if(debugOnly) {
-          if(insertSuccess.second) {
-            cerr << "success." << endl;
-          } else {
-            cerr << "failure." << endl;
-          }
-        }
+       
       } catch(std::exception const&  ex) {
         cerr << "tempMap->insert( pair (" << featureId << ", " << featureValue << ") ) threw exception: "  << ex.what() << endl;
         assert(false);
