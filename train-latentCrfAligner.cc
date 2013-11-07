@@ -373,6 +373,8 @@ int main(int argc, char **argv) {
     IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount, learningInfo);
   }
 
+  cerr << "done with model 1 initialization" << endl;
+
   latentCrfAligner.BroadcastTheta(0);
   
   assert(model->lambda->IsSealed());
@@ -396,4 +398,6 @@ int main(int argc, char **argv) {
   string labelsFilename = outputFilenamePrefix + ".labels";
   ((LatentCrfAligner*)model)->Label(labelsFilename);
   cerr << "alignments can be found at " << labelsFilename << endl;
+
+  learningInfo.ClearSharedMemorySegment();
 }

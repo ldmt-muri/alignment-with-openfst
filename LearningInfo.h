@@ -197,7 +197,6 @@ class LearningInfo {
  public:
 
  LearningInfo(boost::mpi::communicator *mpiWorld) : mpiWorld(mpiWorld)  {
-    responsibleForDeletingSharedMemory = false;
     cerr << "timestamp 1.01" << endl;
     SetSharedMemorySegment(mpiWorld->rank() == 0);
     cerr << "timestamp 1.02" << endl;
@@ -301,8 +300,8 @@ class LearningInfo {
     return false;
   }
 
-  ~LearningInfo() {
-    if(sharedMemorySegment != 0 && responsibleForDeletingSharedMemory) {
+  ClearSharedMemorySegment() {
+    if(sharedMemorySegment != 0 && mpiWorld->rank() == 0) {
       cerr << "deleting shared memory" << endl;
       delete sharedMemorySegment;
       sharedMemorySegment = 0;
@@ -310,9 +309,6 @@ class LearningInfo {
   }
   
   void SetSharedMemorySegment(bool create) {
-    if(create) {
-      responsibleForDeletingSharedMemory = true;
-    }
     size_t segmentSize = 30 * 1024; // in GBs
     segmentSize *= 1024 * 1024;
     string SEGMENT_NAME = "segment";
@@ -467,8 +463,6 @@ class LearningInfo {
 
   // shared memory segment to efficiently share objects across processes
   boost::interprocess::managed_shared_memory *sharedMemorySegment;
-
-  bool responsibleForDeletingSharedMemory;
 
 };
 
