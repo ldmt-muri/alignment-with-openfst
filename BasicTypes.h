@@ -1,3 +1,6 @@
+#ifndef _BASIC_TYPES_H_
+#define _BASIC_TYPES_H_
+
 enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGNMENT_JUMP=3, ALIGNMENT_JUMP_IS_ZERO=4, SRC0_TGT0=5, PRECOMPUTED=6, DIAGONAL_DEVIATION=7, SYNC_START=8, SYNC_END=9 };
 
 namespace Distribution {
@@ -176,3 +179,5 @@ struct Constraint {
   }
 };
 */
+
+#endif

@@ -699,8 +699,9 @@ void LatentCrfModel::SupervisedTrain(string goldLabelsFilename) {
       }
     }
   }
-  // normalize thetas
-  MultinomialParams::NormalizeParams(thetaMle, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
+  // normalize mle
+  MultinomialParams::NormalizeParams(thetaMle, learningInfo.multinomialSymmetricDirichletAlpha, 
+                                     false, true, learningInfo.variationalInferenceOfMultinomials);
 
   // update nLogThetaGivenOneLabel
   for(auto contextIter = thetaMle.params.begin();

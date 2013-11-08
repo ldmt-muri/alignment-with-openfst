@@ -1,6 +1,7 @@
 #ifndef _MULTINOMIAL_PARAMS_H_
 #define _MULTINOMIAL_PARAMS_H_
 
+#include <boost/math/special_functions/digamma.hpp>
 #include <map>
 #include <string>
 #include <sstream>
@@ -219,7 +220,6 @@ namespace MultinomialParams {
 										    const boost::unordered_map<ContextType, MultinomialParam>& p2) {
     boost::unordered_map<ContextType, MultinomialParam> pTotal(p1);
     for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
-      //MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
 	pTotal[p2Iter->first][subP2Iter->first] += subP2Iter->second;
       }
@@ -232,7 +232,6 @@ namespace MultinomialParams {
 											   const boost::unordered_map<ContextType, MultinomialParam>& p2) {
     boost::unordered_map<ContextType, MultinomialParam> pTotal(p1);
     for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator p2Iter = p2.begin(); p2Iter != p2.end(); p2Iter++) {
-      //MultinomialParam &subPTotal = pTotal[p2Iter->first];
       for(MultinomialParam::const_iterator subP2Iter = p2Iter->second.begin(); subP2Iter != p2Iter->second.end(); subP2Iter++) {
 	pTotal[p2Iter->first][subP2Iter->first] = 
 	  fst::Plus(fst::LogWeight( pTotal[p2Iter->first][subP2Iter->first] ),
@@ -244,8 +243,6 @@ namespace MultinomialParams {
 
   inline double nLog(double prob) {
     if(prob <= 0) {
-      //std::cerr << "ERROR: MultinomialParams::nLog(" << prob << ") is undefined. instead, I returned " << NLOG_ZERO << " and continued." << std::endl;
-      //      std::cerr << "$";
       return NLOG_ZERO;
     }
     return -1.0 * log(prob);
@@ -253,8 +250,6 @@ namespace MultinomialParams {
   
   inline double nExp(double exponent) {
     if(exponent <= NLOG_INF) {
-      //std::cerr << "ERROR: MultinomialParams::nExp(" << exponent << ") is infinity. returned I returned exp(" << NLOG_INF << ") and continued." << std::endl;
-      //      std::cerr << "#";
       exponent = NLOG_INF;
     }
     return exp(-1.0 * exponent);
@@ -267,8 +262,8 @@ namespace MultinomialParams {
   // for MLE, use alpha = 1.0
   template <typename ContextType>
     void NormalizeParams(ConditionalMultinomialParam<ContextType> &params, 
-        double symDirichletAlpha = 1.0, bool unnormalizedParamsAreInNLog = true,
-        bool normalizedParamsAreInNLog = true) {
+                         double symDirichletAlpha = 1.0, bool unnormalizedParamsAreInNLog = true,
+                         bool normalizedParamsAreInNLog = true, bool useVariationalInference = false) {
     assert(symDirichletAlpha >= 1.0); // for smaller values, we should use variational bayes
     // iterate over src tokens in the model
     for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
@@ -278,18 +273,24 @@ namespace MultinomialParams {
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
         // MAP inference with dirichlet prior
         double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
-        fTotalProb += temp + symDirichletAlpha - 1;
+        fTotalProb += useVariationalInference?
+          temp + symDirichletAlpha :
+          temp + symDirichletAlpha - 1;
       }
-      // hack to avoid nans
-      if(fTotalProb == 0.0){
+      // fix fTotalProb
+      if(fTotalProb == 0.0 && !useVariationalInference){
         fTotalProb = 1.0;
+      } else if (useVariationalInference) {
+        fTotalProb = exp( boost::math::digamma(fTotalProb) );
       }
       // exponentiate to find p(*|src) before normalization
       // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
       for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
         // MAP inference with dirichlet prior
         double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
-        double fUnnormalized = temp + symDirichletAlpha - 1;
+        double fUnnormalized = useVariationalInference?
+          exp( boost::math::digamma( temp + symDirichletAlpha) ) :
+          temp + symDirichletAlpha - 1;
         double fNormalized = fUnnormalized / fTotalProb;
         (*tgtIter).second = normalizedParamsAreInNLog? nLog(fNormalized) : fNormalized;
       }

@@ -28,6 +28,9 @@
 #include <boost/unordered_map.hpp>
 
 #define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
+
+#include "MultinomialParams.h"
+
 //#define HAVE_CMPH 1
 #include "cdec-utils/logval.h"
 #include "cdec-utils/semiring.h"
@@ -42,7 +45,6 @@
 #include "Functors.h"
 
 #include "LogLinearParams.h"
-#include "MultinomialParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
 
 namespace mpi = boost::mpi;

@@ -89,6 +89,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MINIBATCH_SIZE = "minibatch-size",
     LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
     DIRICHLET_ALPHA = "dirichlet-alpha",
+    VARIATIONAL_INFERENCE = "variational-inference",
     REVERSE = "reverse";
 
     
@@ -119,8 +120,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
     (MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
     (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
+    (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
-  ;
+    ;
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);

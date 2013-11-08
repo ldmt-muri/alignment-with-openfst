@@ -31,7 +31,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::SRC0_TGT0:
     os << "SRC0_TGT0";
-    os << '|' << obj.wordPair.srcWord << '|' << obj.wordPair.tgtWord;
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
   case FeatureTemplate::PRECOMPUTED:
     os << "PRECOMPUTED";

@@ -48,16 +48,12 @@ class LearningInfo {
     firstKExamplesToLabel = 1;
     invokeCallbackFunctionEveryKIterations = 10;
     endOfKIterationsCallbackFunction = 0;
-    smoothMultinomialParams = false;
-    //fixDOverC = false;
     nSentsPerDot = 1;
     emIterationsCount = 1;
     thetaOptMethod = 0;
-    // theta init
     initializeThetasWithModel1 = false;
     initializeThetasWithGaussian = true;
     initializeThetasWithUniform = false;
-    // lambda init
     initializeLambdasWithZero = true;
     initializeLambdasWithOne = false;
     initializeLambdasWithGaussian = false;
@@ -66,6 +62,7 @@ class LearningInfo {
     hiddenSequenceIsMarkovian = true;
     cacheActiveFeatures = false;
     multinomialSymmetricDirichletAlpha = 1.0;
+    variationalInferenceOfMultinomials = false;
   }
 
   bool IsModelConverged() {
@@ -255,7 +252,7 @@ class LearningInfo {
 
   void (*endOfKIterationsCallbackFunction)();
   
-  bool smoothMultinomialParams;
+  //bool smoothMultinomialParams;
 
   unsigned nSentsPerDot;
 
@@ -283,6 +280,8 @@ class LearningInfo {
   bool fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas;
   
   double multinomialSymmetricDirichletAlpha;
+
+  bool variationalInferenceOfMultinomials;
 
   // train models for the reverse corpus direction
   bool reverse;
