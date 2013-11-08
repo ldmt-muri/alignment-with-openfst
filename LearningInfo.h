@@ -21,9 +21,7 @@ class LearningInfo {
  public:
 
  LearningInfo(boost::mpi::communicator *mpiWorld) : mpiWorld(mpiWorld)  {
-    cerr << "timestamp 1.01" << endl;
     SetSharedMemorySegment(mpiWorld->rank() == 0);
-    cerr << "timestamp 1.02" << endl;
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
     useEarlyStopping = false;
@@ -72,7 +70,6 @@ class LearningInfo {
 
   bool IsModelConverged() {
     assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping || useMinLikelihoodRelativeDiff);
-    cerr << mpiWorld->rank() << endl;
     // logging
     if(useMaxIterationsCount) {
       cerr << "rank #" << mpiWorld->rank() << ": iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl;
@@ -125,7 +122,7 @@ class LearningInfo {
   }
 
   // should be called only once when the shared memory is no longer needed
-  ClearSharedMemorySegment() {
+  void ClearSharedMemorySegment() {
     if(sharedMemorySegment != 0 && mpiWorld->rank() == 0) {
       cerr << "deleting shared memory" << endl;
       delete sharedMemorySegment;
@@ -148,12 +145,13 @@ class LearningInfo {
       cerr << "done" << endl;
       
       // create or open the shared memory segments
-      cerr << "requesting " << segmentSize << " bytes of managed shared memory for segment " << SEGMENT_NAME << "..." << endl;
+      cerr << "requesting " << segmentSize << " bytes of managed shared memory for segment " << SEGMENT_NAME << "...";
       sharedMemorySegment = new managed_shared_memory(open_or_create, SEGMENT_NAME.c_str(), segmentSize);
       assert(sharedMemorySegment);
       cerr << "request granted." << endl;
       // sync with slaves
-      boost::mpi::broadcast<bool>(*mpiWorld, true, 0);
+      bool dummy = true;
+      boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
     } else {
       // sync with master
       bool dummy = false;
@@ -227,8 +225,10 @@ class LearningInfo {
   // 4 = token level debug info.
   unsigned debugLevel;
 
+  /*
   // this field can be used to communicate to the underlying model that certain combinations are required/forbidden
   std::vector<Constraint> constraints;
+  */
 
   // do we use cdec's FastSparseVector when applicable?
   bool useSparseVectors;

@@ -21,7 +21,7 @@ typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
 
 void my_handler(int s) {
   
-  cerr << "___________________//////////////////////// INTERRUPTED " << s << "\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\___________________" << endl;
+  cerr << "___________________//////////////////////// INTERRUPTED " << s << "\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\_________" << endl;
   cerr << "stopped training." << endl;
   LatentCrfModel *model = LatentCrfAligner::GetInstance();
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
@@ -66,8 +66,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
   string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
                      LearningInfo &learningInfo, int &maxModel1IterCount) {
-  
-  cerr << "rank: " << learningInfo.mpiWorld->rank() << "entered ParseParameters." << endl;
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -292,8 +290,6 @@ int main(int argc, char **argv) {
   mpi::environment env(argc, argv);
   mpi::communicator world;
 
-  cerr << "rank: " << world.rank() << " is born." << endl;
-
   LearningInfo learningInfo(&world);
   unsigned FIRST_LABEL_ID = 4;
 
@@ -302,12 +298,10 @@ int main(int argc, char **argv) {
   srand(seed);
 
   // configurations
-  cerr << "rank: " << world.rank() << " timestamp2." << endl;
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": setting configurations...";
   }
   // general 
-  cerr << "rank: " << world.rank() << " timestamp3." << endl;
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.mpiWorld = &world;
@@ -348,16 +342,13 @@ int main(int argc, char **argv) {
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
   int ibmModel1MaxIterCount = 15;
-  cerr << "rank: " << world.rank() << " timestamp3." << endl;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
                       learningInfo, ibmModel1MaxIterCount)){
     assert(false);
   }
-  cerr << "rank: " << world.rank() << " timestamp4." << endl;
   
   // initialize the model
-  cerr << "rank: " << world.rank() << " timestamp5." << endl;
   LatentCrfModel* model = LatentCrfAligner::GetInstance(textFilename, 
 							outputFilenamePrefix, 
 							learningInfo, 
@@ -365,7 +356,6 @@ int main(int argc, char **argv) {
 							initialLambdaParamsFilename, 
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);
-  cerr << "rank: " << world.rank() << " timestamp6." << endl;
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
   if(initialThetaParamsFilename.size() == 0) {

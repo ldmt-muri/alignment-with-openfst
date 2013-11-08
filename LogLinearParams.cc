@@ -1,6 +1,6 @@
 #include "LogLinearParams.h"
 
-//VocabEncoder* FeatureId::precomputedFeaturesEncoder = 0;
+VocabEncoder* FeatureId::vocabEncoder = 0;
 
 using namespace std;
 using namespace boost;
@@ -8,16 +8,14 @@ using namespace boost;
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
 {
 
-enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGNMENT_JUMP=3, ALIGNMENT_JUMP_IS_ZERO=4, SRC0_TGT0=5, PRECOMPUTED=6, DIAGONAL_DEVIATION=7, SYNC_START=8, SYNC_END=9 };
-
   switch(obj.type) {
   case FeatureTemplate::LABEL_BIGRAM:
     os << "LABEL_BIGRAM";
-    os << '|' << obj.bigram.previous << '|' << obj.bigram.current;
+    os << '|' << obj.bigram.previous << "->" << obj.bigram.current;
     break;
   case FeatureTemplate::SRC_BIGRAM:
     os << "SRC_BIGRAM";
-    os << '|' << obj.bigram.previous << '|' << obj.bigram.current;
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.bigram.previous) << "->" << FeatureId::vocabEncoder->Decode(obj.bigram.current);
     break;
   case FeatureTemplate::ALIGNMENT_JUMP:
     os << "ALIGNMENT_JUMP";
@@ -37,7 +35,7 @@ enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGN
     break;
   case FeatureTemplate::PRECOMPUTED:
     os << "PRECOMPUTED";
-    os << '|' << obj.precomputed;
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.precomputed);
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
     os << "DIAGONAL_DEVIATION";
@@ -54,6 +52,7 @@ enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGN
   return os;
 }
 
+/*
 std::istream& operator>>(std::istream& is, FeatureId& obj)
 {
   // read obj from stream
@@ -84,7 +83,6 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
     break;
   case FeatureTemplate::PRECOMPUTED:
     //is >> separator >> temp2;
-    //obj.EncodePrecomputedFeature(temp2);
     is >> separator >> obj.precomputed;
     assert(separator == '|');
     break;
@@ -100,13 +98,14 @@ std::istream& operator>>(std::istream& is, FeatureId& obj)
   assert(separator == '|');
   return is;
 }
+*/
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
                                  double gaussianStdDev) :
   types(types) {
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
-  //FeatureId::precomputedFeaturesEncoder = &precomputedFeaturesEncoder;
+  FeatureId::vocabEncoder = &types;
   sealed = false;
   paramIdsPtr = 0;
   paramWeightsPtr = 0;
@@ -145,6 +144,19 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
     }
     } */ else {
     assert(false);
+  }
+}
+
+OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, const std::pair<int64_t, int64_t> &wordPair) {
+  if(cacheWordPairFeatures.count(wordPair) == 0) {
+    stringstream ss;
+    ss << wordPair.first << " " << wordPair.second;
+    string wordPairStr = ss.str();
+    auto features = MapWordPairFeaturesToSharedMemory(create, wordPairStr);
+    cacheWordPairFeatures[wordPair] = features;
+    return features;
+  } else {
+    return cacheWordPairFeatures[wordPair];
   }
 }
 
@@ -225,15 +237,6 @@ void LogLinearParams::Seal() {
   sealed = true;
 }
 
-// add a featureId/featureValue pair to the map at precomputedFeatures[input1][input2]
-void LogLinearParams::AddToPrecomputedFeaturesWith2Inputs(int input1, int input2, FeatureId &featureId, double featureValue) {
-  assert(false);
-  assert(!sealed);
-  std::tuple<int, int> srcTgtPair(input1, input2);
-  //(*precomputedFeaturesWithTwoInputsPtr)[srcTgtPair][featureId] = featureValue;
-  //  AddParam(featureId);
-}
-
 // by two inputs, i mean that a precomputed feature value is a function of two strings
 // example line in the precomputed features file:
 // madrasa ||| school ||| F52:editdistance=7 F53:capitalconsistency=1
@@ -268,10 +271,8 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     int input2 = types.ConstEncode(input2String);
     // skip |||
     splitsIter++;
-    std::stringstream srcTgtPairKey;
-    srcTgtPairKey << input1 << " " << input2;
-    auto srcTgtPairKeyStr = srcTgtPairKey.str();
-    auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPairKeyStr);
+    std::pair<int64_t, int64_t> srcTgtPair(input1, input2);
+    auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPair);
     assert(tempMap);
     // the remaining elements are precomputed features for (input1, input2)
     while(splitsIter != splits.end()) {
@@ -410,13 +411,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
   auto tgtToken = x_t[i];
   auto prevTgtToken = i > 0? x_t[i-1] : -1;
   auto nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : (int64_t) -1;
-  //std::tuple<int, int> srcTgtPair(srcToken, tgtToken);
-  std::stringstream srcTgtPairKey;
-  srcTgtPairKey << srcToken << " " << tgtToken;
-  auto srcTgtPairKeyStr = srcTgtPairKey.str();
-  auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, srcTgtPairKeyStr);
-  //  precomputedFeaturesWithTwoInputsPtr->size() != 0?
-  //  &(  (*precomputedFeaturesWithTwoInputsPtr)[srcTgtPair] ) : 0;
+  std::pair<int64_t, int64_t> srcTgtPair(srcToken, tgtToken);
+  auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, srcTgtPair);
   
   FeatureId featureId;
   
@@ -455,7 +451,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
             try {
               AddParam(precomputedIter->first);
             } catch (LogLinearParamsException &ex) {
-              cerr << "LogLinearParamsException " << ex.what() << " -- thrown at LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, int START_OF_SENTENCE_Y_VALUE, int FIRST_POS, FastSparseVector<double> &activeFeatures) where yI = " << yI << ", yIM1 = " << yIM1 << ", i = " << i << ", x_t[i] = " << x_t[i] << ", x_s[yI] = " << x_s[yI] << ", types.Decode(x_t[i]) = " << types.Decode(x_t[i]) << ", types.Decode(x_s[yI]) = " << types.Decode(x_s[yI]) << ", precomputedFeatures->size() = " << precomputedFeatures->size() << ", precomputedIter->first = " << precomputedIter->first << ", precomputedIter->second = " << precomputedIter->second << ", srcTgtPairKey = " << srcTgtPairKey.str() << ", types.Decode(precomputedIter->first.precomputed) = " << types.Decode(precomputedIter->first.precomputed) << endl;
+              cerr << "LogLinearParamsException " << ex.what() << " -- thrown at LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, int START_OF_SENTENCE_Y_VALUE, int FIRST_POS, FastSparseVector<double> &activeFeatures) where yI = " << yI << ", yIM1 = " << yIM1 << ", i = " << i << ", x_t[i] = " << x_t[i] << ", x_s[yI] = " << x_s[yI] << ", types.Decode(x_t[i]) = " << types.Decode(x_t[i]) << ", types.Decode(x_s[yI]) = " << types.Decode(x_s[yI]) << ", precomputedFeatures->size() = " << precomputedFeatures->size() << ", precomputedIter->first = " << precomputedIter->first << ", precomputedIter->second = " << precomputedIter->second << ", types.Decode(precomputedIter->first.precomputed) = " << types.Decode(precomputedIter->first.precomputed) << endl;
               throw;
             }
             activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;

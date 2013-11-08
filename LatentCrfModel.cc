@@ -29,8 +29,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
                                           UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
                                           learningInfo(learningInfo) {
   
-  cerr << "rank " << learningInfo.mpiWorld->rank() << ": entering LatentCrfModel::LatentCrfModel()" << endl;
-  
   AddEnglishClosedVocab();
   
   if(learningInfo.mpiWorld->rank() == 0) {
@@ -55,7 +53,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   // what task is this core being used for? pos tagging? word alignment?
   this->task = task;
 
-  cerr << "rank " << learningInfo.mpiWorld->rank() << ": exiting LatentCrfModel::LatentCrfModel()" << endl;
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {
@@ -797,10 +794,6 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   
   LatentCrfModel &model = LatentCrfModel::GetInstance();
   
-  if(model.learningInfo.debugLevel  >= DebugLevel::REDICULOUS){
-    cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": entered LbfgsCallbackEvalYGivenXLambdaGradient" << endl;
-  }
-
   // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
   double Nll = 0;
@@ -936,10 +929,6 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
     assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
   }
   
-  if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
-    cerr << "rank #" << model.learningInfo.mpiWorld->rank() << ": exiting LbfgsCallbackEvalYGivenXLambdaGradient" << endl;
-  }
-
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH && model.learningInfo.mpiWorld->rank() == 0) {
     cerr << "master" << model.learningInfo.mpiWorld->rank() << ": eval(y|x) = " << Nll << endl;
   }
@@ -1873,13 +1862,13 @@ void LatentCrfModel::InitLambda() {
     mpi::gather<std::vector< FeatureId > >(*learningInfo.mpiWorld, lambda->paramIdsTemp, localFeatureVectors, 0);
     cerr << "done gathering." << endl;
     for (int proc = 0; proc < learningInfo.mpiWorld->size(); ++proc) {
-      cerr << "master: adding features of proc " << proc << " ... " << endl;
+      cerr << "master: adding features of proc " << proc << ", of size = " << localFeatureVectors[proc].size() << " ... " << endl;
       lambda->AddParams(localFeatureVectors[proc]);
     }
     cerr << "master: done aggregating all features.  |lambda| = " << lambda->paramIndexes.size() << endl; 
   } else {
-    cerr << "rank " << learningInfo.mpiWorld->rank() << ": sending my paramIdsTemp to master ... ";
-    gather(*learningInfo.mpiWorld, lambda->paramIdsTemp, 0);
+    cerr << "rank " << learningInfo.mpiWorld->rank() << ": sending my |paramIdsTemp| = " << lambda->paramIdsTemp.size() << "  to master ... ";
+    mpi::gather< std::vector< FeatureId > >(*learningInfo.mpiWorld, lambda->paramIdsTemp, 0);
     cerr << "done." << endl;
   }
 
@@ -1902,7 +1891,6 @@ void LatentCrfModel::InitLambda() {
   // slaves seal their lambda params, consuming the shared memory created by master
   if(learningInfo.mpiWorld->rank() != 0) {
     assert(lambda->paramIdsTemp.size() == lambda->paramWeightsTemp.size());
-    assert(lambda->paramIdsTemp.size() > 0);
     assert(lambda->paramIdsPtr == 0 && lambda->paramWeightsPtr == 0);
     lambda->Seal();
     assert(lambda->paramIdsTemp.size() == 0 && lambda->paramWeightsTemp.size() == 0);

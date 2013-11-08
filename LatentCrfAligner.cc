@@ -45,7 +45,6 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
                                                                     FIRST_LABEL_ID,
                                                                     LatentCrfAligner::Task::WORD_ALIGNMENT) {
   
-  cerr << "rank " << learningInfo.mpiWorld->rank() << ": entered LatentCrfAligner::LatentCrfAligner()" << endl;
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -117,7 +116,6 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(lambda->paramWeightsPtr->size() == lambda->paramIndexes.size());
   assert(lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
 
-  cerr << "rank " << learningInfo.mpiWorld->rank() << ": exiting LatentCrfAligner::LatentCrfAligner()" << endl;
 }
 
 void LatentCrfAligner::InitTheta() {

@@ -45,7 +45,7 @@ struct LogLinearParamsException : public std::exception
 
 struct FeatureId {
 public:
-  static VocabEncoder *precomputedFeaturesEncoder;
+  static VocabEncoder *vocabEncoder;
   FeatureTemplate type;
   union {
     struct { unsigned current, previous; } bigram;
@@ -53,12 +53,6 @@ public:
     struct { unsigned srcWord, tgtWord; } wordPair;
     int64_t precomputed;
   };
-  
-  
-  void EncodePrecomputedFeature(const string& featureIdString) {
-    assert(type == FeatureTemplate::PRECOMPUTED);
-    precomputed = precomputedFeaturesEncoder->Encode(featureIdString);
-  }
   
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
@@ -253,6 +247,7 @@ class LogLinearParams {
   // for the latent CRF model
   LogLinearParams(VocabEncoder &types, double gaussianStdDev = 1);
   
+  OuterMappedType* MapWordPairFeaturesToSharedMemory(bool create, const std::pair<int64_t, int64_t> &wordPair);
   OuterMappedType* MapWordPairFeaturesToSharedMemory(bool create, const string& objectNickname);
   
   void* MapToSharedMemory(bool create, string name);
@@ -393,6 +388,8 @@ class LogLinearParams {
   const GaussianSampler *gaussianSampler;
 
   const set< int > *englishClosedClassTypes;
+
+  boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
   
  private:
   bool sealed;
