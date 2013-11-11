@@ -207,7 +207,11 @@ void LatentCrfAligner::Label(vector<int64_t> &tokens, vector<int64_t> &context, 
   unsigned sentId = 0;
   fst::VectorFst<FstUtils::LogArc> fst;
   std::vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
+  if(learningInfo.testWithCrfOnly) {
+    BuildLambdaFst(sentId, fst, alphas, betas);
+  } else {
+    BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
+  }
 
   // map to the tropical semiring which enjoys the path property (in order to find the best alignment)
   fst::VectorFst<FstUtils::StdArc> pathFst, shortestPathFst;
