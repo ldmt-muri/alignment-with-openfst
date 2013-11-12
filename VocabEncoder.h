@@ -74,9 +74,7 @@ class VocabEncoder {
   void Init() {
 
     alloc_inst = new void_allocator(learningInfo.sharedMemorySegment->get_segment_manager());
-    cerr << learningInfo.mpiWorld->rank() << ": alloc_inst = " << alloc_inst << ", learningInfo.sharedMemorySegment = " << learningInfo.sharedMemorySegment << endl;
     
-
     // create/find managed shared memory objects
     if(learningInfo.mpiWorld->rank() == 0) {
       
@@ -90,7 +88,6 @@ class VocabEncoder {
       intToToken->insert(IntToTokenPair(firstId + intToToken->size(), *UNK_char_string));
       
       // then sync
-      cerr << "master created intToToken and tokenToInt" << endl;
       bool dummy = false;
       boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
 
@@ -99,20 +96,17 @@ class VocabEncoder {
       // sync
       bool dummy = false;
       boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
-      cerr << "slave will now find intToToken and tokenToInt" << endl;
-
+      
       // then find
       intToToken = (ShmemIntToTokenMap *) MapToSharedMemory(false, "VocabEncoder::intToToken");
       tokenToInt = (ShmemTokenToIntMap *) MapToSharedMemory(false, "VocabEncoder::tokenToInt");
       UNK_char_string = (char_string *) MapToSharedMemory(false, "VocabEncoder::UNK_char_string");
 
-      cerr << "slave: tokenToInt->size() = " << tokenToInt->size() << endl;
-      cerr << "slave: intToToken->size() = " << intToToken->size() << endl;
     }
     
   }
   
- VocabEncoder(const LearningInfo &learningInfo, unsigned firstId = 2): learningInfo(learningInfo), firstId(firstId), UNK("_unk_")     {
+  VocabEncoder(const LearningInfo &learningInfo, unsigned firstId = 2): learningInfo(learningInfo), firstId(firstId), UNK("_unk_")     {
     Init();
   }
 
@@ -220,7 +214,10 @@ class VocabEncoder {
   }
   
   // if nullToken is of length > 0, this token is inserted at position 0 for each src sentence.
-  void ReadParallelCorpus(const std::string &textFilename, vector<vector<int64_t> > &srcSents, vector<vector<int64_t> > &tgtSents, const string &nullToken, bool reverse) {
+  void ReadParallelCorpus(const std::string &textFilename, 
+			  vector<vector<int64_t> > &srcSents, 
+			  vector<vector<int64_t> > &tgtSents, 
+			  const string &nullToken, bool reverse) {
 
     assert(srcSents.size() == 0 && tgtSents.size() == 0);
 
@@ -343,54 +340,41 @@ class VocabEncoder {
   }
 
   void* MapToSharedMemory(bool create, const string objectNickname) {
-    cerr << "rank " << learningInfo.mpiWorld->rank() << ": entering VocabEncoder::MapToSharedMemory()" << endl;
     if(string(objectNickname) == string("VocabEncoder::tokenToInt")) {
       if(create) {
-        cerr << "constructing VocabEncoder::tokenToInt...";
         ShmemTokenToIntPairAllocator allocator(learningInfo.sharedMemorySegment->get_segment_manager()); 
         auto temp = learningInfo.sharedMemorySegment->construct<ShmemTokenToIntMap> (objectNickname.c_str()) (std::less<char_string>(), allocator);
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       } else {
-        cerr << "finding VocabEncoder::tokenToInt...";
         auto temp = learningInfo.sharedMemorySegment->find<ShmemTokenToIntMap> (objectNickname.c_str()).first;
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       }
     } else if (string(objectNickname) == string("VocabEncoder::intToToken")) {
       if(create) {
-        cerr << "constructing VocabEncoder::intToToken...";
         ShmemIntToTokenPairAllocator allocator(learningInfo.sharedMemorySegment->get_segment_manager()); 
         auto temp = learningInfo.sharedMemorySegment->construct<ShmemIntToTokenMap> 
           (objectNickname.c_str()) 
           (std::less<int64_t>(), allocator);
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       } else {
-        cerr << "finding VocabEncoder::intToToken...";
         auto temp = learningInfo.sharedMemorySegment->find<ShmemIntToTokenMap> (objectNickname.c_str()).first;
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       }
     } else if (string(objectNickname) == string("VocabEncoder::UNK_char_string")) {
       if(create) {
-        cerr << "constructing VocabEncoder::UNK_char_string...";
         char_allocator allocator(learningInfo.sharedMemorySegment->get_segment_manager());
         auto temp = learningInfo.sharedMemorySegment->construct<char_string> 
           (objectNickname.c_str()) 
           (allocator);
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       } else {
-        cerr << "finding VocabEncoder::UNK_char_string...";
         auto temp = learningInfo.sharedMemorySegment->find<char_string> (objectNickname.c_str()).first;
         assert(temp);
-        cerr << "done@" << temp << endl;
         return temp;
       }
     } else {

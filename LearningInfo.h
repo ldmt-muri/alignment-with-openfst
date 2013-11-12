@@ -154,9 +154,7 @@ class LearningInfo {
       // sync with master
       bool dummy = false;
       boost::mpi::broadcast<bool>(*mpiWorld, dummy, 0);
-      cerr << "opening segment " << SEGMENT_NAME << " ...";
       sharedMemorySegment = new managed_shared_memory(open_only, SEGMENT_NAME.c_str());      
-      cerr << "done.";
     }
     assert(sharedMemorySegment->get_size() == segmentSize);
   }
