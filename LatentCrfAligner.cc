@@ -57,8 +57,8 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 
   // slaves wait for master
   if(learningInfo.mpiWorld->rank() != 0) {
-    bool dummy;
-    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+    bool vocabEncoderIsReady;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
 
   // encode the null token which is conventionally added to the beginning of the src sentnece. 
@@ -79,18 +79,22 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
 
+  if(learningInfo.mpiWorld->rank() == 0) {
+    lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+  }
+
   // master signals to slaves that he's done
   if(learningInfo.mpiWorld->rank() == 0) {
-    bool dummy;
-    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+    bool vocabEncoderIsReady;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
-  
+
   // initialize (and normalize) the log theta params to gaussians
+  InitTheta();
   if(initialThetaParamsFilename.size() == 0) {
-    InitTheta();
     BroadcastTheta(0);
   } else {
-    assert(nLogThetaGivenOneLabel.params.size() == 0);
+    //assert(nLogThetaGivenOneLabel.params.size() == 0);
     if(learningInfo.mpiWorld->rank() == 0) {
       cerr << "initializing theta params from " << initialThetaParamsFilename << endl;
     }
@@ -98,10 +102,6 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
     assert(nLogThetaGivenOneLabel.params.size() > 0);
   }
   
-  if(learningInfo.mpiWorld->rank() == 0) {
-    lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
-  }
-
   // load saved parameters
   if(initialLambdaParamsFilename.size() > 0) {
     lambda->LoadParams(initialLambdaParamsFilename);

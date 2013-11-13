@@ -93,7 +93,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
     REVERSE = "reverse";
 
-    
+
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -366,8 +366,6 @@ int main(int argc, char **argv) {
     // ibm model 1 initialization of theta params. 
     IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount, learningInfo);
   }
-
-  cerr << "done with model 1 initialization" << endl;
 
   latentCrfAligner.BroadcastTheta(0);
   

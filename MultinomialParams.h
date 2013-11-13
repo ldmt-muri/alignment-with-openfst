@@ -167,7 +167,11 @@ namespace MultinomialParams {
       int64_t event = -1;
       if(encodeEvent) {
 	event = vocabEncoder.ConstEncode(splits[0]);
-	assert(event != vocabEncoder.UnkInt());
+	if(event == vocabEncoder.UnkInt()) {
+	  cerr << "vocabEncoder.ConstEncode(" << splits[0] << ") = " << event << " = vocabEncoder.UnkInt() = " << vocabEncoder.UnkInt() << endl;
+	  cerr << "vocabEncoder.Count() = " << vocabEncoder.Count() << endl;
+	  assert(false);
+	}
       } else {
 	stringstream ss;
 	ss << splits[0];
