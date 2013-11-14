@@ -1,15 +1,23 @@
 disclaimer: work in progress
 
+description:
+============
+a scalable feature-rich word alignment tool
+
 dependencies:
 =============
-* openfst-1.3.2
+* boost 1.54
 * libLBFGS
+* MPI
+* openfst-1.3.2
 * python 2.7
 
-how to build (compiler: gcc 4.6.3 or clang 3.1-8):
+how to build (with compiler: gcc 4.6.3 or clang 3.1-8):
 ==================================================
-* make
+* make -f Makefile-latentCrfAligner
 
-how to run:
-===========
-* example invocations can be found at batch-files/run-small-example.bash, which uses a small parallel corpus of english-kinyarwanda located in the 'example' subdirectory
+example invocation:
+===================
+```mpirun 32 latentCrfAligner [options]```
+
+for an up-to-date list of options, ```latentCrfAligner --help```
