@@ -64,6 +64,7 @@ class LearningInfo {
     multinomialSymmetricDirichletAlpha = 1.0;
     variationalInferenceOfMultinomials = false;
     testWithCrfOnly = false;
+    optimizeLambdasFirst = false;
   }
 
   bool IsModelConverged() {
@@ -283,6 +284,8 @@ class LearningInfo {
   bool variationalInferenceOfMultinomials;
   
   bool testWithCrfOnly;
+
+  bool optimizeLambdasFirst;
 
   // train models for the reverse corpus direction
   bool reverse;

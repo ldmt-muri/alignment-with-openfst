@@ -91,7 +91,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     DIRICHLET_ALPHA = "dirichlet-alpha",
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
-    REVERSE = "reverse";
+    REVERSE = "reverse",
+    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first";
 
 
 
@@ -124,6 +125,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
+    (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     ;
 
   po::variables_map vm;

@@ -1341,7 +1341,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas using a few EM iterations: =========" << endl << endl;
     }
     
-    if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
+    if(learningInfo.iterationsCount == 0 && learningInfo.optimizeLambdasFirst) {
+      // don't touch theta parameters
+    } else if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
 
 
 
