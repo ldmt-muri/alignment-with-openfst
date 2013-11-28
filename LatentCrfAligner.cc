@@ -40,10 +40,10 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 				   const string &initialLambdaParamsFilename, 
 				   const string &initialThetaParamsFilename,
 				   const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename,
-                                                                    outputPrefix,
-                                                                    learningInfo,
-                                                                    FIRST_LABEL_ID,
-                                                                    LatentCrfAligner::Task::WORD_ALIGNMENT) {
+											    outputPrefix,
+											    learningInfo,
+											    FIRST_LABEL_ID,
+											    LatentCrfAligner::Task::WORD_ALIGNMENT) {
   
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
@@ -54,7 +54,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 
   // unlike POS tagging, yDomain depends on the src sentence length. we will set it on a per-sentence basis.
   this->yDomain.clear();
-
+  
   // slaves wait for master
   if(learningInfo.mpiWorld->rank() != 0) {
     bool vocabEncoderIsReady;
@@ -169,6 +169,7 @@ vector<int64_t>& LatentCrfAligner::GetObservableSequence(int exampleId) {
     assert(exampleId < testTgtSents.size());
     return testTgtSents[exampleId];
   } else {
+    lambda->learningInfo->currentSentId = exampleId;
     if(exampleId >= tgtSents.size()) {
       cerr << exampleId << " < " << tgtSents.size() << endl;
     }
@@ -231,6 +232,7 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
   ofstream labelsFile(labelsFilename.c_str());
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    lambda->learningInfo->currentSentId = exampleId;
     if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       if(learningInfo.mpiWorld->rank() == 0){
         string labelSequence;

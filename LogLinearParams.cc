@@ -46,6 +46,10 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   case FeatureTemplate::SYNC_END:
     os << "SYNC_END";
     break;
+  case FeatureTemplate::OTHER_ALIGNERS:
+    os << "OTHER_ALIGNERS";
+    os << "|" << obj.otherAligner.alignerId << "|" << obj.otherAligner.compatible;
+    break;
   default:
     assert(false);
   }
@@ -305,8 +309,59 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
   
 }
 
-void LogLinearParams::SetLearningInfo(const LearningInfo &learningInfo) {
+void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo) {
   this->learningInfo = &learningInfo;
+
+  // load word alignments of other aligners
+  LoadOtherAlignersOutput();
+}
+
+void LogLinearParams::LoadOtherAlignersOutput() {
+  //cerr << "inside LoadOtherAlignersOutput()" << endl;
+  // each process independently reads the output of other word aligners
+  if(learningInfo->otherAlignersOutputFilenames.size() > 0) {
+    //cerr << "inside otherAlignersOutputFilenames.size() > 0" << endl;
+    for(auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
+	filenameIter != learningInfo->otherAlignersOutputFilenames.end();
+	++filenameIter) {
+      auto alignerOutput = new vector< vector<int>* >();
+      //cerr << "adding this aligner to the list of aligners" << endl;
+      otherAlignersOutput.push_back(alignerOutput);
+      std::ifstream infile(filenameIter->c_str());
+      std::string line;
+      while (std::getline(infile, line)) {
+	auto sentAlignments = new vector<int>();
+	//cerr << "adding this sentence to the list of sentences for this aligner" << endl;
+	alignerOutput->push_back(sentAlignments);
+	// each line consists of a number of word-to-word alignments
+	vector<std::string> srcpos_tgtpos_pairs;
+	StringUtils::SplitString(line, ' ', srcpos_tgtpos_pairs);
+	for(auto pairIter = srcpos_tgtpos_pairs.begin(); 
+	    pairIter != srcpos_tgtpos_pairs.end();
+	    ++pairIter) {
+	  // read this pair
+	  int srcpos, tgtpos; 
+	  char del;
+	  std::istringstream ss(*pairIter);
+	  ss >> srcpos >> del >> tgtpos;
+	  assert(del == '-');
+	  // if this is a 'reverse' training, swap srcpos with tgtpos
+	  if(learningInfo->reverse) {
+	    int temp = srcpos;
+	    srcpos = tgtpos;
+	    tgtpos = temp;
+	  }
+	  // increment srcpos because we insert the NULL src word at the beginning of each sentence
+	  srcpos++;
+	  // make room in the sentAlignments vector for this pair. tgt positions not mentioned are aligned to NULL
+	  while(sentAlignments->size() <= tgtpos) { sentAlignments->push_back(0); }
+	  // memorize this pair
+	  //cerr << "adding this word pair to this sentence" << endl;
+	  (*sentAlignments)[tgtpos] = srcpos;
+	}
+      }
+    }
+  }
 }
 
 int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
@@ -504,6 +559,18 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       case FeatureTemplate::LABEL_BIGRAM:
       cerr << "this feature template is not implemented for word alignment" << endl;
       assert(false);
+      break;
+
+      case FeatureTemplate::OTHER_ALIGNERS:
+      for(int alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
+	assert(learningInfo->currentSentId < otherAlignersOutput[alignerId]->size());
+	int woodAlignment = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
+	featureId.type = FeatureTemplate::OTHER_ALIGNERS;
+	featureId.otherAligner.compatible = woodAlignment == yI || woodAlignment == 0;
+	featureId.otherAligner.alignerId = alignerId;
+	AddParam(featureId);
+	activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
       break;
       
       default:

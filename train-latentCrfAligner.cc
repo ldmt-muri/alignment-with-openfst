@@ -92,7 +92,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
     REVERSE = "reverse",
-    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first";
+    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
+    OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames";
 
 
 
@@ -126,6 +127,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
+    (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     ;
 
   po::variables_map vm;
@@ -182,6 +184,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
       learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
     } else if(*featIter == "SYNC_END") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
+    } else if(*featIter == "OTHER_ALIGNERS") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
     } else {
       assert(false);
     }
@@ -237,7 +241,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   // learningInfo.minLikelihoodRelativeDiff set by ParseParameters;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model

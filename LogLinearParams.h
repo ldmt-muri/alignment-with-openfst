@@ -52,6 +52,7 @@ public:
     int alignmentJump;
     struct { unsigned srcWord, tgtWord; } wordPair;
     int64_t precomputed;
+    struct { unsigned alignerId; bool compatible; } otherAligner;
   };
   
   template<class Archive>
@@ -79,7 +80,11 @@ public:
         ar & wordPair.srcWord;
         ar & wordPair.tgtWord;
         break;
-      default:
+    case FeatureTemplate::OTHER_ALIGNERS:
+      ar & otherAligner.alignerId;
+      ar & otherAligner.compatible;
+      break;
+    default:
         assert(false);
     }
   }
@@ -89,7 +94,8 @@ public:
     switch(type) {
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
-        return bigram.current < rhs.bigram.current || bigram.previous < rhs.bigram.previous;
+        return bigram.current < rhs.bigram.current || \
+	  bigram.current == rhs.bigram.current && bigram.previous < rhs.bigram.previous;
         break;
       case FeatureTemplate::ALIGNMENT_JUMP:
       case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
@@ -97,7 +103,8 @@ public:
         return alignmentJump < rhs.alignmentJump;
         break;
       case SRC0_TGT0:
-        return wordPair.srcWord < rhs.wordPair.srcWord || wordPair.tgtWord < rhs.wordPair.tgtWord;
+        return wordPair.srcWord < rhs.wordPair.srcWord || \
+	  wordPair.srcWord == rhs.wordPair.srcWord && wordPair.tgtWord < rhs.wordPair.tgtWord;
         break;
       case PRECOMPUTED:
         return precomputed < rhs.precomputed;
@@ -107,6 +114,9 @@ public:
       case SYNC_END:
         return false;
         break;
+    case OTHER_ALIGNERS:
+      return otherAligner.alignerId < rhs.otherAligner.alignerId || \
+	otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible;
       default:
         assert(false);
     }
@@ -136,6 +146,8 @@ public:
       case SYNC_END:
         return false;
         break;
+    case OTHER_ALIGNERS:
+      return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
       default:
         assert(false);
     }
@@ -171,6 +183,10 @@ public:
         case SYNC_START:
         case SYNC_END:
           break;
+        case OTHER_ALIGNERS:
+	  boost::hash_combine(seed, x.otherAligner.alignerId);
+	  boost::hash_combine(seed, x.otherAligner.compatible);
+	  break;
         default:
           assert(false);
       }
@@ -202,6 +218,10 @@ public:
         case SYNC_END:
           return true;
           break;
+        case OTHER_ALIGNERS:
+	return left.otherAligner.alignerId == right.otherAligner.alignerId && \
+	  left.otherAligner.compatible == right.otherAligner.compatible;
+	  break;
         default:
           assert(false);
       }
@@ -295,7 +315,10 @@ class LogLinearParams {
   double Hash();
 
   // set learning info
-  void SetLearningInfo(const LearningInfo &learningInfo);
+  void SetLearningInfo(LearningInfo &learningInfo);
+
+  // load the word alignments when available
+  void LoadOtherAlignersOutput();
 
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
   // note: pos here is short for position
@@ -383,11 +406,15 @@ class LogLinearParams {
   // maps precomputed feature strings into ids
   //VocabEncoder precomputedFeaturesEncoder;
 
-  const LearningInfo *learningInfo;
+  LearningInfo *learningInfo;
 
   const GaussianSampler *gaussianSampler;
 
   const set< int > *englishClosedClassTypes;
+
+  // for each other aligner, for each sentence pair, for each target position, 
+  // determines the corresponding src position 
+  std::vector< std::vector< std::vector<int>* >* > otherAlignersOutput;
 
   boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
   

@@ -293,6 +293,12 @@ class LearningInfo {
   // shared memory segment to efficiently share objects across processes
   boost::interprocess::managed_shared_memory *sharedMemorySegment;
 
+  // the filenames specifying output of other word aligners for this dataset
+  vector< string > otherAlignersOutputFilenames;
+
+  // the id of the sentence pair currently being processed
+  int currentSentId;
+
 };
 
 #endif

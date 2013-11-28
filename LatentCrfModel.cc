@@ -46,7 +46,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   this->outputPrefix = outputPrefix;
   this->learningInfo = learningInfo;
   this->lambda->SetLearningInfo(learningInfo);
-  
+
   // by default, we are operating in the training (not testing) mode
   testingMode = false;
 
@@ -1846,6 +1846,9 @@ void LatentCrfModel::InitLambda() {
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       continue;
     }
+
+    // just to set learningInfo.currentSentId
+    GetObservableSequence(sentId);
     
     // build the FST
     fst::VectorFst<FstUtils::LogArc> lambdaFst;
