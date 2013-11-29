@@ -59,8 +59,9 @@ for line in input_wordpair_file:
   src_cluster = src_brown_clusters[src_word] if src_word in src_brown_clusters else u'?'
   tgt_cluster = tgt_brown_clusters[tgt_word] if tgt_word in tgt_brown_clusters else u'?'
   # then, determine how frequent src_word and tgt_word are
-  src_freq_score = compute_freq_score(src_word, src_word_freqs, src_sorted_freqs)
-  tgt_freq_score = compute_freq_score(tgt_word, tgt_word_freqs, tgt_sorted_freqs)
+  max_score = 10
+  src_freq_score = compute_freq_score(src_word, src_word_freqs, src_sorted_freqs, max_score)
+  tgt_freq_score = compute_freq_score(tgt_word, tgt_word_freqs, tgt_sorted_freqs, max_score)
   # generate a bunch of binary features
   new_features = set()
 
@@ -73,12 +74,23 @@ for line in input_wordpair_file:
     # the full src/tgt clusters
     #new_features.add(u'Brown{}:{}=1'.format(src_cluster, tgt_cluster))
     # prefixes of the src/tgt clusters
+    if len(src_cluster) < 4: src_cluster = u'{}{}'.format(src_cluster, u'xxx') 
+    if len(tgt_cluster) < 4: tgt_cluster = u'{}{}'.format(tgt_cluster, u'xxx') 
     new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:4], tgt_cluster[0:4]))
     #new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:8], tgt_cluster[0:8]))
     #new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:12], tgt_cluster[0:12]))
     # frequency for src word and tgt word
-    new_features.add(u'Freq{}:{}=1'.format(src_freq_score, tgt_freq_score))
-    new_features.add(u'FreqDiff{}=1'.format(abs(src_freq_score - tgt_freq_score)))
+    #new_features.add(u'Freq{}:{}=1'.format(src_freq_score, tgt_freq_score))
+    freq_score_diff = abs(src_freq_score - tgt_freq_score)
+    if src_freq_score == 0 or src_freq_score == max_score or \
+       tgt_freq_score == 0 or tgt_freq_score == max_score:
+      pass
+    elif freq_score_diff <= 1:
+      new_features.add(u'FreqDiffSmall=1')
+    elif freq_score_diff <= max_score / 2.0:
+      new_features.add(u'FreqDiffMedium=1')
+    else:
+      new_features.add(u'FreqDiffLarge=1')
 
   # write the new features to the end of the line
   line = u'{} ||| {} ||| {} {}\n'.format( src_word, tgt_word, features, u' '.join(new_features) )

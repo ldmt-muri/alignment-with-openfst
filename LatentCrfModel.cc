@@ -1016,9 +1016,10 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
     } else {
       cerr << " unregularized objective = " << reducedNll << endl;	
     }
-    if(model.learningInfo.useDevSet) {
-      cerr << " dev set negative loglikelihood = " << reducedDevSetNll << endl;
-    }
+  }
+
+  if(model.learningInfo.useDevSet) {
+    cerr << " dev set negative loglikelihood = " << reducedDevSetNll << endl;
   }
   
   return reducedNll;
@@ -1386,10 +1387,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
         }
         double unregularizedObjective = 0;
         for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
-	  
-	  if(learningInfo.useDevSet && sentId % 10 == 0) {
-	    continue;
-	  }
 	  
 	  // sentId is assigned to the process # (sentId % world.size())
           if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -1970,6 +1967,11 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
       assert(zIter->second.s_ == false); //  all B values are supposed to be positive
       double bOverC = MultinomialParams::nExp(nLogb - nLogC);
       assert(bOverC > -0.001);
+
+      if(learningInfo.useDevSet && sentId % 10 == 0) {
+	bOverC = 0.0;
+      }
+
       mle[context][z_] += bOverC;
       mleMarginals[context] += bOverC;
       //      cerr << "-log(b[" << vocabEncoder.Decode(context) << "][" << vocabEncoder.Decode(z_) << "]) = -log(b[" << yIter->first << "][" << z_  << "]) = " << nLogb << endl;
