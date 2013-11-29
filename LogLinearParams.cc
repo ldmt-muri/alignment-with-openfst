@@ -50,6 +50,12 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << "OTHER_ALIGNERS";
     os << "|" << obj.otherAligner.alignerId << "|" << obj.otherAligner.compatible;
     break;
+  case FeatureTemplate::NULL_ALIGNMENT:
+    os << "NULL_ALIGNMENT";
+    break;
+  case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
+    os << "NULL_ALIGNMENT_LENGTH_RATIO";
+    break;
   default:
     assert(false);
   }
@@ -484,7 +490,10 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 
       case FeatureTemplate::LOG_ALIGNMENT_JUMP:
       featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
-      featureId.alignmentJump = log(yI - yIM1);
+      featureId.alignmentJump = 
+	yI >= yIM1? 
+	log(1 + 2.0 * (yI - yIM1)):
+	-1 * log(1 + 2.0 * (yIM1 - yI));
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
@@ -541,7 +550,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       break;
 
       case FeatureTemplate::SYNC_START:
-      if(i == 0 && yI == 0) {
+      if(i == 0 && yI == 1) {
         featureId.type = FeatureTemplate::SYNC_START;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
@@ -572,9 +581,25 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 	activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
-      
-      default:
-        assert(false);
+
+    case FeatureTemplate::NULL_ALIGNMENT:
+      if(yI == 0) {
+	featureId.type = FeatureTemplate::NULL_ALIGNMENT;
+	AddParam(featureId);
+	activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+
+    case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
+      if(yI == 0) {
+	featureId.type = FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO;
+	AddParam(featureId);
+	activeFeatures[paramIndexes[featureId]] += 1.0 * (x_t.size() - x_s.size() - 1) / x_t.size();
+      }
+      break;
+
+    default:
+      assert(false);
     } // end of switch
   } // end of loop over enabled feature templates
 }

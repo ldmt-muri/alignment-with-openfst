@@ -267,7 +267,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
-  double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId);
+  double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
 
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster

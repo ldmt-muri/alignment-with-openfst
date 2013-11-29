@@ -67,6 +67,8 @@ public:
       case FeatureTemplate::DIAGONAL_DEVIATION:
       case FeatureTemplate::SYNC_END:
       case FeatureTemplate::SYNC_START:
+      case FeatureTemplate::NULL_ALIGNMENT:
+      case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
         break;
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
@@ -112,6 +114,8 @@ public:
       case DIAGONAL_DEVIATION:
       case SYNC_START:
       case SYNC_END:
+      case NULL_ALIGNMENT:
+      case NULL_ALIGNMENT_LENGTH_RATIO:
         return false;
         break;
     case OTHER_ALIGNERS:
@@ -144,7 +148,9 @@ public:
       case DIAGONAL_DEVIATION:
       case SYNC_START:
       case SYNC_END:
-        return false;
+      case NULL_ALIGNMENT:
+      case NULL_ALIGNMENT_LENGTH_RATIO:
+	return false;
         break;
     case OTHER_ALIGNERS:
       return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
@@ -182,7 +188,9 @@ public:
         case DIAGONAL_DEVIATION:
         case SYNC_START:
         case SYNC_END:
-          break;
+        case NULL_ALIGNMENT:
+	case NULL_ALIGNMENT_LENGTH_RATIO:
+	  break;
         case OTHER_ALIGNERS:
 	  boost::hash_combine(seed, x.otherAligner.alignerId);
 	  boost::hash_combine(seed, x.otherAligner.compatible);
@@ -216,6 +224,8 @@ public:
         case DIAGONAL_DEVIATION:
         case SYNC_START:
         case SYNC_END:
+        case NULL_ALIGNMENT:
+        case NULL_ALIGNMENT_LENGTH_RATIO:
           return true;
           break;
         case OTHER_ALIGNERS:

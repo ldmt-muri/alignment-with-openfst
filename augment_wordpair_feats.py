@@ -63,18 +63,26 @@ for line in input_wordpair_file:
   tgt_freq_score = compute_freq_score(tgt_word, tgt_word_freqs, tgt_sorted_freqs)
   # generate a bunch of binary features
   new_features = set()
-  # the full src/tgt clusters
-  new_features.add(u'Brown{}:{}=1'.format(src_cluster, tgt_cluster))
-  # prefixes of the src/tgt clusters
-  new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:4], tgt_cluster[0:4]))
-  new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:8], tgt_cluster[0:8]))
-  new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:12], tgt_cluster[0:12]))
-  # frequency for src word and tgt word
-  new_features.add(u'Freq{}:{}=1'.format(src_freq_score, tgt_freq_score))
-  new_features.add(u'FreqDiff{}=1'.format(abs(src_freq_score - tgt_freq_score)))
+
+  # null is a special case
+  if src_word == u'<eps>':
+    src_word = u'__null__token__'
+  elif tgt_word == u'<eps>':
+    tgt_word = u'__null__token__'
+  else:
+    # the full src/tgt clusters
+    #new_features.add(u'Brown{}:{}=1'.format(src_cluster, tgt_cluster))
+    # prefixes of the src/tgt clusters
+    new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:4], tgt_cluster[0:4]))
+    #new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:8], tgt_cluster[0:8]))
+    #new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:12], tgt_cluster[0:12]))
+    # frequency for src word and tgt word
+    new_features.add(u'Freq{}:{}=1'.format(src_freq_score, tgt_freq_score))
+    new_features.add(u'FreqDiff{}=1'.format(abs(src_freq_score - tgt_freq_score)))
+
   # write the new features to the end of the line
   line = u'{} ||| {} ||| {} {}\n'.format( src_word, tgt_word, features, u' '.join(new_features) )
   output_wordpair_file.write(line)
-  
+    
 input_wordpair_file.close()
 output_wordpair_file.close()

@@ -186,6 +186,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
       learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
     } else if(*featIter == "OTHER_ALIGNERS") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
+    } else if(*featIter == "NULL_ALIGNMENT") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
+    } else if(*featIter == "NULL_ALIGNMENT_LENGTH_RATIO") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO);
     } else {
       assert(false);
     }
