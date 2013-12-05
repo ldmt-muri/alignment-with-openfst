@@ -299,7 +299,10 @@ class LearningInfo {
   // the id of the sentence pair currently being processed
   int currentSentId;
 
-  bool useDevSet = true;
+  bool useDevSet = false;
+
+  string tgtWordClassesFilename;
+
 };
 
 #endif

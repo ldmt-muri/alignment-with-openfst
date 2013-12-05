@@ -330,13 +330,13 @@ void LogLinearParams::LoadOtherAlignersOutput() {
     for(auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
 	filenameIter != learningInfo->otherAlignersOutputFilenames.end();
 	++filenameIter) {
-      auto alignerOutput = new vector< vector<int>* >();
+      auto alignerOutput = new vector< vector< set<int>* >* >();
       //cerr << "adding this aligner to the list of aligners" << endl;
       otherAlignersOutput.push_back(alignerOutput);
       std::ifstream infile(filenameIter->c_str());
       std::string line;
       while (std::getline(infile, line)) {
-	auto sentAlignments = new vector<int>();
+	auto sentAlignments = new vector< set<int>* >();
 	//cerr << "adding this sentence to the list of sentences for this aligner" << endl;
 	alignerOutput->push_back(sentAlignments);
 	// each line consists of a number of word-to-word alignments
@@ -360,11 +360,16 @@ void LogLinearParams::LoadOtherAlignersOutput() {
 	  // increment srcpos because we insert the NULL src word at the beginning of each sentence
 	  srcpos++;
 	  // make room in the sentAlignments vector for this pair. tgt positions not mentioned are aligned to NULL
-	  while(sentAlignments->size() <= tgtpos) { sentAlignments->push_back(0); }
+	  while(sentAlignments->size() <= tgtpos) { 
+	    auto tgtPosAlignments = new set<int>();
+	    sentAlignments->push_back(tgtPosAlignments); 
+	  }
 	  // memorize this pair
 	  //cerr << "adding this word pair to this sentence" << endl;
-	  (*sentAlignments)[tgtpos] = srcpos;
+	  (*sentAlignments)[tgtpos]->insert(srcpos);
+	  //cerr << "tgtpos=" << tgtpos << " aligns to srcpos=" << srcpos << endl;
 	}
+	//cerr << endl;
       }
     }
   }
@@ -573,9 +578,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       case FeatureTemplate::OTHER_ALIGNERS:
       for(int alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
 	assert(learningInfo->currentSentId < otherAlignersOutput[alignerId]->size());
-	int woodAlignment = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
+	if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {continue;}
+	auto woodAlignments = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
 	featureId.type = FeatureTemplate::OTHER_ALIGNERS;
-	featureId.otherAligner.compatible = woodAlignment == yI || woodAlignment == 0;
+	featureId.otherAligner.compatible = woodAlignments->count(yI) == 1 || \
+	  yI == 0 && woodAlignments->size() == 0;
 	featureId.otherAligner.alignerId = alignerId;
 	AddParam(featureId);
 	activeFeatures[paramIndexes[featureId]] += 1.0;

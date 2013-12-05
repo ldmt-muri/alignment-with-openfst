@@ -1057,7 +1057,11 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
     if(!ignoreThetaTerms) {
-      BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+      BuildThetaLambdaFst(sentId, 
+			  GetReconstructedObservableSequence(sentId), 
+			  thetaLambdaFst, 
+			  thetaLambdaAlphas, 
+			  thetaLambdaBetas);
     }
     BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
 
@@ -1080,7 +1084,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
       }
       assert(false);
     }
-    
+
     // update the loglikelihood
     if(!ignoreThetaTerms) {
       
@@ -1115,7 +1119,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
 
     // compute the Z value for this sentence
     double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
-
+    
     // keep an eye on bad numbers
     if(std::isnan(nLogZ) || std::isinf(nLogZ)) {
       if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
@@ -1124,10 +1128,16 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
       assert(false);
     } 
 
+
     // update the log likelihood
     if(learningInfo.useDevSet && sentId % 10 == 0) {
       *devSetNll -= nLogZ;
     } else {
+      if(nLogC < nLogZ) {
+	cerr << "this must be a bug. nLogC always be >= nLogZ. " << endl;
+	cerr << "nLogC = " << nLogC << endl;
+	cerr << "nLogZ = " << nLogZ << endl;
+      }
       objective -= nLogZ;
 
       // subtract F/Z from the gradient
@@ -1237,10 +1247,16 @@ void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
     MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels, 
     boost::unordered_map< std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels) {
   
-  MultinomialParams::NormalizeParams(mleGivenOneLabel, learningInfo.multinomialSymmetricDirichletAlpha, false, true);
+  bool unnormalizedParamsAreInNLog = false;
+  bool normalizedParamsAreInNLog = true;
+  MultinomialParams::NormalizeParams(mleGivenOneLabel, 
+				     learningInfo.multinomialSymmetricDirichletAlpha, 
+				     unnormalizedParamsAreInNLog,
+				     normalizedParamsAreInNLog,
+				     learningInfo.variationalInferenceOfMultinomials);
+  cerr << "dirichlet alpha = " << learningInfo.multinomialSymmetricDirichletAlpha << endl;
   nLogThetaGivenOneLabel = mleGivenOneLabel;
 }
-
 
 lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   // lbfgs configurations
@@ -1601,6 +1617,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
           lambdasArray[i] = simulatedAnnealingArray[i];
         }
       } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
+
+	// sync.
+	double dummy4;
+	mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy4, dummy4, std::plus<double>());
+
         bool adagradConverged = false;
         // in each adagrad iter
         while(!adagradConverged) {    
@@ -1635,32 +1656,27 @@ void LatentCrfModel::BlockCoordinateDescent() {
           double l1 = 0.0;
           if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L1) {
             l1 = learningInfo.optimizationMethod.subOptMethod->regularizationStrength; 
-          }
+	    assert(false); // the following implementation of adagrad doesn't account for L1 regularizers
+	  }
 
           // core of adagrad algorithm
           // loop over params
-          for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
-            // the u array accumulates the gradient across iterations
-            u[paramId] += gradient[paramId];
-            // the h array accumulates the squared gradient across iterations
-            h[paramId] += gradient[paramId] * gradient[paramId];
-            // absolute (average derivative value) of this parameter minus l1 strength
-            double z = (fabs(u[paramId]) / adagradIter) - l1;
-            // sign of accumulated derivative value of this parameter
-            double s = u[paramId] > 0? -1 : 1;
-            // update param weight
-            double eta = 1000.0 / (learningInfo.iterationsCount+1);
-            int miniBatchSize = toSentId - fromSentId;
-            if (z > 0 && h[paramId] && gradient[paramId]) {
-              lambdasArray[paramId] = prevLambdaWeights[paramId] + \
-                (eta * s * z * adagradIter) / (sqrt(h[paramId]) * miniBatchSize);
-            } else {
-              lambdasArray[paramId] = prevLambdaWeights[paramId];
-            }
-          }
-          
+	  if(learningInfo.mpiWorld->rank() == 0) {
+	    // update param weight
+	    double eta = 1.0; // / sqrt(learningInfo.iterationsCount+1);
+	    int miniBatchSize = toSentId - fromSentId;
+	    for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+	      // the h array accumulates the squared gradient across iterations
+	      h[paramId] += gradient[paramId] * gradient[paramId];
+	      lambdasArray[paramId] -= eta / sqrt(h[paramId]) * gradient[paramId];
+	    }
+	  }	    
+	  
+	  double dummy3;
+	  mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy3, dummy3, std::plus<double>());
+
           // convergence criterion for adagrad 
-          int maxAdagradIter = 1;//learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+          int maxAdagradIter = 1; //learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
           adagradConverged = (adagradIter++ % maxAdagradIter == 0);
         }
         
@@ -1947,7 +1963,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
   fst::VectorFst<FstUtils::LogArc> lambdaFst;
   std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+  BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence
   boost::unordered_map< int64_t, boost::unordered_map< int64_t, LogVal<double> > > B;
@@ -1994,7 +2010,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
   fst::VectorFst<FstUtils::LogArc> lambdaFst;
   std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
-  BuildThetaLambdaFst(sentId, GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+  BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence
   boost::unordered_map< pair<int64_t, int64_t>, boost::unordered_map< int64_t, LogVal<double> > > B;

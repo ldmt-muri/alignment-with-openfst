@@ -424,7 +424,7 @@ class LogLinearParams {
 
   // for each other aligner, for each sentence pair, for each target position, 
   // determines the corresponding src position 
-  std::vector< std::vector< std::vector<int>* >* > otherAlignersOutput;
+  std::vector< std::vector< std::vector< std::set<int>* >* >* > otherAlignersOutput;
 
   boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
   

@@ -1,6 +1,7 @@
 #ifndef _LATENT_CRF_ALIGNER_H_
 #define _LATENT_CRF_ALIGNER_H_
 
+#include <fstream>
 #include "LatentCrfModel.h"
 
 class LatentCrfAligner : public LatentCrfModel {
@@ -19,6 +20,8 @@ class LatentCrfAligner : public LatentCrfModel {
   std::vector<int64_t>& GetObservableSequence(int exampleId);
 
   std::vector<int64_t>& GetObservableContext(int exampleId);
+
+  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId);
 
   void InitTheta();
 
@@ -46,12 +49,23 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void SetTestExample(std::vector<int64_t> &x_t, std::vector<int64_t> &x_s);
 
+  // this should be done by master only
+  void EncodeTgtWordClasses();
+  
+  // this should be done by all processes
+  void LoadTgtWordClasses();
+
+  // convert tgt tokens to a word class sequence (if provided)
+  vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
+
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;
 
+  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
+
   // data
-  std::vector< std::vector<int64_t> > srcSents, tgtSents, testSrcSents, testTgtSents;
+  std::vector< std::vector<int64_t> > srcSents, tgtSents, classTgtSents, testSrcSents, testTgtSents, testClassTgtSents;
 
   // null token
   static int64_t NULL_TOKEN;
@@ -61,6 +75,7 @@ class LatentCrfAligner : public LatentCrfModel {
   static unsigned FIRST_SRC_POSITION;
   // the string representing the null token at the source sentence which produce "spurious" tgt words.
   static string NULL_TOKEN_STR;
+
 };
 
 #endif

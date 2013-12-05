@@ -86,11 +86,14 @@ for line in input_wordpair_file:
        tgt_freq_score == 0 or tgt_freq_score == max_score:
       pass
     elif freq_score_diff <= 1:
-      new_features.add(u'FreqDiffSmall=1')
+      pass
+    #  new_features.add(u'FreqDiffSmall=1')
     elif freq_score_diff <= max_score / 2.0:
-      new_features.add(u'FreqDiffMedium=1')
+      pass
+    #  new_features.add(u'FreqDiffMedium=1')
     else:
-      new_features.add(u'FreqDiffLarge=1')
+      pass
+    #  new_features.add(u'FreqDiffLarge=1')
 
   # write the new features to the end of the line
   line = u'{} ||| {} ||| {} {}\n'.format( src_word, tgt_word, features, u' '.join(new_features) )

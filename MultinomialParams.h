@@ -268,7 +268,7 @@ namespace MultinomialParams {
     void NormalizeParams(ConditionalMultinomialParam<ContextType> &params, 
                          double symDirichletAlpha = 1.0, bool unnormalizedParamsAreInNLog = true,
                          bool normalizedParamsAreInNLog = true, bool useVariationalInference = false) {
-    assert(symDirichletAlpha >= 1.0); // for smaller values, we should use variational bayes
+    assert(symDirichletAlpha >= 1.0 || useVariationalInference); // for smaller values, we should use variational bayes
     // iterate over src tokens in the model
     for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
       MultinomialParam &translations = (*srcIter).second;

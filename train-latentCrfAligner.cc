@@ -80,7 +80,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     MAX_ITER_COUNT = "max-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
-    MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
+    //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
@@ -93,9 +93,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
     REVERSE = "reverse",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
-    OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames";
-
-
+    OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
+    TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename";
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -112,9 +111,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
-    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.001), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
-//    (MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
+    //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
@@ -128,6 +127,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
+    (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     ;
 
   po::variables_map vm;
@@ -208,6 +208,48 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     }
   }
   
+  // logging
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "program options are as follows:" << endl;
+    cerr << TRAIN_DATA << "=" << textFilename << endl;
+    cerr << INIT_LAMBDA << "=" << initialLambdaParamsFilename << endl;
+    cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
+    cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
+    cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
+    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel;
+    cerr << FEAT << "=";
+    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
+	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+      cerr << *featIter << " ";
+    }
+    cerr << endl;
+    cerr << L2_STRENGTH << "=" << vm[L2_STRENGTH.c_str()].as<float>() << endl;
+    cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
+    cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
+    cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
+    cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
+    cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
+    cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
+    cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
+    if(vm.count(OPTIMIZER.c_str())) {
+      cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
+    }
+    cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
+    cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
+    cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
+    cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
+    cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
+    cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
+    cerr << REVERSE << "=" << learningInfo.reverse << endl;
+    cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
+    cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
+    for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
+	filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
+      cerr << *filename << " ";
+    }
+    cerr << endl << "=====================" << endl;
+  }
+    
   // validation
   if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || vm[L1_STRENGTH.c_str()].as<float>() < 0.0) {
     cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 

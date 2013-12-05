@@ -228,6 +228,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   virtual std::vector<int64_t>& GetObservableContext(int exampleId) = 0;
 
+  virtual std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId) = 0;
+
+
   // SENT LEVEL
   ///////////
 
