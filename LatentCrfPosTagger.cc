@@ -2,7 +2,11 @@
 
 using namespace std;
 
-vector<int>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
+vector<int64_t>& LatentCrfPosTagger::GetReconstructedObservableSequence(int exampleId) {
+  return GetObservableSequence(exampleId);
+}
+
+vector<int64_t>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
   if(testingMode) {
     assert(exampleId < testData.size());
     return testData[exampleId];
@@ -47,7 +51,6 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
   assert(START_OF_SENTENCE_Y_VALUE > 0);
 
-
   // POS tag yDomain
   unsigned latentClasses = NUMBER_OF_LABELS;
   assert(latentClasses > 1);
@@ -58,58 +61,10 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
 
-  // words zDomain
-  for(map<int,string>::const_iterator vocabIter = vocabEncoder.intToToken.begin();
-      vocabIter != vocabEncoder.intToToken.end();
-      vocabIter++) {
-    if(vocabIter->second == "_unk_") {
-      continue;
-    }
-    this->zDomain.insert(vocabIter->first);
-  }
-  // zero is reserved for FST epsilon
-  assert(this->zDomain.count(0) == 0);
-  
   // read and encode data
   data.clear();
   vocabEncoder.Read(textFilename, data);
   examplesCount = data.size();
-  
-  // bool vectors indicating which feature types to use
-  assert(enabledFeatureTypes.size() == 0);
-  // features 1-50 are reserved for wordalignment
-  for(int i = 0; i <= 50; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  // features 51-100 are reserved for latentCrf model
-  for(int i = 51; i < 100; i++) {
-    enabledFeatureTypes.push_back(false);
-  }
-  enabledFeatureTypes[51] = true;   // y_i:y_{i-1}
-  //  enabledFeatureTypes[52] = true; // y_i:x_{i-2}
-  enabledFeatureTypes[53] = true; // y_i:x_{i-1}
-  enabledFeatureTypes[54] = true;   // y_i:x_i
-  enabledFeatureTypes[55] = true; // y_i:x_{i+1}
-  //enabledFeatureTypes[56] = true; // y_i:x_{i+2}
-  enabledFeatureTypes[57] = true; // y_i:i
-  //  enabledFeatureTypes[58] = true;
-  //  enabledFeatureTypes[59] = true;
-  //  enabledFeatureTypes[60] = true;
-  //  enabledFeatureTypes[61] = true;
-  //  enabledFeatureTypes[62] = true;
-  //  enabledFeatureTypes[63] = true;
-  //  enabledFeatureTypes[64] = true;
-  //  enabledFeatureTypes[65] = true;
-  enabledFeatureTypes[66] = true; // y_i:(|x|-i)
-  enabledFeatureTypes[67] = true; // capital and i != 0
-  //enabledFeatureTypes[68] = true;
-  enabledFeatureTypes[69] = true; // coarse hash functions
-  //enabledFeatureTypes[70] = true;
-  //enabledFeatureTypes[71] = true; // y_i:x_{i-1} where x_{i-1} is closed vocab
-  //enabledFeatureTypes[72] = true;
-  //enabledFeatureTypes[73] = true; // y_i:x_{i+1} where x_{i+1} is closed vocab
-  //enabledFeatureTypes[74] = true;
-  //enabledFeatureTypes[75] = true; // y_i
 
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
@@ -140,13 +95,21 @@ void LatentCrfPosTagger::InitTheta() {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
   }
 
+  // create a vector of all word types in the corpus
+  set<int64_t> wordTypes;
+  for(unsigned sentId = 0; sentId < data.size(); ++sentId) {
+    vector<int64_t> &sent = data[sentId];
+    for(auto tokenIter = sent.begin(); tokenIter != sent.end(); ++tokenIter) {
+      wordTypes.insert(*tokenIter);
+    }
+  }
+
   // first initialize nlogthetas to unnormalized gaussians
   nLogThetaGivenOneLabel.params.clear();
-  for(set<int>::const_iterator yDomainIter = yDomain.begin(); 
+  for(auto yDomainIter = yDomain.begin(); 
       yDomainIter != yDomain.end(); yDomainIter++) {
-    for(set<int>::const_iterator zDomainIter = zDomain.begin(); 
-        zDomainIter != zDomain.end(); zDomainIter++) {
-      nLogThetaGivenOneLabel.params[*yDomainIter][*zDomainIter] = abs(gaussianSampler.Draw());
+    for(auto wordTypeIter = wordTypes.begin(); wordTypeIter != wordTypes.end(); ++wordTypeIter) {
+      nLogThetaGivenOneLabel.params[*yDomainIter][*wordTypeIter] = abs(gaussianSampler.Draw());
     }
   }
   
@@ -157,106 +120,12 @@ void LatentCrfPosTagger::InitTheta() {
   }
 }
 
-// add constrained features here and set their weights by hand. those weights will not be optimized.
-void LatentCrfPosTagger::AddConstrainedFeatures() {
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "adding constrained lambda features..." << endl;
-  }
-  FastSparseVector<double> activeFeatures;
-  int yI, xI;
-  int yIM1_dummy, index; // we don't really care
-  vector<int> x;
-  string xIString;
-  vector<bool> constrainedFeatureTypes(lambda->COUNT_OF_FEATURE_TYPES, false);
-  for(int i = 0; i < learningInfo.constraints.size(); i++) {
-    switch(learningInfo.constraints[i].type) {
-      // constrains the latent variable corresponding to certain types
-    case ConstraintType::yIExclusive_xIString:
-      // we only want to constrain one specific feature type
-      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
-      constrainedFeatureTypes[54] = true;
-      // parse the constraint
-      xIString.clear();
-      learningInfo.constraints[i].GetFieldsOfConstraintType_yIExclusive_xIString(yI, xIString);
-      xI = vocabEncoder.Encode(xIString);
-      // fire positively constrained features
-      x.clear();
-      x.push_back(xI);
-      yIM1_dummy = yI; // we don't really care
-      index = 0; // we don't really care
-      activeFeatures.clear();
-      // start hack 
-      SetTestExample(x);
-      testingMode = true;
-      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-      testingMode = false;
-      // end hack
-      // set appropriate weights to favor those parameters
-      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
-      }
-      // negatively constrained features (i.e. since xI is constrained to get the label yI, any other label should be penalized)
-      for(set<int>::const_iterator yDomainIter = yDomain.begin(); yDomainIter != yDomain.end(); yDomainIter++) {
-	if(*yDomainIter == yI) {
-	  continue;
-	}
-	// fire the negatively constrained features
-	activeFeatures.clear();
-	// start hack 
-	SetTestExample(x);
-	testingMode = true;
-	FireFeatures(*yDomainIter, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-	testingMode = false;
-	// end hack
-	// set appropriate weights to penalize those parameters
-	for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	  lambda->UpdateParam(featureIter->first, PENALTY_FOR_CONSTRAINED_FEATURES);
-	}   
-      }
-      break;
-    case ConstraintType::yI_xIString:
-      // we only want to constrain one specific feature type
-      std::fill(constrainedFeatureTypes.begin(), constrainedFeatureTypes.end(), false);
-      constrainedFeatureTypes[54] = true;
-      // parse the constraint
-      xIString.clear();
-      learningInfo.constraints[i].GetFieldsOfConstraintType_yI_xIString(yI, xIString);
-      xI = vocabEncoder.Encode(xIString);
-      // fire positively constrained features
-      x.clear();
-      x.push_back(xI);
-      yIM1_dummy = yI; // we don't really care
-      index = 0; // we don't really care
-      activeFeatures.clear();
-      // start hack
-      SetTestExample(x);
-      testingMode = true;
-      FireFeatures(yI, yIM1_dummy, 0, index, constrainedFeatureTypes, activeFeatures);
-      testingMode = false;
-      // end hack
-      // set appropriate weights to favor those parameters
-      for(FastSparseVector<double>::iterator featureIter = activeFeatures.begin(); featureIter != activeFeatures.end(); ++featureIter) {
-	lambda->UpdateParam(featureIter->first, REWARD_FOR_CONSTRAINED_FEATURES);
-      }
-      break;
-    default:
-      assert(false);
-      break;
-    }
-  }
-  // take note of the number of constrained lambda parameters. use this to limit optimization to non-constrained params
-  countOfConstrainedLambdaParameters = lambda->GetParamsCount();
-  if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "done adding constrainted lambda features. Count:" << lambda->GetParamsCount() << endl;
-  }
-}
-
-void LatentCrfPosTagger::SetTestExample(vector<int> &tokens) {
+void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
   testData.clear();
   testData.push_back(tokens);
 }
 
-void LatentCrfPosTagger::Label(vector<int> &tokens, vector<int> &labels) {
+void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
   testingMode = true;

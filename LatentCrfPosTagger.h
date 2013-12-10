@@ -16,13 +16,15 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   void InitTheta();
 
-  void SetTestExample(std::vector<int> &tokens);
+  void SetTestExample(std::vector<int64_t> &tokens);
 
   void PrepareExample(unsigned exampleId) { /* do nothing */ }
 
-  std::vector<int>& GetObservableContext(int exampleId) { /* do nothing */ return empty; }
+  std::vector<int64_t>& GetObservableContext(int exampleId) { /* do nothing */ return empty; }
 
-  int GetContextOfTheta(unsigned sentId, int y) { return y; }
+  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId);
+
+  int64_t GetContextOfTheta(unsigned sentId, int y) { return y; }
 
  public:
 
@@ -34,18 +36,19 @@ class LatentCrfPosTagger : public LatentCrfModel {
 				     unsigned NUMBER_OF_LABELS, 
 				     unsigned FIRST_LABEL_ID);
 
-  std::vector<int>& GetObservableSequence(int exampleId);
+  std::vector<int64_t>& GetObservableSequence(int exampleId);
 
   // add constrained features with hand-crafted weights
   void AddConstrainedFeatures();
 
   using UnsupervisedSequenceTaggingModel::Label;
-  void Label(std::vector<int> &tokens, std::vector<int> &labels);
+  void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
 
  public:
-  std::vector<std::vector<int> > data, testData;
+  std::vector<std::vector<int64_t> > data, testData;
 
-  std::vector<int> empty;
+  std::vector<int64_t> empty;
+
 };
 
 #endif

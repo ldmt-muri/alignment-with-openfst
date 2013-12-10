@@ -214,7 +214,7 @@ class LearningInfo {
 
   // list of feature templates to be fired
   std::vector<FeatureTemplate> featureTemplates;
-  
+ 
   // 0 = no debug info. 
   // 1 = corpus level debug info.
   // 2 = mini-batch level debug info.

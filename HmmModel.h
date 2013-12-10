@@ -34,7 +34,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   void ClearFractionalCounts();
 
   // builds the lattice of all possible label sequences
-  void BuildThetaGammaFst(vector<int> &x, fst::VectorFst<FstUtils::LogArc> &fst);
+  void BuildThetaGammaFst(vector<int64_t> &x, fst::VectorFst<FstUtils::LogArc> &fst);
   
   // builds the lattice of all possible label sequences, also computes potentials
   void BuildThetaGammaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas);
@@ -44,8 +44,8 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
 		 const fst::VectorFst<FstUtils::LogArc> &fst, 
 		 const vector<FstUtils::LogWeight> &alphas, 
 		 const vector<FstUtils::LogWeight> &betas, 
-		 MultinomialParams::ConditionalMultinomialParam<int> &thetaMle, 
-		 MultinomialParams::ConditionalMultinomialParam<int> &gammaMle);
+		 MultinomialParams::ConditionalMultinomialParam<int64_t> &thetaMle, 
+		 MultinomialParams::ConditionalMultinomialParam<int64_t> &gammaMle);
  
   void InitParams();
   
@@ -62,7 +62,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   void Train();
   
   using UnsupervisedSequenceTaggingModel::Label;
-  void Label(vector<int> &tokens, vector<int> &labels);
+  void Label(vector<int64_t> &tokens, vector<int> &labels);
   
  private:
   
@@ -73,7 +73,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   LearningInfo *learningInfo;
   
   // training data
-  vector< vector<int> > observations;
+  vector< vector<int64_t> > observations;
 
   // gaussian sampler
   GaussianSampler gaussianSampler;
@@ -82,11 +82,12 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   string outputPrefix;
   
   // possible values x_i and y_i may take
-  set<int> xDomain, yDomain;
+  set<int64_t> xDomain;
+  set<int> yDomain;
 
  public:
   // model parameters theta = emission probabilities, alpha = transition prbailibities
-  MultinomialParams::ConditionalMultinomialParam<int> nlogTheta, nlogGamma;
+  MultinomialParams::ConditionalMultinomialParam<int64_t> nlogTheta, nlogGamma;
     
 };
 

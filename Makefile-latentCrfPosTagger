@@ -1,10 +1,8 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS=-llbfgs -lfst -ldl -lboost_mpi -lboost_serialization -lboost_thread -lboost_system -lcmph
-OPT=-O3
-INC=-I/usr/local/packages/gcc/4.7.2/include/c++/4.7.2/
-DEBUG=-g -ggdb
+LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
+OPT=-g -O3
 
 all: train-latentCrfPosTagger
 

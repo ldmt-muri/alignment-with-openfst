@@ -5,12 +5,12 @@ using namespace fst;
 using namespace MultinomialParams;
 using namespace boost;
 
-HmmModel::HmmModel(const string &textFilename, 
+HmmModel2::HmmModel2(const string &textFilename, 
 		     const string &outputPrefix, 
 		     LearningInfo &learningInfo,
 		     unsigned numberOfLabels,
 		     unsigned firstLabelId) : 
-  UnsupervisedSequenceTaggingModel(textFilename),
+  UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
   gaussianSampler(0.0, 1.0),
   START_OF_SENTENCE_Y_VALUE(firstLabelId-1),
   FIRST_ALLOWED_LABEL_VALUE(firstLabelId) {
@@ -26,8 +26,8 @@ HmmModel::HmmModel(const string &textFilename,
   }
 
   // populate the X domain with all types in the vocabEncoder
-  for(map<int,string>::const_iterator vocabIter = vocabEncoder.intToToken.begin();
-      vocabIter != vocabEncoder.intToToken.end();
+  for(auto vocabIter = vocabEncoder.intToToken->begin();
+      vocabIter != vocabEncoder.intToToken->end();
       vocabIter++) {
     if(vocabIter->second == "_unk_") {
       continue;
@@ -45,7 +45,7 @@ HmmModel::HmmModel(const string &textFilename,
 }
 
 // gaussian initialization of the multinomial params
-void HmmModel::InitParams(){
+void HmmModel2::InitParams(){
   for(set<int>::const_iterator toYIter = yDomain.begin(); toYIter != yDomain.end(); toYIter++) {
     if(*toYIter == START_OF_SENTENCE_Y_VALUE) {
       continue;
@@ -53,7 +53,7 @@ void HmmModel::InitParams(){
     for(set<int>::const_iterator fromYIter = yDomain.begin(); fromYIter != yDomain.end(); fromYIter++) {
       nlogGamma[*fromYIter][*toYIter] = 1;
     }
-    for(set<int>::const_iterator xIter = xDomain.begin(); xIter != xDomain.end(); xIter++) {
+    for(set<int64_t>::const_iterator xIter = xDomain.begin(); xIter != xDomain.end(); xIter++) {
       nlogTheta[*toYIter][*xIter] = 1;
     }
   }
@@ -68,16 +68,18 @@ void HmmModel::InitParams(){
   }
 }
 
-void HmmModel::PersistParams(string &prefix) {
+void HmmModel2::PersistParams(string &prefix) {
   if(prefix.size() == 0) {
     prefix = outputPrefix + ".hmm2.final";
   }
-  MultinomialParams::PersistParams(prefix + ".nlogTheta", nlogTheta, vocabEncoder);
-  MultinomialParams::PersistParams(prefix + ".nlogGamma", nlogGamma, vocabEncoder);
+  const string thetaFilename(prefix + ".nlogTheta");
+  const string gammaFilename(prefix + ".nlogTheta");
+  MultinomialParams::PersistParams(thetaFilename, nlogTheta, vocabEncoder, true, true);
+  MultinomialParams::PersistParams(gammaFilename, nlogGamma, vocabEncoder, true, true);
 }
 
 // builds the lattice of all possible label sequences
-void HmmModel::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &fst) {
+void HmmModel2::BuildThetaGammaFst(vector<int64_t> &x, VectorFst<FstUtils::LogArc> &fst) {
   // arcs represent a particular choice of y_i at time step i
   // arc weights are - log \theta_{x_i|y_i} - log \gamma_{y_i|y_{i-1}}
   assert(fst.NumStates() == 0);
@@ -141,7 +143,7 @@ void HmmModel::BuildThetaGammaFst(vector<int> &x, VectorFst<FstUtils::LogArc> &f
 }
 
 // builds the lattice of all possible label sequences, also computes potentials
-void HmmModel::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
+void HmmModel2::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
   // first, build the lattice
   BuildThetaGammaFst(observations[sentId], fst);
@@ -153,13 +155,13 @@ void HmmModel::BuildThetaGammaFst(unsigned sentId, VectorFst<FstUtils::LogArc> &
   ShortestDistance(fst, &betas, true);
 }
 
-void HmmModel::UpdateMle(const unsigned sentId,
+void HmmModel2::UpdateMle(const unsigned sentId,
 			  const VectorFst<FstUtils::LogArc> &fst, 
 			  const vector<FstUtils::LogWeight> &alphas, 
 			  const vector<FstUtils::LogWeight> &betas, 
-			  ConditionalMultinomialParam<int> &thetaMle, 
-			  ConditionalMultinomialParam<int> &gammaMle){
-  vector<int> &x = observations[sentId];
+			  ConditionalMultinomialParam<int64_t> &thetaMle, 
+			  ConditionalMultinomialParam<int64_t> &gammaMle){
+  vector<int64_t> &x = observations[sentId];
  
   // schedule for visiting states such that we know the timestep for each arc
   set<int> iStates, iP1States;
@@ -211,12 +213,12 @@ void HmmModel::UpdateMle(const unsigned sentId,
 }
 
 // EM training of the HMM
-void HmmModel::Train(){
+void HmmModel2::Train(){
   do {
     
     // expectation
     double nloglikelihood = 0;
-    ConditionalMultinomialParam<int> thetaMle, gammaMle;
+    ConditionalMultinomialParam<int64_t> thetaMle, gammaMle;
     for(unsigned sentId = 0; sentId < observations.size(); sentId++) {
       VectorFst<FstUtils::LogArc> fst;
       vector<FstUtils::LogWeight> alphas, betas; 
@@ -237,9 +239,13 @@ void HmmModel::Train(){
     }
 
     // maximization
-    thetaMle.ConvertUnnormalizedParamsIntoNormalizedNlogParams();
+    MultinomialParams::NormalizeParams(thetaMle, learningInfo->multinomialSymmetricDirichletAlpha, 
+                                       false, true, 
+                                       learningInfo->variationalInferenceOfMultinomials);
     nlogTheta = thetaMle;
-    gammaMle.ConvertUnnormalizedParamsIntoNormalizedNlogParams();
+    MultinomialParams::NormalizeParams(gammaMle, learningInfo->multinomialSymmetricDirichletAlpha, 
+                                       false, true, 
+                                       learningInfo->variationalInferenceOfMultinomials);
     nlogGamma = gammaMle;
 
     // check convergence
@@ -253,7 +259,7 @@ void HmmModel::Train(){
   } while(!learningInfo->IsModelConverged());
 }
 
-void HmmModel::Label(vector<int> &tokens, vector<int> &labels) {
+void HmmModel2::Label(vector<int64_t> &tokens, vector<int> &labels) {
   VectorFst<FstUtils::LogArc> fst;
   BuildThetaGammaFst(tokens, fst);
 
