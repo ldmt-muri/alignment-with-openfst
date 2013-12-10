@@ -58,11 +58,12 @@ class LatentCrfAligner : public LatentCrfModel {
   // convert tgt tokens to a word class sequence (if provided)
   vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
 
+  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
+
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;
 
-  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
 
   // data
   std::vector< std::vector<int64_t> > srcSents, tgtSents, classTgtSents, testSrcSents, testTgtSents, testClassTgtSents;

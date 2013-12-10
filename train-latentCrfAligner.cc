@@ -216,7 +216,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
     cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
     cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
-    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel;
+    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
     cerr << FEAT << "=";
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
 	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
@@ -302,19 +302,29 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   
   // only override theta params if initialThetaParamsFilename is not specified
   if(initialThetaParamsFilename.size() == 0 && learningInfo.initializeThetasWithModel1) {
-    // now initialize the latentCrfAligner's theta parameters, and also augment the precomputed features with ibm model 1 features
-    cerr << "rank #" << world.rank() << ": now update the multinomial params of the latentCrfALigner model." << endl;
-    for(auto contextIter = latentCrfAligner.nLogThetaGivenOneLabel.params.begin(); 
-        contextIter != latentCrfAligner.nLogThetaGivenOneLabel.params.end();
+    cerr << "rank #" << world.rank() << ": now update the multinomail params of the latentCrfAligner model." << endl;
+    for(auto contextIter = ibmModel1.params.params.begin(); 
+        contextIter != ibmModel1.params.params.end();
         contextIter++) {
-      
       for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-        assert(ibmModel1.params[contextIter->first].count(probIter->first) > 0);
-        probIter->second = ibmModel1.params[contextIter->first][probIter->first];
+        if(learningInfo.tgtWordClassesFilename.size() == 0) {
+          latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
+        } else {
+          int64_t tgtWordClass = latentCrfAligner.tgtWordToClass[probIter->first];
+          latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
+        }
       }
     }
   }
   
+  // nLogThetaGivenOneLabel is not normalized
+  // TODO: normalize it
+  //MultinomialParams::NormalizeParams<int64_t>(latentCrfAligner.nLogThetaGivenOneLabel, 
+  //                                            learningInfo.multinomialSymmetricDirichletAlpha, 
+  //                                            true, true, 
+  //                                            learningInfo.variationalInferenceOfMultinomials);
+
+
   cerr << "rank #" << world.rank() << ": ibm model 1 initialization finished." << endl;
 }
 

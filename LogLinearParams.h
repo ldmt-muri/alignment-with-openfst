@@ -97,7 +97,7 @@ public:
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
         return bigram.current < rhs.bigram.current || \
-	  bigram.current == rhs.bigram.current && bigram.previous < rhs.bigram.previous;
+          (bigram.current == rhs.bigram.current && bigram.previous < rhs.bigram.previous);
         break;
       case FeatureTemplate::ALIGNMENT_JUMP:
       case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
@@ -106,7 +106,7 @@ public:
         break;
       case SRC0_TGT0:
         return wordPair.srcWord < rhs.wordPair.srcWord || \
-	  wordPair.srcWord == rhs.wordPair.srcWord && wordPair.tgtWord < rhs.wordPair.tgtWord;
+          (wordPair.srcWord == rhs.wordPair.srcWord && wordPair.tgtWord < rhs.wordPair.tgtWord);
         break;
       case PRECOMPUTED:
         return precomputed < rhs.precomputed;
@@ -120,7 +120,7 @@ public:
         break;
     case OTHER_ALIGNERS:
       return otherAligner.alignerId < rhs.otherAligner.alignerId || \
-	otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible;
+        (otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible);
       default:
         assert(false);
     }

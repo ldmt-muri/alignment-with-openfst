@@ -34,12 +34,11 @@ LatentCrfModel* LatentCrfAligner::GetInstance() {
 }
 
 void LatentCrfAligner::EncodeTgtWordClasses() {
-  if(learningInfo.mpiWorld != 0 || learningInfo.tgtWordClassesFilename.size() == 0) { return; }
+  if(learningInfo.mpiWorld->rank() != 0 || learningInfo.tgtWordClassesFilename.size() == 0) { return; }
   std::ifstream infile(learningInfo.tgtWordClassesFilename.c_str());
   string classString, wordString;
   int frequency;
   while(infile >> classString >> wordString >> frequency) {
-    cerr << "reading line: " << classString << ", " << wordString << ", " << frequency << endl; 
     int64_t wordClass = vocabEncoder.Encode(classString);
     int64_t wordType = vocabEncoder.Encode(wordString);
   }
@@ -47,6 +46,7 @@ void LatentCrfAligner::EncodeTgtWordClasses() {
 }
 
 vector<int64_t> LatentCrfAligner::GetTgtWordClassSequence(vector<int64_t> &x_t) {
+  assert(learningInfo.tgtWordClassesFilename.size() > 0);
   vector<int64_t> classSequence;
   for(auto tgtToken = x_t.begin(); tgtToken != x_t.end(); tgtToken++) {
     if( tgtWordToClass.count(*tgtToken) == 0 ) {
@@ -66,7 +66,6 @@ void LatentCrfAligner::LoadTgtWordClasses() {
   string classString, wordString;
   int frequency;
   while(infile >> classString >> wordString >> frequency) {
-    cerr << "reading line: " << classString << ", " << wordString << ", " << frequency << endl; 
     int64_t wordClass = vocabEncoder.ConstEncode(classString);
     int64_t wordType = vocabEncoder.ConstEncode(wordString);
     tgtWordToClass[wordType] = wordClass;
@@ -77,6 +76,11 @@ void LatentCrfAligner::LoadTgtWordClasses() {
   for(auto tgtSent = tgtSents.begin(); tgtSent != tgtSents.end(); tgtSent++) {
     classTgtSents.push_back( GetTgtWordClassSequence(*tgtSent) );
   }
+  
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master: finished reading " << learningInfo.tgtWordClassesFilename << ". now, classTgtSents.size() = " << classTgtSents.size() << ", tgtWordToClass.size() = " << tgtWordToClass.size() << endl;
+  }
+
 }
 
 
@@ -116,7 +120,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   // read and encode tgt words and their classes (e.g. brown clusters)
   if(learningInfo.mpiWorld->rank() == 0) {
     EncodeTgtWordClasses();
-  }
+  } 
 
   // read and encode data
   srcSents.clear();
@@ -131,7 +135,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(srcSents.size() > 0);
   examplesCount = srcSents.size();
 
-  if(learningInfo.mpiWorld->rank() == 0) {
+  if(learningInfo.mpiWorld->rank() == 0 && wordPairFeaturesFilename.size() > 0) {
     lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
   }
 
@@ -190,18 +194,22 @@ void LatentCrfAligner::InitTheta() {
     for(unsigned i = 0; i < srcSent.size(); ++i) {
       auto srcToken = srcSent[i];
       for(unsigned j = 0; j < reconstructedSent.size(); ++j) {
-	auto tgtToken = reconstructedSent[j];
-	if(learningInfo.initializeThetasWithGaussian) {
-	  nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
-	} else if (learningInfo.initializeThetasWithUniform || learningInfo.initializeThetasWithModel1) {
-	  nLogThetaGivenOneLabel.params[srcToken][tgtToken] = 1;
-	}
+        auto tgtToken = reconstructedSent[j];
+        if(learningInfo.initializeThetasWithGaussian) {
+          nLogThetaGivenOneLabel.params[srcToken][tgtToken] = abs(gaussianSampler.Draw());
+        } else if (learningInfo.initializeThetasWithUniform || learningInfo.initializeThetasWithModel1) {
+          nLogThetaGivenOneLabel.params[srcToken][tgtToken] = 1;
+        }
       }
     }
   }
-
+  
   // then normalize them
   MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
+
+  stringstream thetaParamsFilename;
+  thetaParamsFilename << outputPrefix << ".init.theta";
+  PersistTheta(thetaParamsFilename.str());
 
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done" << endl;
@@ -272,8 +280,10 @@ void LatentCrfAligner::SetTestExample(vector<int64_t> &x_t, vector<int64_t> &x_s
   testSrcSents.push_back(x_s);
   testTgtSents.clear();
   testTgtSents.push_back(x_t);
-  testClassTgtSents.clear();  
-  testClassTgtSents.push_back( GetTgtWordClassSequence(x_t) );
+  if(learningInfo.tgtWordClassesFilename.size() > 0) {
+    testClassTgtSents.clear();  
+    testClassTgtSents.push_back( GetTgtWordClassSequence(x_t) );
+  }
 }
 
 // tokens = target sentence

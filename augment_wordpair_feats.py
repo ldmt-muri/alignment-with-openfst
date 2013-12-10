@@ -60,8 +60,8 @@ for line in input_wordpair_file:
   tgt_cluster = tgt_brown_clusters[tgt_word] if tgt_word in tgt_brown_clusters else u'?'
   # then, determine how frequent src_word and tgt_word are
   max_score = 10
-  src_freq_score = compute_freq_score(src_word, src_word_freqs, src_sorted_freqs, max_score)
-  tgt_freq_score = compute_freq_score(tgt_word, tgt_word_freqs, tgt_sorted_freqs, max_score)
+  #src_freq_score = compute_freq_score(src_word, src_word_freqs, src_sorted_freqs, max_score)
+  #tgt_freq_score = compute_freq_score(tgt_word, tgt_word_freqs, tgt_sorted_freqs, max_score)
   # generate a bunch of binary features
   new_features = set()
 
@@ -81,18 +81,18 @@ for line in input_wordpair_file:
     #new_features.add(u'Brown{}:{}=1'.format(src_cluster[0:12], tgt_cluster[0:12]))
     # frequency for src word and tgt word
     #new_features.add(u'Freq{}:{}=1'.format(src_freq_score, tgt_freq_score))
-    freq_score_diff = abs(src_freq_score - tgt_freq_score)
-    if src_freq_score == 0 or src_freq_score == max_score or \
-       tgt_freq_score == 0 or tgt_freq_score == max_score:
-      pass
-    elif freq_score_diff <= 1:
-      pass
+    #freq_score_diff = abs(src_freq_score - tgt_freq_score)
+    #if src_freq_score == 0 or src_freq_score == max_score or \
+    #   tgt_freq_score == 0 or tgt_freq_score == max_score:
+    #  pass
+    #elif freq_score_diff <= 1:
+    #  pass
     #  new_features.add(u'FreqDiffSmall=1')
-    elif freq_score_diff <= max_score / 2.0:
-      pass
+    #elif freq_score_diff <= max_score / 2.0:
+    #  pass
     #  new_features.add(u'FreqDiffMedium=1')
-    else:
-      pass
+    #else:
+    #  pass
     #  new_features.add(u'FreqDiffLarge=1')
 
   # write the new features to the end of the line

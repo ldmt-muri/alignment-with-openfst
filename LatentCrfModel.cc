@@ -518,8 +518,8 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int64_t zi, unsigned examp
     return nLogThetaGivenOneLabel[yi][zi]; 
   } else if(task == Task::WORD_ALIGNMENT) {
     vector<int64_t> &srcSent = GetObservableContext(exampleId);
-    vector<int64_t> &tgtSent = GetObservableSequence(exampleId);
-    assert(find(tgtSent.begin(), tgtSent.end(), zi) != tgtSent.end());
+    vector<int64_t> &reconstructedSent = GetReconstructedObservableSequence(exampleId);
+    assert(find(reconstructedSent.begin(), reconstructedSent.end(), zi) != reconstructedSent.end());
     unsigned FIRST_POSITION = learningInfo.allowNullAlignments? NULL_POSITION: NULL_POSITION+1;
     yi -= FIRST_POSITION;
     yim1 -= FIRST_POSITION;
@@ -1968,7 +1968,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   // compute the B matrix for this sentence
   boost::unordered_map< int64_t, boost::unordered_map< int64_t, LogVal<double> > > B;
   B.clear();
-  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
+  ComputeB(sentId, this->GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
   //  cerr << "nLogC=" << nLogC << endl;
@@ -2015,7 +2015,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   // compute the B matrix for this sentence
   boost::unordered_map< pair<int64_t, int64_t>, boost::unordered_map< int64_t, LogVal<double> > > B;
   B.clear();
-  ComputeB(sentId, this->GetObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
+  ComputeB(sentId, this->GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas, B);
   // compute the C value for this sentence
   double nLogC = ComputeNLogC(thetaLambdaFst, thetaLambdaBetas);
   //  cerr << "C = " << MultinomialParams::nExp(nLogC) << endl;

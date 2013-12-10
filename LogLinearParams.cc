@@ -582,7 +582,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 	auto woodAlignments = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
 	featureId.type = FeatureTemplate::OTHER_ALIGNERS;
 	featureId.otherAligner.compatible = woodAlignments->count(yI) == 1 || \
-	  yI == 0 && woodAlignments->size() == 0;
+	  (yI == 0 && woodAlignments->size() == 0);
 	featureId.otherAligner.alignerId = alignerId;
 	AddParam(featureId);
 	activeFeatures[paramIndexes[featureId]] += 1.0;
