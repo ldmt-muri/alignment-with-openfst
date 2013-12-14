@@ -93,7 +93,7 @@ class UnsupervisedSequenceTaggingModel {
                                   LearningInfo &learningInfo) : 
   vocabEncoder(vocabEncoderFilenameInitializer, learningInfo),
     learningInfo(learningInfo)
-  { 
+  {
   }
 
   ~UnsupervisedSequenceTaggingModel() { }

@@ -48,28 +48,47 @@ public:
   static VocabEncoder *vocabEncoder;
   FeatureTemplate type;
   union {
+    int64_t wordBias;
+    struct { signed char displacement; int64_t word; int label; } emission;
     struct { unsigned current, previous; } bigram;
     int alignmentJump;
+    struct { int alignmentJump; int64_t wordBias; } biasedAlignmentJump;
     struct { unsigned srcWord, tgtWord; } wordPair;
     int64_t precomputed;
     struct { unsigned alignerId; bool compatible; } otherAligner;
+    struct { int position; int label; } boundaryLabel;
   };
   
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
     ar & type;
     switch(type) {
-      case FeatureTemplate::ALIGNMENT_JUMP:
-      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
-        ar & alignmentJump;
+      case FeatureTemplate::BOUNDARY_LABELS:
+        ar & boundaryLabel.position;
+        ar & boundaryLabel.label;
         break;
       case FeatureTemplate::DIAGONAL_DEVIATION:
+      case FeatureTemplate::SRC_WORD_BIAS:
+        ar & wordBias;
+        break;
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+        ar & alignmentJump;
+        break;
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+        ar & biasedAlignmentJump.alignmentJump;
+        ar & biasedAlignmentJump.wordBias;
+        break;
       case FeatureTemplate::SYNC_END:
       case FeatureTemplate::SYNC_START:
       case FeatureTemplate::NULL_ALIGNMENT:
       case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
         break;
+    case FeatureTemplate::EMISSION:
+      ar & emission.displacement;
+      ar & emission.label;
+      ar & emission.word;
+      break;
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
         ar & bigram.previous;
@@ -94,6 +113,21 @@ public:
   bool operator<(const FeatureId& rhs) const {
     if(type < rhs.type) return true;
     switch(type) {
+    case FeatureTemplate::BOUNDARY_LABELS:
+      return boundaryLabel.position < rhs.boundaryLabel.position || \
+        (boundaryLabel.position == rhs.boundaryLabel.position && boundaryLabel.label < rhs.boundaryLabel.label);
+      break;
+      case FeatureTemplate::EMISSION:
+        if(emission.displacement != rhs.emission.displacement) {
+          return emission.displacement < rhs.emission.displacement;
+        } else if(emission.label != rhs.emission.label) {
+          return emission.label < rhs.emission.label;
+        } else if(emission.word != rhs.emission.word) {
+          return emission.word < rhs.emission.word;
+        } else {
+          return false;
+        }
+        break;
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
         return bigram.current < rhs.bigram.current || \
@@ -101,8 +135,11 @@ public:
         break;
       case FeatureTemplate::ALIGNMENT_JUMP:
       case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
         return alignmentJump < rhs.alignmentJump;
+        break;
+      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+        return biasedAlignmentJump.alignmentJump < rhs.biasedAlignmentJump.alignmentJump || \
+          (biasedAlignmentJump.alignmentJump == rhs.biasedAlignmentJump.alignmentJump && biasedAlignmentJump.wordBias < rhs.biasedAlignmentJump.wordBias);
         break;
       case SRC0_TGT0:
         return wordPair.srcWord < rhs.wordPair.srcWord || \
@@ -112,6 +149,9 @@ public:
         return precomputed < rhs.precomputed;
         break;
       case DIAGONAL_DEVIATION:
+      case SRC_WORD_BIAS:
+        return wordBias < rhs.wordBias; 
+        break;
       case SYNC_START:
       case SYNC_END:
       case NULL_ALIGNMENT:
@@ -130,32 +170,47 @@ public:
   bool operator!=(const FeatureId& rhs) const {
     if(type != rhs.type) return true;
     switch(type) {
-      case FeatureTemplate::LABEL_BIGRAM:
-      case FeatureTemplate::SRC_BIGRAM:
-        return bigram.current != rhs.bigram.current || bigram.previous != rhs.bigram.previous;
-        break;
-      case FeatureTemplate::ALIGNMENT_JUMP:
-      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
-        return alignmentJump != rhs.alignmentJump;
-        break;
-      case SRC0_TGT0:
-        return wordPair.srcWord != rhs.wordPair.srcWord || wordPair.tgtWord != rhs.wordPair.tgtWord;
-        break;
-      case PRECOMPUTED:
-        return precomputed != rhs.precomputed;
-        break;
-      case DIAGONAL_DEVIATION:
-      case SYNC_START:
-      case SYNC_END:
-      case NULL_ALIGNMENT:
-      case NULL_ALIGNMENT_LENGTH_RATIO:
-	return false;
-        break;
+    case FeatureTemplate::BOUNDARY_LABELS:
+      return boundaryLabel.position != rhs.boundaryLabel.position || \
+        boundaryLabel.label != rhs.boundaryLabel.label;
+      break;
+    case FeatureTemplate::EMISSION:
+      return emission.displacement != rhs.emission.displacement ||  \
+        emission.label != rhs.emission.label ||                     \
+        emission.word != rhs.emission.word;
+      break;
+    case FeatureTemplate::LABEL_BIGRAM:
+    case FeatureTemplate::SRC_BIGRAM:
+      return bigram.current != rhs.bigram.current || bigram.previous != rhs.bigram.previous;
+      break;
+    case FeatureTemplate::ALIGNMENT_JUMP:
+    case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      return alignmentJump != rhs.alignmentJump;
+      break;
+    case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      return biasedAlignmentJump.alignmentJump != rhs.biasedAlignmentJump.alignmentJump || \
+        biasedAlignmentJump.wordBias != rhs.biasedAlignmentJump.wordBias;
+      break;
+    case SRC0_TGT0:
+      return wordPair.srcWord != rhs.wordPair.srcWord || wordPair.tgtWord != rhs.wordPair.tgtWord;
+      break;
+    case PRECOMPUTED:
+      return precomputed != rhs.precomputed;
+      break;
+    case DIAGONAL_DEVIATION:
+    case SRC_WORD_BIAS:
+      return wordBias != rhs.wordBias;
+      break;
+    case SYNC_START:
+    case SYNC_END:
+    case NULL_ALIGNMENT:
+    case NULL_ALIGNMENT_LENGTH_RATIO:
+      return false;
+      break;
     case OTHER_ALIGNERS:
       return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
-      default:
-        assert(false);
+    default:
+      assert(false);
     }
   }
   
@@ -168,6 +223,15 @@ public:
       size_t seed = 0;
       boost::hash_combine(seed, x.type);
       switch(x.type) {
+      case FeatureTemplate::BOUNDARY_LABELS:
+        boost::hash_combine(seed, x.boundaryLabel.position);
+        boost::hash_combine(seed, x.boundaryLabel.label);
+        break;
+      case FeatureTemplate::EMISSION:
+          boost::hash_combine(seed, x.emission.displacement);
+          boost::hash_combine(seed, x.emission.label);
+          boost::hash_combine(seed, x.emission.word);
+          break;
         case FeatureTemplate::LABEL_BIGRAM:
         case FeatureTemplate::SRC_BIGRAM:
           boost::hash_combine(seed, x.bigram.current);
@@ -175,8 +239,11 @@ public:
           break;
         case FeatureTemplate::ALIGNMENT_JUMP:
         case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
           boost::hash_combine(seed, x.alignmentJump);
+          break;
+        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+          boost::hash_combine(seed, x.biasedAlignmentJump.alignmentJump);
+          boost::hash_combine(seed, x.biasedAlignmentJump.wordBias);
           break;
         case SRC0_TGT0:
           boost::hash_combine(seed, x.wordPair.srcWord);
@@ -186,6 +253,9 @@ public:
           boost::hash_combine(seed, x.precomputed);
           break;
         case DIAGONAL_DEVIATION:
+        case SRC_WORD_BIAS:
+          boost::hash_combine(seed, x.wordBias);
+          break;
         case SYNC_START:
         case SYNC_END:
         case NULL_ALIGNMENT:
@@ -206,29 +276,44 @@ public:
     bool operator()(const FeatureId& left, const FeatureId& right) const {
       if(left.type != right.type) return false;
       switch(left.type) {
-        case FeatureTemplate::LABEL_BIGRAM:
-        case FeatureTemplate::SRC_BIGRAM:
-          return left.bigram.current == right.bigram.current && left.bigram.previous == right.bigram.previous;
+      case FeatureTemplate::BOUNDARY_LABELS:
+        return left.boundaryLabel.position == right.boundaryLabel.position && \
+          left.boundaryLabel.label == right.boundaryLabel.label;
+        break;
+      case FeatureTemplate::EMISSION:
+        return left.emission.displacement == right.emission.displacement && \
+          left.emission.label == right.emission.label &&                \
+          left.emission.word == right.emission.word;
+        break;
+      case FeatureTemplate::LABEL_BIGRAM:
+      case FeatureTemplate::SRC_BIGRAM:
+        return left.bigram.current == right.bigram.current && left.bigram.previous == right.bigram.previous;
           break;
         case FeatureTemplate::ALIGNMENT_JUMP:
         case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
           return left.alignmentJump == right.alignmentJump;
           break;
-        case SRC0_TGT0:
+        case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+          return left.biasedAlignmentJump.alignmentJump == right.biasedAlignmentJump.alignmentJump && \
+            left.biasedAlignmentJump.wordBias == right.biasedAlignmentJump.wordBias;
+          break;
+        case FeatureTemplate::SRC0_TGT0:
           return left.wordPair.srcWord == right.wordPair.srcWord && left.wordPair.tgtWord == right.wordPair.tgtWord;
           break;
-        case PRECOMPUTED:
+        case FeatureTemplate::PRECOMPUTED:
           return left.precomputed == right.precomputed;
           break;
-        case DIAGONAL_DEVIATION:
-        case SYNC_START:
-        case SYNC_END:
-        case NULL_ALIGNMENT:
-        case NULL_ALIGNMENT_LENGTH_RATIO:
+        case FeatureTemplate::DIAGONAL_DEVIATION:
+        case FeatureTemplate::SRC_WORD_BIAS:
+          return left.wordBias == right.wordBias;
+          break;
+        case FeatureTemplate::SYNC_START:
+        case FeatureTemplate::SYNC_END:
+        case FeatureTemplate::NULL_ALIGNMENT:
+        case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
           return true;
           break;
-        case OTHER_ALIGNERS:
+        case FeatureTemplate::OTHER_ALIGNERS:
 	return left.otherAligner.alignerId == right.otherAligner.alignerId && \
 	  left.otherAligner.compatible == right.otherAligner.compatible;
 	  break;
@@ -336,7 +421,7 @@ class LogLinearParams {
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
 		    unordered_map_featureId_double& activeFeatures);
-  
+
   void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
 		    FastSparseVector<double> &activeFeatures);
   
@@ -412,9 +497,6 @@ class LogLinearParams {
   
   // maps a word id into a string
   VocabEncoder &types;
-
-  // maps precomputed feature strings into ids
-  //VocabEncoder precomputedFeaturesEncoder;
 
   LearningInfo *learningInfo;
 

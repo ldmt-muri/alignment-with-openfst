@@ -19,6 +19,18 @@ namespace po = boost::program_options;
 
 typedef ProductArc<FstUtils::LogWeight, FstUtils::LogWeight> ProductLogArc;
 
+string GetOutputPrefix(int argc, char **argv) {
+  string OUTPUT_PREFIX_OPTION("--output-prefix");
+  for(int i = 0; i < argc; i++) {
+    string currentOption(argv[i]);
+    if(currentOption == OUTPUT_PREFIX_OPTION) {
+      if(i+1 == argc) assert(false);
+      return string(argv[i+1]);
+    }
+  }
+  assert(false);
+}
+
 void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo) {
   assert(argc >= 3);
   textFilename = argv[1];
@@ -129,6 +141,10 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
       featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
     if(*featIter == "LABEL_BIGRAM") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
+    } else if(*featIter == "BOUNDARY_LABELS") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::BOUNDARY_LABELS);
+    } else if(*featIter == "EMISSION") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::EMISSION);
     } else if(*featIter == "SRC_BIGRAM") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
@@ -238,7 +254,6 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     assert(false);
   }
 
-
 }
 
 // returns the rank of the process which have found the best HMM parameters
@@ -251,7 +266,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   bool persistHmmParams = false;
 
-  LearningInfo learningInfo(&world);
+  LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
@@ -380,7 +395,7 @@ int main(int argc, char **argv) {
     cerr << "done." << endl;
   }
 
-  unsigned NUMBER_OF_LABELS = 45;
+  unsigned NUMBER_OF_LABELS = 12;
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -394,7 +409,7 @@ int main(int argc, char **argv) {
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": setting configurations...";
   }
-  LearningInfo learningInfo(&world);
+  LearningInfo learningInfo(&world, GetOutputPrefix(argc, argv));
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
   learningInfo.useMaxIterationsCount = false;
@@ -425,6 +440,11 @@ int main(int argc, char **argv) {
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.supervisedTraining = false;
 
+  // thetas
+  learningInfo.thetaOptMethod = new OptMethod();
+  learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+  //learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+
   // parse command line arguments
   string textFilename, outputFilenamePrefix, goldLabelsFilename;
   ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo);
@@ -435,8 +455,14 @@ int main(int argc, char **argv) {
   // hmm initialization
   unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
   model->BroadcastTheta(bestRank);
-  assert(false); // we need to syncronize lambdas instead of broadcasting them right here
-  //model->BroadcastLambdas(bestRank);
+  
+  // sync all processes
+  bool dummy = true;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    mpi::gather<bool>(*learningInfo.mpiWorld, dummy, &dummy, 0);
+  } else {
+    mpi::gather<bool>(*learningInfo.mpiWorld, dummy, 0);
+  }
 
   // use gold labels to do supervised training
   if(learningInfo.supervisedTraining) {

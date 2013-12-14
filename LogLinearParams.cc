@@ -9,6 +9,15 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
 {
 
   switch(obj.type) {
+  case FeatureTemplate::BOUNDARY_LABELS:
+    os << "BOUNDARY_LABELS";
+    os << "|" << obj.boundaryLabel.position;
+    os << "|" << obj.boundaryLabel.label;
+    break;
+  case FeatureTemplate::EMISSION:
+    os << "EMISSION";
+    os << '|' << obj.emission.displacement << "|" << obj.emission.label << "->" << obj.emission.word;
+    break;
   case FeatureTemplate::LABEL_BIGRAM:
     os << "LABEL_BIGRAM";
     os << '|' << obj.bigram.previous << "->" << obj.bigram.current;
@@ -23,7 +32,8 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::LOG_ALIGNMENT_JUMP:
     os << "LOG_ALIGNMENT_JUMP";
-    os << '|' << obj.alignmentJump;
+    os << '|' << obj.biasedAlignmentJump.alignmentJump;
+    os << '|' << obj.biasedAlignmentJump.wordBias;
     break;
   case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
     os << "ALIGNMENT_JUMP_IS_ZERO";
@@ -38,7 +48,9 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << '|' << FeatureId::vocabEncoder->Decode(obj.precomputed);
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
+  case FeatureTemplate::SRC_WORD_BIAS:
     os << "DIAGONAL_DEVIATION";
+    os << '|' << obj.wordBias;
     break;
   case FeatureTemplate::SYNC_START:
     os << "SYNC_START";
@@ -61,54 +73,6 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   }
   return os;
 }
-
-/*
-std::istream& operator>>(std::istream& is, FeatureId& obj)
-{
-  // read obj from stream
-  int temp;
-  string temp2;
-  is >> temp;
-  obj.type = (FeatureTemplate)temp;
-  char separator;
-  switch(obj.type) {
-  case FeatureTemplate::LABEL_BIGRAM:
-  case FeatureTemplate::SRC_BIGRAM:
-    is >> separator >> obj.bigram.current;
-    assert(separator == '|');
-    is >> separator >> obj.bigram.previous;
-    assert(separator == '|');
-    break;
-  case FeatureTemplate::ALIGNMENT_JUMP:
-  case FeatureTemplate::LOG_ALIGNMENT_JUMP:
-  case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-    is >> separator >> obj.alignmentJump;
-    assert(separator == '|');
-    break;
-  case FeatureTemplate::SRC0_TGT0:
-    is >> separator >> obj.wordPair.srcWord;
-    assert(separator == '|');
-    is >> separator >> obj.wordPair.tgtWord;
-    assert(separator == '|');
-    break;
-  case FeatureTemplate::PRECOMPUTED:
-    //is >> separator >> temp2;
-    is >> separator >> obj.precomputed;
-    assert(separator == '|');
-    break;
-  case FeatureTemplate::DIAGONAL_DEVIATION:
-  case FeatureTemplate::SYNC_START:
-  case FeatureTemplate::SYNC_END:
-    break;
-  default:
-    is.setstate(std::ios::failbit);
-    assert(false);
-  }
-  is >> separator;
-  assert(separator == '|');
-  return is;
-}
-*/
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
                                  double gaussianStdDev) :
@@ -495,10 +459,16 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 
       case FeatureTemplate::LOG_ALIGNMENT_JUMP:
       featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
-      featureId.alignmentJump = 
-	yI >= yIM1? 
-	log(1 + 2.0 * (yI - yIM1)):
-	-1 * log(1 + 2.0 * (yIM1 - yI));
+      featureId.biasedAlignmentJump.alignmentJump = 
+        yI >= yIM1? 
+        log(1 + 2.0 * (yI - yIM1)):
+        -1 * log(1 + 2.0 * (yIM1 - yI));
+      // biased version:
+      featureId.biasedAlignmentJump.wordBias = srcToken;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      // unbiased version:
+      featureId.biasedAlignmentJump.wordBias = -1;
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
@@ -546,12 +516,25 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       case FeatureTemplate::DIAGONAL_DEVIATION:
       if(yI + yIM1 > 0) {
         featureId.type = FeatureTemplate::DIAGONAL_DEVIATION;
-        AddParam(featureId);
+        featureId.wordBias = srcToken;
         double deviation = (yI > 0)?
           fabs(1.0 * (yI-1) / (x_s.size()-1) - 1.0 * i / x_t.size()):
           fabs(1.0 * (yIM1-1) / (x_s.size()-1) - 1.0 * i / x_t.size());
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += deviation;
+
+        // this feature is not specific to the srcToken
+        featureId.wordBias = -1; 
+        AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += deviation;
       }
+      break;
+
+      case FeatureTemplate::SRC_WORD_BIAS:
+      featureId.type = FeatureTemplate::SRC_WORD_BIAS;
+      featureId.wordBias = srcToken;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
 
       case FeatureTemplate::SYNC_START:
@@ -570,6 +553,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       }
       break;
     
+      case FeatureTemplate::EMISSION:
+      cerr << "this feature template is not implemented for word alignment" << endl;
+      assert(false);
+      break;
+
       case FeatureTemplate::LABEL_BIGRAM:
       cerr << "this feature template is not implemented for word alignment" << endl;
       assert(false);
@@ -610,92 +598,89 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
     } // end of switch
   } // end of loop over enabled feature templates
 }
-/*
+
 // features for the latent crf model
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i, 
-				   const std::vector<bool> &enabledFeatureTypes, 
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
 				   FastSparseVector<double> &activeFeatures) {
   
-  const int &xI = x[i];
+  const int64_t &xI = x[i];
   const std::string& xIString = types.Decode(x[i]);
   unsigned xIStringSize = xIString.size();
-  const int &xIM1 = i-1 >= 0? x[i-1] : -1;
-  const std::string& xIM1String = i-1 >= 0?
-    types.Decode(x[i-1]):
-    "_start_";
+  const int64_t &xIM1 = i-1 >= 0? x[i-1] : -1;
+  const std::string& xIM1String = i-1 >= 0? types.Decode(x[i-1]) : "_start_";
   unsigned xIM1StringSize = xIM1String.size();
-  const int &xIM2 = i-2 >= 0? x[i-2] : -1;
-  const std::string& xIM2String = i-2 >= 0?
-    types.Decode(x[i-2]):
-    "_start_";
-  const int &xIP1 = i+1 < x.size()? x[i+1] : -1;
+  const int64_t &xIM2 = i-2 >= 0? x[i-2] : -1;
+  const std::string& xIM2String = i-2 >= 0? types.Decode(x[i-2]) : "_start_";
+  const int64_t &xIP1 = i+1 < x.size()? x[i+1] : -1;
   const std::string &xIP1String = i+1 < x.size()?
     types.Decode(x[i+1]):
     "_end_";
   unsigned xIP1StringSize = xIP1String.size();
-  const int &xIP2 = i+2 < x.size()? x[i+2] : -1; 
+  const int64_t &xIP2 = i+2 < x.size()? x[i+2] : -1; 
   const std::string &xIP2String = i+2 < x.size()?
     types.Decode(x[i+2]):
     "_end_";
 
-  // F51: yIM1-yI pair
-  if(enabledFeatureTypes.size() > 51 && enabledFeatureTypes[51]) {
-    temp.str("");
-    temp << "F51:" << yIM1 << ":" << yI;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  
-  // F52: yI-xIM2 pair
-  if(enabledFeatureTypes.size() > 52 && enabledFeatureTypes[52]) {
-    temp.str("");
-    temp << "F52:" << yI << ":" << xIM2String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
+  FeatureId featureId;
 
-  // F53: yI-xIM1 pair
-  if(enabledFeatureTypes.size() > 53 && enabledFeatureTypes[53]) {
-    temp.str("");
-    temp << "F53:" << yI << ":" << xIM1String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
+  for(auto featTemplateIter = learningInfo->featureTemplates.begin();
+      featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
+    
+    featureId.type = *featTemplateIter;
+    
+    switch(featureId.type) {
 
-  // F54: yI-xI pair
-  if(enabledFeatureTypes.size() > 54 && enabledFeatureTypes[54]) {
-    temp.str("");
-    temp << "F54:" << yI << ":" << xIString;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  
-  // F55: yI-xIP1 pair
-  if(enabledFeatureTypes.size() > 55 && enabledFeatureTypes[55]) {
-    temp.str("");
-    temp << "F55:" << yI << ":" << xIP1String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
+      case FeatureTemplate::LABEL_BIGRAM:
+        featureId.bigram.current = yI;
+        featureId.bigram.previous = yIM1;
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
 
-  // F56: yI-xIP2 pair
-  if(enabledFeatureTypes.size() > 56 && enabledFeatureTypes[56]) {
-    temp.str("");
-    temp << "F56:" << yI << ":" << xIP2String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
+      case FeatureTemplate::EMISSION:
+        featureId.emission.label = yI;
+        // y[i]:x[i+k]
+        for(int k = -2; k <= 2; ++k) {
+          featureId.emission.word = k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2;
+          featureId.emission.displacement = k;
+          AddParam(featureId);
+          activeFeatures[paramIndexes[featureId]] += 1.0;
+        }
+      break;
 
-  // F57: yI-i pair
-  if(enabledFeatureTypes.size() > 57 && enabledFeatureTypes[57]) {
-    if(i < 2) {
-      temp.str("");
-      temp << "F57:" << yI << ":" << i;
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
+      case FeatureTemplate::OTHER_ALIGNERS:
+      for(int alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
+        assert(learningInfo->currentSentId < otherAlignersOutput[alignerId]->size());
+        if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
+          continue;
+        }
+        auto woodAlignments = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
+        featureId.type = FeatureTemplate::OTHER_ALIGNERS;
+        featureId.otherAligner.compatible = woodAlignments->count(yI) == 1 || \
+          (yI == 0 && woodAlignments->size() == 0);
+        featureId.otherAligner.alignerId = alignerId;
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+
+    case FeatureTemplate::BOUNDARY_LABELS:
+      if(i < 2 || i > x.size() - 3) {
+        featureId.type = FeatureTemplate::BOUNDARY_LABELS;
+        featureId.boundaryLabel.position = i < 2? i : i - x.size(); 
+        featureId.boundaryLabel.label = yI;
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+      
+    default:
+      assert(false);
+      
     }
   }
 
+  /*
   // F58: yI-prefix(xI)
   if(enabledFeatureTypes.size() > 58 && enabledFeatureTypes[58]) {
     //    if(xIStringSize > 0) {
@@ -857,16 +842,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     }
   }
 
-  // F66: yI-(|x|-i)
-  if(enabledFeatureTypes.size() > 66 && enabledFeatureTypes[66]) {
-    if(x.size() - i < 2) {
-      temp.str("");
-      temp << "F66:" << yI << ":" << (x.size()-i);
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
   // F67: yI-capitalInitial(xI) && i > 0
   if(enabledFeatureTypes.size() > 67 && enabledFeatureTypes[67]) {
     if(i > 0 && xIString[0] >= 'A' && xIString[0] <= 'Z') { 
@@ -1006,8 +981,9 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int> &x, int i
     AddParam(temp.str());
     activeFeatures[paramIndexes[temp.str()]] += 1.0;
   }
+  */
 }
-*/
+
 
 double LogLinearParams::Hash() {
   assert(sealed);
@@ -1016,150 +992,7 @@ double LogLinearParams::Hash() {
     hash += *paramIter;
   }
   return hash;
-} 
-
-/*
-void LogLinearParams::FireFeatures(int srcToken, int prevSrcToken, int tgtToken, int srcPos, int prevSrcPos, int tgtPos, 
-				   int srcSentLength, int tgtSentLength, 
-				   const std::vector<bool>& enabledFeatureTypes, 
-				   boost::unordered_map<string, double>& activeFeatures) {
-  
-  // for debugging
-  //    cerr << "srcToken=" << srcToken << " tgtToken=" << tgtToken << " srcPos=" << srcPos << " tgtPos=" << tgtPos;
-  //    cerr << " srcSentLength=" << srcSentLength << " tgtSentLength=" << tgtSentLength << endl;
-
-  assert(activeFeatures.size() == 0);
-  assert(srcToken != 0 && tgtToken != 0);
-
-  stringstream temp;
-
-  // F1: src-tgt pair (subset of word association features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 1 && enabledFeatureTypes[1]) {
-    temp << "F1:" << srcToken << "-" << tgtToken;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F2: diagonal-bias (positional features in Chris et al. 2011, which follows Blunsom and Cohn 2006)
-  if(enabledFeatureTypes.size() > 2 && enabledFeatureTypes[2]) {
-    activeFeatures["F2:diagonal-bias"] = fabs((double) srcPos / srcSentLength) - ((double) tgtPos / tgtSentLength);
-  }
-
-  // F3: src token (source features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 3 && enabledFeatureTypes[3]) {
-    temp.str("");
-    temp << "F3:" << srcToken;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F4: alignment jump distance (subset of src path features in Chris et al. 2011)
-  // for debugging only
-  int alignmentJumpWidth = abs(srcPos - prevSrcPos);
-  int discretizedAlignmentJumpWidth = (int) (log(alignmentJumpWidth) / log(1.3));
-  if(enabledFeatureTypes.size() > 4 && enabledFeatureTypes[4]) {
-    temp.str("");
-    temp << "F4:" << discretizedAlignmentJumpWidth;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F5: alignment jump direction (subset of src path features in Chris et al. 2011)
-  int alignmentJumpDirection = srcPos > prevSrcPos? +1 : srcPos < prevSrcPos? -1 : 0;
-  if(enabledFeatureTypes.size() > 5 && enabledFeatureTypes[5]) {
-    temp.str("");
-    temp << "F5:" << alignmentJumpDirection;
-    activeFeatures[temp.str()] = 1.0;
-  }
- 
-  // F6: alignment jump from/to (subset of src path features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 6 && enabledFeatureTypes[6]) {
-    temp.str("");
-    temp << "F6:" << prevSrcPos << ":" << srcPos;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F7: orthographic similarity (subset of word association features in Chris et al. 2011)
-  const std::string& srcTokenString = types.Decode(srcToken);
-  const std::string& tgtTokenString = types.Decode(tgtToken);
-  //  cerr << "computing ortho-similarity(" << srcToken << " (" << srcTokenString << ") " << ", " << tgtToken << " (" << tgtTokenString << ") )" << endl;
-  //  double orthographicSimilarity = ComputeOrthographicSimilarity(srcTokenString, tgtTokenString);
-  //  if(enabledFeatureTypes.size() > 7 && enabledFeatureTypes[7]) {
-  //    activeFeatures["F7:orthographic-similarity"] = orthographicSimilarity;
-  //  }
-
-  // F12: ibm model 1 forward logprob (subset of word association features in Chris et al. 2011)
-  double ibm1Forward = ibmModel1ForwardScores.find(srcToken)->second.find(tgtToken)->second;
-  if(enabledFeatureTypes.size() > 12 && enabledFeatureTypes[12]) {
-    temp.str("");
-    temp << "F12:" << srcToken << ":" << tgtToken;
-    activeFeatures[temp.str()] = ibm1Forward;
-  }
-
-  // F13: ibm model 1 backward logprob (subset of word association features in Chris et al. 2011)
-  double ibm1Backward = ibmModel1BackwardScores.find(tgtToken)->second.find(srcToken)->second;
-  if(enabledFeatureTypes.size() > 13 && enabledFeatureTypes[13]) {
-    temp.str("");
-    temp << "F13:" << srcToken << ":" << tgtToken;
-    activeFeatures[temp.str()] = ibm1Backward;
-  }
-
-  // F14: log of the geometric mean of ibm model 1 forward/backward prob (subset of word association features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 14 && enabledFeatureTypes[14]) {
-    temp.str("");
-    temp << "F14:" << srcToken << ":" << tgtToken;
-    activeFeatures[temp.str()] = 0.5 * (ibm1Forward + ibm1Backward);
-  }
-
-  // F15: discretized Dice's coefficient (subset of word association features in Chris et al. 2011)
-  // TODO
-
-  // F16: word cluster associations (e.g. to encode things like nouns tend to translate as nouns) (subset of word association features in Chris et al. 2011)
-  // TODO
-
-  // F17: <F2:diagonal_bias, srcWordClassType>  (subset of positional features in Chris et al. 2011)
-  // TODO
-
-  // F18: srcWordClassType (subset of source features in Chris et al. 2011)
-  // TODO
-
-  // F19: alignment jump direction AND (discretized) width (subset of src path features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 19 && enabledFeatureTypes[19]) {
-    temp.str("");
-    temp << "F19:" << alignmentJumpDirection * discretizedAlignmentJumpWidth;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F20: <discretized alignment jump, tgtLength> (subset of src path features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 20 && enabledFeatureTypes[20]) {
-    temp.str("");
-    temp << "F20:" << alignmentJumpDirection * discretizedAlignmentJumpWidth << ":" << tgtSentLength;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F21: <discretized alignment jump, class of srcToken> (subset of src path features in Chris et al. 2011)
-  // TODO
-
-  // F22: <discretized alignment jump, class of srcToken, class of prevSrcToken> (subset of src path features in Chris et al. 2011)
-  // TODO
-
-  // F23: <srcToken, prevSrcToken> (subset of src path features in Chris et al. 2011)
-  if(enabledFeatureTypes.size() > 23 && enabledFeatureTypes[23]) {
-    temp.str("");
-    temp << "F23:" << srcToken << ":" << prevSrcToken;
-    activeFeatures[temp.str()] = 1.0;
-  }
-
-  // F24: is this a named entity translated twice? (subset of tgt string features in Chris et al. 2011)
-  // note: in this implementation, the feature fires when the current translation is ortho-similar, and a[i] == a[i-1].
-  //       ideally, it should also fire when the current translation is orth-similar, and a[i] == a[i+1]
-  //  if(enabledFeatureTypes.size() > 24 && enabledFeatureTypes[24]) {
-  //    if(orthographicSimilarity > 0 && prevSrcPos == srcPos) {
-  //      temp.str("");
-  //      temp << "F24:repeated-NE";
-  //      activeFeatures[temp.str()] = orthographicSimilarity;
-  //    }
-  //}
 }
-
-*/
 
 // each line consists of: <featureStringId><space><featureWeight>\n
 void LogLinearParams::PersistParams(const string &outputFilename, bool humanFriendly) {

@@ -1,7 +1,7 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS= -llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
+LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
 OPT=-g -O3
 
 all: train-latentCrfAligner

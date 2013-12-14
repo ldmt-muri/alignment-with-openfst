@@ -20,7 +20,9 @@ using namespace std;
 class LearningInfo {
  public:
 
- LearningInfo(boost::mpi::communicator *mpiWorld) : mpiWorld(mpiWorld)  {
+ LearningInfo(boost::mpi::communicator *mpiWorld, string outputFilenamePrefix) : 
+  mpiWorld(mpiWorld), 
+  outputFilenamePrefix(outputFilenamePrefix) {
     SetSharedMemorySegment(mpiWorld->rank() == 0);
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
@@ -133,7 +135,7 @@ class LearningInfo {
   void SetSharedMemorySegment(bool create) {
     size_t segmentSize = 30 * 1024; // in GBs
     segmentSize *= 1024 * 1024;
-    string SEGMENT_NAME = "segment";
+    string SEGMENT_NAME = outputFilenamePrefix + ".segment";
     using namespace boost::interprocess;
     // Shared memory front-end that is able to construct objects
     // associated with a c-string. Erase previous shared memory with the name
@@ -302,6 +304,8 @@ class LearningInfo {
   bool useDevSet = false;
 
   string tgtWordClassesFilename;
+
+  string outputFilenamePrefix;
 
 };
 

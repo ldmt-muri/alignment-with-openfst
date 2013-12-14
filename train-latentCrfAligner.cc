@@ -49,18 +49,19 @@ void my_handler(int s) {
   exit(0);
 }
 
-void register_my_handler() {
-  struct sigaction sigIntHandler;
 
-  sigIntHandler.sa_handler = my_handler;
-  sigemptyset(&sigIntHandler.sa_mask);
-  sigIntHandler.sa_flags = 0;
-
-  sigaction(SIGINT, &sigIntHandler, NULL);
-  sigaction(SIGTERM, &sigIntHandler, NULL);
-  sigaction(SIGUSR1, &sigIntHandler, NULL);
-  sigaction(SIGUSR2, &sigIntHandler, NULL);
+string GetOutputPrefix(int argc, char **argv) {
+  string OUTPUT_PREFIX_OPTION("--output-prefix");
+  for(int i = 0; i < argc; i++) {
+    string currentOption(argv[i]);
+    if(currentOption == OUTPUT_PREFIX_OPTION) {
+      if(i+1 == argc) assert(false);
+      return string(argv[i+1]);
+    }
+  }
+  assert(false);
 }
+
 
 bool ParseParameters(int argc, char **argv, string &textFilename, 
   string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
@@ -75,6 +76,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     OUTPUT_PREFIX = "output-prefix", 
     TEST_SIZE = "test-size",
     FEAT = "feat",
+    WEIGHTED_L2_STRENGTH = "weighted-l2-strength",
     L2_STRENGTH = "l2-strength",
     L1_STRENGTH = "l1-strength",
     MAX_ITER_COUNT = "max-iter-count",
@@ -108,8 +110,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
      // deen=150 // czen=515 // fren=447;
     (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
-    (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
-    (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
+    (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
+    (L2_STRENGTH.c_str(), po::value<float>()->default_value(1.0), "(double) strength of an l2 regularizer")
+    (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
@@ -157,14 +160,23 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   }
 
   if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L2_STRENGTH.c_str()].as<float>();
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L1_STRENGTH.c_str()].as<float>();
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  } else if (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::WeightedL2;
+  } else {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.0;
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   }
-
+  
   for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
       featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
     if(*featIter == "LABEL_BIGRAM") {
+      assert(false); // this feature does not make sense for word alignment
       learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
     } else if(*featIter == "SRC_BIGRAM") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
@@ -180,6 +192,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
       learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
     } else if (*featIter == "DIAGONAL_DEVIATION") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
+    } else if (*featIter == "SRC_WORD_BIAS") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_WORD_BIAS);
     } else if(*featIter == "SYNC_START" ){
       learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
     } else if(*featIter == "SYNC_END") {
@@ -224,6 +238,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     }
     cerr << endl;
     cerr << L2_STRENGTH << "=" << vm[L2_STRENGTH.c_str()].as<float>() << endl;
+    cerr << WEIGHTED_L2_STRENGTH << "=" << vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() << endl;
     cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
     cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
@@ -251,13 +266,17 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   }
     
   // validation
-  if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || vm[L1_STRENGTH.c_str()].as<float>() < 0.0) {
-    cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 
+  if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || \
+     vm[L1_STRENGTH.c_str()].as<float>() < 0.0 || \
+     vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() < 0.0) {
+    cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << WEIGHTED_L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 
       " negative values" << endl;
     cerr << desc << endl;
     return false;
-  } else if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
-    cerr << "you can't set both " << L2_STRENGTH << " AND " << L1_STRENGTH  << 
+  } else if((vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0) || \
+            (vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) || \
+            (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0)) {
+    cerr << "you can't only set " << L2_STRENGTH << " OR " << L1_STRENGTH  << " OR " << WEIGHTED_L2_STRENGTH  << 
       ". sorry :-/" << endl;
     cerr << desc << endl;
     return false;
@@ -291,9 +310,9 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  cerr << "about to initialize IbmModel1." << endl;
+  cerr << "initializing IbmModel1...";
   IbmModel1 ibmModel1(textFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN, latentCrfAligner.vocabEncoder);
-  cerr << "finished initializing IbmModel1." << endl;
+  cerr << "done." << endl;
 
   // train model parameters
   cerr << "rank #" << world.rank() << ": train the model..." << endl;
@@ -347,6 +366,20 @@ void endOfKIterationsCallbackFunction() {
   aligner.Label(labelsFilename.str());
 }
 
+
+void register_my_handler() {
+  struct sigaction sigIntHandler;
+
+  sigIntHandler.sa_handler = my_handler;
+  sigemptyset(&sigIntHandler.sa_mask);
+  sigIntHandler.sa_flags = 0;
+
+  sigaction(SIGINT, &sigIntHandler, NULL);
+  sigaction(SIGTERM, &sigIntHandler, NULL);
+  sigaction(SIGUSR1, &sigIntHandler, NULL);
+  sigaction(SIGUSR2, &sigIntHandler, NULL);
+}
+
 int main(int argc, char **argv) {  
 
   // register interrupt handlers
@@ -356,7 +389,7 @@ int main(int argc, char **argv) {
   mpi::environment env(argc, argv);
   mpi::communicator world;
 
-  LearningInfo learningInfo(&world);
+  LearningInfo learningInfo(&world, GetOutputPrefix(argc, argv));
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -422,6 +455,7 @@ int main(int argc, char **argv) {
 							initialLambdaParamsFilename, 
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);
+  
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
   if(initialThetaParamsFilename.size() == 0) {
@@ -451,7 +485,9 @@ int main(int argc, char **argv) {
   // run viterbi (and write alignments in giza format)
   string labelsFilename = outputFilenamePrefix + ".labels";
   ((LatentCrfAligner*)model)->Label(labelsFilename);
-  cerr << "alignments can be found at " << labelsFilename << endl;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "alignments can be found at " << labelsFilename << endl;
+  }
 
   learningInfo.ClearSharedMemorySegment();
 }

@@ -95,7 +95,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 											    learningInfo,
 											    FIRST_LABEL_ID,
 											    LatentCrfAligner::Task::WORD_ALIGNMENT) {
-  
+
   // set constants
   this->START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;

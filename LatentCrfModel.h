@@ -106,7 +106,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
  public: 
 
-  enum Task {POS_TAGGING, WORD_ALIGNMENT};
+  enum Task {POS_TAGGING=0, WORD_ALIGNMENT=1};
   
   // STATIC METHODS
   /////////////////
@@ -248,6 +248,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // adds l2 reguarlization term (for lambdas) to the objective
   double AddL2Term(double unregularizedObjective);
 
+  void AddWeightedL2Term(vector<double> *gradient, double *objective, FastSparseVector<double> &activeFeatures);
+
   // prepare the model before processing an example
   virtual void PrepareExample(unsigned exampleId) = 0;
 
@@ -264,10 +266,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
          std::vector<FstUtils::LogWeight>& betas);
 
   // build an FST to compute Z(x)
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<double> *derivativeWRTLambda=0, double *objective=0);
 
   // build an FST to compute Z(x). also computes potentials
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda=0, double *objective=0);
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
   double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);

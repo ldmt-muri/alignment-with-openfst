@@ -116,7 +116,7 @@ class VocabEncoder {
 
     if(learningInfo.mpiWorld->rank() == 0) {
 
-      cerr<< learningInfo.mpiWorld->rank() << ": will read the vocabencoder init file now" << endl;
+      cerr<< learningInfo.mpiWorld->rank() << ": reading the vocabencoder init file now...";
 
       // create token-int correspondnence
       std::ifstream textFile(textFilename.c_str(), std::ios::in);
@@ -134,6 +134,8 @@ class VocabEncoder {
           
         }
       }
+
+      cerr << "done reading." << endl;
     }
 
     bool dummy;

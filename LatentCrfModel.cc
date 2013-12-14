@@ -29,6 +29,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
                                           UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
                                           learningInfo(learningInfo) {
   
+  
   AddEnglishClosedVocab();
   
   if(learningInfo.mpiWorld->rank() == 0) {
@@ -40,7 +41,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   mpi::broadcast<bool>(*learningInfo.mpiWorld, syncAllProcesses, 0);
 
   lambda = new LogLinearParams(vocabEncoder);
-  
+
   // set member variables
   this->textFilename = textFilename;
   this->outputPrefix = outputPrefix;
@@ -87,7 +88,7 @@ double LatentCrfModel::ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc
 }
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), but doesn't not compute the potentials
-void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst) {
+void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<double> *derivativeWRTLambda, double *objective) {
 
   PrepareExample(sentId);
 
@@ -132,11 +133,15 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
         // compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
-      	FireFeatures(yI, yIM1, sentId, i, h);
+        FireFeatures(yI, yIM1, sentId, i, h);
         // compute the weight of this transition:
         // \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
         double nLambdaH = -1.0 * lambda->DotProduct(h);
         // determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
+
+        // WeightedL2
+        AddWeightedL2Term(derivativeWRTLambda, objective, h);
+
         int toState;
         if(yIToState.count(yI) == 0) {
           toState = fst.AddState();
@@ -173,13 +178,13 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 }
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), and computes the potentials
-void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
+void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda, double *objective) {
   clock_t timestamp = clock();
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
 
   // first, build the fst
-  BuildLambdaFst(sentId, fst);
+  BuildLambdaFst(sentId, fst, derivativeWRTLambda, objective);
 
   // then, compute potentials
   assert(alphas.size() == 0);
@@ -254,8 +259,7 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
 				  FastSparseVector<double> &activeFeatures) { 
   if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
-    assert(false); // fix the implementation of FireFeatures for pOS tagging replacing string feature ids with FeatureId structs
-    //lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, enabledFeatureTypes, activeFeatures);
+    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, activeFeatures);
   } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
     int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
@@ -550,7 +554,6 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int64_t> 
 					 vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
   clock_t timestamp = clock();
-  //  cerr << "starting LatentCrfModel::BuildThetaLambdaFst" << endl;
   PrepareExample(sentId);
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
@@ -792,6 +795,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
 							      const int lambdasCount,
 							      const double step) {
   // this method needs to be reimplemented/modified according to https://github.com/ldmt-muri/alignment-with-openfst/issues/83
+  // TODO: use this as basis for semi-supervised learning in this model
   assert(false);
   
   LatentCrfModel &model = LatentCrfModel::GetInstance();
@@ -937,6 +941,20 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   return Nll;
 }
 
+void LatentCrfModel::AddWeightedL2Term(vector<double> *gradient, double *objective, FastSparseVector<double> &activeFeatures) {
+  if(learningInfo.optimizationMethod.subOptMethod->regularizer != Regularizer::WeightedL2) return;
+  if(gradient == NULL || objective == NULL) return;
+  cerr << "or maybe here?" << endl;
+  for(auto activeFeatureIter = activeFeatures.begin(); 
+      activeFeatureIter != activeFeatures.end();
+      ++activeFeatureIter) {
+    unsigned temp = activeFeatureIter->first;
+    double lambda_i = lambda->GetParamWeight(temp);
+    (*gradient)[activeFeatureIter->first] += 2.0 * learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i;
+    *objective += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
+  }
+}
+
 // adds l2 terms to both the objective and the gradient). return value is the 
 // the objective after adding the l2 term.
 double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient, 
@@ -944,12 +962,17 @@ double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient,
   double l2RegularizedObjective = unregularizedObjective;
   // this is where the L2 term is added to both the gradient and objective function
   assert(lambda->GetParamsCount() == unregularizedGradient.size());
+  double l2term = 0;
   for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
     double lambda_i = lambda->GetParamWeight(i);
     regularizedGradient[i] = unregularizedGradient[i] + 2.0 * learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i;
     l2RegularizedObjective += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
+    l2term += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
     assert(!std::isnan(unregularizedGradient[i]) || !std::isinf(unregularizedGradient[i]));
   } 
+  cerr << "lambda->GetParamsCount() = " << lambda->GetParamsCount() << endl;
+  cerr << "l2term = " << l2term << endl;
+  cerr << "learningInfo.optimizationMethod.subOptMethod->regularizationStrength = " << learningInfo.optimizationMethod.subOptMethod->regularizationStrength << endl;
   return l2RegularizedObjective;
 }
 
@@ -970,7 +993,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
 							      double *gradient,
   							      const int lambdasCount,
 							      const double step) {
-  
+
   LatentCrfModel &model = LatentCrfModel::GetInstance();
   // only the master executes the lbfgs() call and therefore only the master is expected to come here
   assert(model.learningInfo.mpiWorld->rank() == 0);
@@ -1000,6 +1023,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   assert(reducedNll != -1);
 
   // fill in the gradient array allocated by lbfgs
+  cerr << "before l2 reg, reducednll = " << reducedNll;
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
     reducedNll = model.AddL2Term(reducedGradient, gradient, reducedNll);
   } else {
@@ -1009,6 +1033,7 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
       assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
     } 
   }
+  cerr << "after l2 reg, reducednll = " << reducedNll;
 
   if(model.learningInfo.debugLevel == DebugLevel::MINI_BATCH) {
     if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
@@ -1063,7 +1088,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
 			  thetaLambdaAlphas, 
 			  thetaLambdaBetas);
     }
-    BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
+    BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, &derivativeWRTLambda, &objective);
 
     // compute the D map for this sentence
     FastSparseVector<LogVal<double> > DSparseVector;
@@ -1289,7 +1314,9 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
     }
     break;
   case Regularizer::L2:
-    // nothing to be done now. l2 is implemented in the lbfgs callback evaluate function.
+  case Regularizer::WeightedL2:
+    // nothing to be done now. l2 is implemented in the lbfgs callback evaluate function. 
+    // weighted l2 is implemented in BuildLambdaFst()
     break;
   case Regularizer::NONE:
     // do nothing
@@ -1364,9 +1391,19 @@ void LatentCrfModel::BlockCoordinateDescent() {
   }
   int adagradIter = 1;
 
+  // fix learningInfo.firstKExamplesToLabel
+  if(learningInfo.firstKExamplesToLabel == 1) {
+    learningInfo.firstKExamplesToLabel = examplesCount;
+  }
+
   // TRAINING ITERATIONS
   bool converged = false;
   do {
+    
+    if(learningInfo.useMaxIterationsCount && learningInfo.maxIterationsCount == 0) {
+      // no training at all!
+      break;
+    }
     
     // debug info
     if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
@@ -1403,13 +1440,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
         }
         double unregularizedObjective = 0;
         for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
-	  
-	  // sentId is assigned to the process # (sentId % world.size())
+          
+          // sentId is assigned to the process # (sentId % world.size())
           if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
             continue;
           }
-                    
+
           double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+          
           unregularizedObjective += sentLoglikelihood;
           
           if(sentId % learningInfo.nSentsPerDot == 0) {
@@ -1423,13 +1461,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // accumulate mle counts from slaves
         ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
         mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
-        
+
         double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
           AddL2Term(unregularizedObjective):
           unregularizedObjective;
         
         if(learningInfo.mpiWorld->rank() == 0) {
-          if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+          if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2 || 
+             learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::WeightedL2) {
             cerr << "l2 reg. objective = " << regularizedObjective << endl;
           } else { 
             cerr << "unregularized objective = " << unregularizedObjective << endl;
@@ -1444,7 +1483,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
         
         // update nLogTheta on slaves
         BroadcastTheta(0);
-        
+
       } // end of EM iterations
       
       // debug info
@@ -1644,8 +1683,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
           mpi::reduce<double>(*learningInfo.mpiWorld, devSetNllPiece, miniBatchDevSetNll, std::plus<double>(), 0);
 
           // add l2 regularization terms to objective and gradient
+          cerr << "considering adding an l2 term" << endl;
           if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+            cerr << "actually adding an l2 term.. before: " << optimizedMiniBatchNll;
             optimizedMiniBatchNll = this->AddL2Term(gradient, gradient.data(), optimizedMiniBatchNll);
+            cerr << ", after: " << optimizedMiniBatchNll << endl;
           }
 
           // log
@@ -1884,8 +1926,11 @@ void LatentCrfModel::InitLambda() {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
   }
 
+  assert(examplesCount > 0);
   // then, each process discovers the features that may show up in their sentences.
   for(int sentId = 0; sentId < examplesCount; sentId++) {
+
+    assert(learningInfo.mpiWorld->size() > 0);
     
     // skip sentences not assigned to this process
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
@@ -1964,7 +2009,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   fst::VectorFst<FstUtils::LogArc> lambdaFst;
   std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
   BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
-  BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
+  BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, NULL, NULL);
   // compute the B matrix for this sentence
   boost::unordered_map< int64_t, boost::unordered_map< int64_t, LogVal<double> > > B;
   B.clear();
