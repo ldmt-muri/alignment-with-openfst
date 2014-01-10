@@ -45,12 +45,14 @@ struct LbfgsParams {
   int maxEvalsPerIteration;
   int memoryBuffer;
   double precision;
+  double l1Strength;
   
   LbfgsParams() {
     maxIterations = 10;
     memoryBuffer = 6;
     precision = 0.000000000000001;
     maxEvalsPerIteration = 3;
+    l1Strength = 0.0;
   }
 };
 

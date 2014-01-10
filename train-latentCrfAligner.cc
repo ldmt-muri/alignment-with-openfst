@@ -111,7 +111,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
-    (L2_STRENGTH.c_str(), po::value<float>()->default_value(1.0), "(double) strength of an l2 regularizer")
+    (L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
@@ -351,9 +351,6 @@ void endOfKIterationsCallbackFunction() {
   // get hold of the model
   LatentCrfModel *model = LatentCrfAligner::GetInstance();
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
-  if(aligner.learningInfo.mpiWorld->rank() == 0) {
-    //  return;
-  } 
 
   // fix learningInfo.test_size
   if(aligner.learningInfo.firstKExamplesToLabel == 0) {

@@ -51,15 +51,17 @@ void HmmModel2::InitParams(){
       continue;
     }
     for(set<int>::const_iterator fromYIter = yDomain.begin(); fromYIter != yDomain.end(); fromYIter++) {
-      nlogGamma[*fromYIter][*toYIter] = 1;
+      nlogGamma[*fromYIter][*toYIter] = fabs(gaussianSampler.Draw());
     }
     for(set<int64_t>::const_iterator xIter = xDomain.begin(); xIter != xDomain.end(); xIter++) {
-      nlogTheta[*toYIter][*xIter] = 1;
+      nlogTheta[*toYIter][*xIter] = fabs(gaussianSampler.Draw());
     }
   }
   nlogTheta.GaussianInit();
   nlogGamma.GaussianInit();
-  
+  //NormalizeParams(nlogTheta, 1.0, false, true);
+  //NormalizeParams(nlogGamma, 1.0, false, true);
+    
   if(learningInfo->debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "nlogTheta params: " << endl;
     nlogTheta.PrintParams();
@@ -73,9 +75,9 @@ void HmmModel2::PersistParams(string &prefix) {
     prefix = outputPrefix + ".hmm2.final";
   }
   const string thetaFilename(prefix + ".nlogTheta");
-  const string gammaFilename(prefix + ".nlogTheta");
-  MultinomialParams::PersistParams(thetaFilename, nlogTheta, vocabEncoder, true, true);
-  MultinomialParams::PersistParams(gammaFilename, nlogGamma, vocabEncoder, true, true);
+  const string gammaFilename(prefix + ".nlogGamma");
+  MultinomialParams::PersistParams(thetaFilename, nlogTheta, vocabEncoder, false, true);
+  MultinomialParams::PersistParams(gammaFilename, nlogGamma, vocabEncoder, false, false);
 }
 
 // builds the lattice of all possible label sequences

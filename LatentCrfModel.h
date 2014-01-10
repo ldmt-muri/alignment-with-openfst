@@ -321,6 +321,15 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   
   ~LatentCrfModel();
 
+  // this should be done by master only
+  void EncodeTgtWordClasses();
+  
+  // this should be done by all processes
+  void LoadTgtWordClasses(std::vector<std::vector<int64_t> > &tgtSents);
+
+  // convert tgt tokens to a word class sequence (if provided)
+  vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
+
  public:
   std::vector<std::vector<int64_t> > labels;
   LearningInfo learningInfo;
@@ -332,8 +341,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
   unsigned examplesCount;
   std::string textFilename, outputPrefix;
-  
- protected:
+ 
+ public:
+  std::vector< std::vector<int64_t> > classTgtSents, testClassTgtSents;
+  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
   static LatentCrfModel *instance;
   std::tr1::unordered_set<int> /*zDomain, */yDomain;
   GaussianSampler gaussianSampler;

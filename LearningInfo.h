@@ -110,7 +110,7 @@ class LearningInfo {
     } 
     if(useEarlyStopping &&
        iterationsCount > 5 &&
-       validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2] > 0) {
+       fabs((validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2]) / validationLogLikelihood[iterationsCount-2]) < minLikelihoodRelativeDiff) {
       return true;
     }
     if(useMinLikelihoodRelativeDiff && 
@@ -301,11 +301,11 @@ class LearningInfo {
   // the id of the sentence pair currently being processed
   int currentSentId;
 
-  bool useDevSet = false;
-
   string tgtWordClassesFilename;
 
   string outputFilenamePrefix;
+
+  string goldFilename;
 
 };
 

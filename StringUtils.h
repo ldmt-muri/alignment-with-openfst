@@ -17,6 +17,7 @@ class StringUtils {
     stringstream ss(s);
     string item;
     while(getline(ss, item, delim)) {
+      if(item.size() == 0) { continue; }
       elems.push_back(item);
     }
   }

@@ -7,10 +7,11 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
  protected:
   LatentCrfPosTagger(const std::string &textFilename, 
-		     const std::string &outputPrefix, 
-		     LearningInfo &learningInfo,
-		     unsigned numberOfLabels,
-		     unsigned firstLabelId);
+                     const std::string &outputPrefix, 
+                     LearningInfo &learningInfo,
+                     unsigned numberOfLabels,
+                     unsigned firstLabelId,
+                     const string &wordPairFeaturesFilename);
   
   ~LatentCrfPosTagger();
 
@@ -31,10 +32,11 @@ class LatentCrfPosTagger : public LatentCrfModel {
   static LatentCrfModel* GetInstance();
 
   static LatentCrfModel* GetInstance(const std::string &textFilename, 
-				     const std::string &outputPrefix, 
-				     LearningInfo &learningInfo, 
-				     unsigned NUMBER_OF_LABELS, 
-				     unsigned FIRST_LABEL_ID);
+                                     const std::string &outputPrefix, 
+                                     LearningInfo &learningInfo, 
+                                     unsigned NUMBER_OF_LABELS, 
+                                     unsigned FIRST_LABEL_ID,
+                                     const string &wordPairFeaturesFilename);
 
   std::vector<int64_t>& GetObservableSequence(int exampleId);
 
@@ -43,6 +45,8 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   using UnsupervisedSequenceTaggingModel::Label;
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
+
+  void Label(const string &labelsFilename);
 
  public:
   std::vector<std::vector<int64_t> > data, testData;

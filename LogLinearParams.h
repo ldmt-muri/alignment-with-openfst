@@ -49,7 +49,7 @@ public:
   FeatureTemplate type;
   union {
     int64_t wordBias;
-    struct { signed char displacement; int64_t word; int label; } emission;
+    struct { int displacement; int64_t word; int label; } emission;
     struct { unsigned current, previous; } bigram;
     int alignmentJump;
     struct { int alignmentJump; int64_t wordBias; } biasedAlignmentJump;
@@ -370,7 +370,6 @@ class LogLinearParams {
   template<class Archive>
     void save(Archive & os, const unsigned int version) const
     {
-      cerr << "inside LogLinearParams::save()" << endl;
       assert(IsSealed());
       assert(paramIdsPtr->size() == paramWeightsPtr->size());
       int count = paramIdsPtr->size();
@@ -384,7 +383,6 @@ class LogLinearParams {
   template<class Archive>
     void load(Archive & is, const unsigned int version)
     {
-      cerr << "inside LogLinearParams::load()" << endl;
       int count;
       is >> count;
       for(int i = 0; i < count; ++i) {

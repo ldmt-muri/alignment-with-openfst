@@ -33,57 +33,6 @@ LatentCrfModel* LatentCrfAligner::GetInstance() {
   return instance;
 }
 
-void LatentCrfAligner::EncodeTgtWordClasses() {
-  if(learningInfo.mpiWorld->rank() != 0 || learningInfo.tgtWordClassesFilename.size() == 0) { return; }
-  std::ifstream infile(learningInfo.tgtWordClassesFilename.c_str());
-  string classString, wordString;
-  int frequency;
-  while(infile >> classString >> wordString >> frequency) {
-    int64_t wordClass = vocabEncoder.Encode(classString);
-    int64_t wordType = vocabEncoder.Encode(wordString);
-  }
-  vocabEncoder.Encode("?");
-}
-
-vector<int64_t> LatentCrfAligner::GetTgtWordClassSequence(vector<int64_t> &x_t) {
-  assert(learningInfo.tgtWordClassesFilename.size() > 0);
-  vector<int64_t> classSequence;
-  for(auto tgtToken = x_t.begin(); tgtToken != x_t.end(); tgtToken++) {
-    if( tgtWordToClass.count(*tgtToken) == 0 ) {
-      classSequence.push_back( vocabEncoder.ConstEncode("?") );
-    } else {
-      classSequence.push_back( tgtWordToClass[*tgtToken] );
-    }
-  }
-  return classSequence;
-}
-
-void LatentCrfAligner::LoadTgtWordClasses() {
-  // read the word class file and store it in a map
-  if(learningInfo.tgtWordClassesFilename.size() == 0) { return; }
-  tgtWordToClass.clear();
-  std::ifstream infile(learningInfo.tgtWordClassesFilename.c_str());
-  string classString, wordString;
-  int frequency;
-  while(infile >> classString >> wordString >> frequency) {
-    int64_t wordClass = vocabEncoder.ConstEncode(classString);
-    int64_t wordType = vocabEncoder.ConstEncode(wordString);
-    tgtWordToClass[wordType] = wordClass;
-  }
-  infile.close();
-  
-  // now read each tgt sentence and create a corresponding sequence of tgt word clusters
-  for(auto tgtSent = tgtSents.begin(); tgtSent != tgtSents.end(); tgtSent++) {
-    classTgtSents.push_back( GetTgtWordClassSequence(*tgtSent) );
-  }
-  
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "master: finished reading " << learningInfo.tgtWordClassesFilename << ". now, classTgtSents.size() = " << classTgtSents.size() << ", tgtWordToClass.size() = " << tgtWordToClass.size() << endl;
-  }
-
-}
-
-
 LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 				   const string &outputPrefix,
 				   LearningInfo &learningInfo,
@@ -146,7 +95,7 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   }
 
   // load the mapping from each target word to its word class (e.g. brown clusters)
-  LoadTgtWordClasses();
+  LoadTgtWordClasses(tgtSents);
 
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
@@ -174,6 +123,10 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   assert(lambda->paramWeightsTemp.size() == 0 && lambda->paramIdsTemp.size() == 0);
   assert(lambda->paramWeightsPtr->size() == lambda->paramIndexes.size());
   assert(lambda->paramIdsPtr->size() == lambda->paramIndexes.size());
+
+  if(learningInfo.mpiWorld->rank() == 0) {
+    vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
+  }
 
 }
 
@@ -332,6 +285,7 @@ void LatentCrfAligner::Label(const string &labelsFilename) {
       }
       continue;
     }
+
     std::vector<int64_t> &srcSent = GetObservableContext(exampleId);
     std::vector<int64_t> &tgtSent = GetObservableSequence(exampleId);
     std::vector<int> labels;

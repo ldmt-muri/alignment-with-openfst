@@ -49,24 +49,13 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void SetTestExample(std::vector<int64_t> &x_t, std::vector<int64_t> &x_s);
 
-  // this should be done by master only
-  void EncodeTgtWordClasses();
-  
-  // this should be done by all processes
-  void LoadTgtWordClasses();
-
-  // convert tgt tokens to a word class sequence (if provided)
-  vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
-
-  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
-
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;
 
 
   // data
-  std::vector< std::vector<int64_t> > srcSents, tgtSents, classTgtSents, testSrcSents, testTgtSents, testClassTgtSents;
+  std::vector< std::vector<int64_t> > srcSents, tgtSents, testSrcSents, testTgtSents;
 
   // null token
   static int64_t NULL_TOKEN;

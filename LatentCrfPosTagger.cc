@@ -3,7 +3,26 @@
 using namespace std;
 
 vector<int64_t>& LatentCrfPosTagger::GetReconstructedObservableSequence(int exampleId) {
-  return GetObservableSequence(exampleId);
+  if(testingMode) {
+    if(testClassTgtSents.size() > 0) {
+      return testClassTgtSents[exampleId];
+    } else {
+      return testData[exampleId];
+    }
+  } else {
+    // refactor: this following line does not logically belong here
+    lambda->learningInfo->currentSentId = exampleId;
+
+    if(exampleId >= data.size()) {
+      cerr << exampleId << " < " << data.size() << endl;
+    }
+    assert(exampleId < data.size());
+    if(classTgtSents.size() > 0) {
+      return classTgtSents[exampleId];
+    } else {
+      return data[exampleId];
+    }
+  }
 }
 
 vector<int64_t>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
@@ -18,12 +37,14 @@ vector<int64_t>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
 
 // singleton
 LatentCrfModel* LatentCrfPosTagger::GetInstance(const string &textFilename, 
-						const string &outputPrefix, 
-						LearningInfo &learningInfo, 
-						unsigned NUMBER_OF_LABELS, 
-						unsigned FIRST_LABEL_ID) {
+                                                const string &outputPrefix, 
+                                                LearningInfo &learningInfo, 
+                                                unsigned NUMBER_OF_LABELS, 
+                                                unsigned FIRST_LABEL_ID,
+                                                const string &wordPairFeaturesFilename) {
   if(!instance) {
-    instance = new LatentCrfPosTagger(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
+    instance = new LatentCrfPosTagger(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, 
+                                      FIRST_LABEL_ID, wordPairFeaturesFilename);
   } else {
     cerr << "A LatentCrfPosTagger object has already been initialized" << endl;
   }
@@ -38,14 +59,15 @@ LatentCrfModel* LatentCrfPosTagger::GetInstance() {
 }
 
 LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename, 
-				       const string &outputPrefix, 
-				       LearningInfo &learningInfo, 
-				       unsigned NUMBER_OF_LABELS, 
-				       unsigned FIRST_LABEL_ID) : LatentCrfModel(textFilename, 
-										 outputPrefix, 
-										 learningInfo, 
-										 FIRST_LABEL_ID,
-										 LatentCrfModel::Task::POS_TAGGING) {
+                                       const string &outputPrefix, 
+                                       LearningInfo &learningInfo, 
+                                       unsigned NUMBER_OF_LABELS, 
+                                       unsigned FIRST_LABEL_ID,
+                                       const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename, 
+                                                                                                outputPrefix, 
+                                                                                                learningInfo, 
+                                                                                                FIRST_LABEL_ID,
+                                                                                                LatentCrfModel::Task::POS_TAGGING) {
   // set constants
   LatentCrfModel::START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -61,11 +83,39 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
 
+  // slaves wait for master
+  if(learningInfo.mpiWorld->rank() != 0) {
+    bool vocabEncoderIsReady;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
+  }
+
+
+  // read and encode tgt words and their classes (e.g. brown clusters)
+  if(learningInfo.mpiWorld->rank() == 0) {
+    EncodeTgtWordClasses();
+  } 
+
   // read and encode data
   data.clear();
   vocabEncoder.Read(textFilename, data);
   examplesCount = data.size();
 
+  if(learningInfo.mpiWorld->rank() == 0 && wordPairFeaturesFilename.size() > 0) {
+    cerr << "vocabEncoder.Count() = " << vocabEncoder.Count() << endl;
+    lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
+    cerr << "vocabEncoder.Count() = " << vocabEncoder.Count() << endl;
+  }
+
+  // master signals to slaves that he's done
+  if(learningInfo.mpiWorld->rank() == 0) {
+    bool vocabEncoderIsReady;
+    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
+  }
+
+  // load the mapping from each target word to its word class (e.g. brown clusters)
+  LoadTgtWordClasses(data);
+
+    
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
 
@@ -86,6 +136,10 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   // initialize the lambda parameters
   // add all features in this data set to lambda.params
   InitLambda();
+
+  if(learningInfo.mpiWorld->rank() == 0) {
+    vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
+  }
 }
 
 LatentCrfPosTagger::~LatentCrfPosTagger() {}
@@ -98,8 +152,10 @@ void LatentCrfPosTagger::InitTheta() {
   // create a vector of all word types in the corpus
   set<int64_t> wordTypes;
   for(unsigned sentId = 0; sentId < data.size(); ++sentId) {
-    vector<int64_t> &sent = data[sentId];
-    for(auto tokenIter = sent.begin(); tokenIter != sent.end(); ++tokenIter) {
+
+    vector<int64_t> &reconstructedSent = classTgtSents.size() > 0?
+      classTgtSents[sentId] : data[sentId];
+    for(auto tokenIter = reconstructedSent.begin(); tokenIter != reconstructedSent.end(); ++tokenIter) {
       wordTypes.insert(*tokenIter);
     }
   }
@@ -123,24 +179,72 @@ void LatentCrfPosTagger::InitTheta() {
 void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
   testData.clear();
   testData.push_back(tokens);
+  if(learningInfo.tgtWordClassesFilename.size() > 0) {
+    testClassTgtSents.clear();
+    testClassTgtSents.push_back( GetTgtWordClassSequence(tokens) );
+  }
 }
 
 void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
+
   testingMode = true;
 
   // hack to reuse the code that manipulates the fst
   SetTestExample(tokens);
   unsigned sentId = 0;
-  
+
   fst::VectorFst<FstUtils::LogArc> fst;
   vector<FstUtils::LogWeight> alphas, betas;
-  BuildThetaLambdaFst(sentId, tokens, fst, alphas, betas);
+  if(learningInfo.testWithCrfOnly) {
+    BuildLambdaFst(sentId, fst, alphas, betas);
+  } else {
+    BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), fst, alphas, betas);
+  }  
   fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
   fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(fst2, &shortestPath);
   std::vector<int> dummy;
   FstUtils::LinearFstToVector(shortestPath, dummy, labels);
   assert(labels.size() == tokens.size());
+
+  testingMode = false;
 }
+
+void LatentCrfPosTagger::Label(const string &labelsFilename) {
+  // run viterbi (and write the classes to file)
+  ofstream labelsFile(labelsFilename.c_str());
+  assert(learningInfo.firstKExamplesToLabel <= examplesCount);
+  for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    lambda->learningInfo->currentSentId = exampleId;
+    if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      if(learningInfo.mpiWorld->rank() == 0){
+        string labelSequence;
+        learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
+        labelsFile << labelSequence;
+      }
+      continue;
+    }
+
+    //std::vector<int64_t> &srcSent = GetObservableContext(exampleId);
+    std::vector<int64_t> &tokens = GetObservableSequence(exampleId);
+    std::vector<int> labels;
+    // run viterbi
+    Label(tokens, labels);
+
+    stringstream ss;
+    for(unsigned i = 0; i < labels.size(); ++i) {
+      ss << labels[i] << " ";
+    }
+    ss << endl;
+    if(learningInfo.mpiWorld->rank() == 0){
+      labelsFile << ss.str();
+    }else{
+      learningInfo.mpiWorld->send(0, 0, ss.str());
+    }
+    
+  }
+  labelsFile.close();
+}
+

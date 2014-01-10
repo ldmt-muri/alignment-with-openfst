@@ -7,7 +7,6 @@ using namespace boost;
 
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
 {
-
   switch(obj.type) {
   case FeatureTemplate::BOUNDARY_LABELS:
     os << "BOUNDARY_LABELS";
@@ -16,7 +15,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::EMISSION:
     os << "EMISSION";
-    os << '|' << obj.emission.displacement << "|" << obj.emission.label << "->" << obj.emission.word;
+    os << '|' << obj.emission.displacement << "|" << obj.emission.label << "->" << FeatureId::vocabEncoder->Decode(obj.emission.word);
     break;
   case FeatureTemplate::LABEL_BIGRAM:
     os << "LABEL_BIGRAM";
@@ -89,8 +88,6 @@ bool LogLinearParams::IsSealed() const {
   return sealed;
 }
 
-
-
 void* LogLinearParams::MapToSharedMemory(bool create, const string objectNickname) {
 
   if(string(objectNickname) == string("paramWeights")) {
@@ -122,12 +119,21 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
 }
 
 OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, const std::pair<int64_t, int64_t> &wordPair) {
+  //cerr << "ttt0:" << wordPair.first << ","<<wordPair.second << endl;
   if(cacheWordPairFeatures.count(wordPair) == 0) {
     stringstream ss;
     ss << wordPair.first << " " << wordPair.second;
     string wordPairStr = ss.str();
     auto features = MapWordPairFeaturesToSharedMemory(create, wordPairStr);
+    //cerr << "ttt5:" << wordPairStr << endl;
+    if(!features) {
+      cerr << "will die! ";
+      cerr << wordPairStr << endl;
+    }
+    assert(features);
+    //cerr << "ttt6:" << features << endl;
     cacheWordPairFeatures[wordPair] = features;
+    //cerr << "ttt7:" << cacheWordPairFeatures[wordPair] << endl;
     return features;
   } else {
     return cacheWordPairFeatures[wordPair];
@@ -138,18 +144,23 @@ OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create,
 OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create, const string& objectNickname) {
   ShmemInnerValueAllocator sharedMemorySimpleMapAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
   if(create) {
-    try { 
+    try {
+      //cerr << "ttt1" << endl;
       auto temp = learningInfo->sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
       if(temp) {
         return temp;
       } 
+      //cerr << "ttt2" << endl;
     } catch(std::exception const&  ex) {
       cerr << "create == True, sharedMemorySegment->find( " << objectNickname << " ) threw " << ex.what() << endl;
       assert(false);
     }
 
     try {
-      return learningInfo->sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
+      //cerr << "ttt3" << endl;
+      auto temp = learningInfo->sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
+      //cerr << "ttt4:" << temp << endl;
+      return temp;
     } catch(std::exception const& ex) {
       cerr << "sharedMemorySegment->construct( " << objectNickname << " ) threw " << ex.what() << endl;
       assert(false);
@@ -246,6 +257,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     // skip |||
     splitsIter++;
     std::pair<int64_t, int64_t> srcTgtPair(input1, input2);
+    //cerr << "ttt-2" << endl;
     auto tempMap = MapWordPairFeaturesToSharedMemory(true, srcTgtPair);
     assert(tempMap);
     // the remaining elements are precomputed features for (input1, input2)
@@ -287,10 +299,8 @@ void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo) {
 }
 
 void LogLinearParams::LoadOtherAlignersOutput() {
-  //cerr << "inside LoadOtherAlignersOutput()" << endl;
   // each process independently reads the output of other word aligners
   if(learningInfo->otherAlignersOutputFilenames.size() > 0) {
-    //cerr << "inside otherAlignersOutputFilenames.size() > 0" << endl;
     for(auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
 	filenameIter != learningInfo->otherAlignersOutputFilenames.end();
 	++filenameIter) {
@@ -415,6 +425,7 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
   }
 }
 
+// for word alignment
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
 				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
@@ -599,6 +610,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
   } // end of loop over enabled feature templates
 }
 
+// for pos induction
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
 				   FastSparseVector<double> &activeFeatures) {
@@ -620,27 +632,81 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
   const std::string &xIP2String = i+2 < x.size()?
     types.Decode(x[i+2]):
     "_end_";
-
+  
   FeatureId featureId;
 
+  std::vector<int> kValues;
+ 
   for(auto featTemplateIter = learningInfo->featureTemplates.begin();
-      featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
+      featTemplateIter != learningInfo->featureTemplates.end(); 
+      ++featTemplateIter) {
     
     featureId.type = *featTemplateIter;
     
     switch(featureId.type) {
+
+    case FeatureTemplate::PRECOMPUTED:
+      // override the feature type because we need to conjoin the precomputed feature with label id in pos tagging
+      featureId.type = FeatureTemplate::EMISSION;
+      // set the conjoined label
+      featureId.emission.label = yI;
+      
+      // a moving window of tokens y[i]:Precomputed(x[i+k])
+      kValues.clear();
+      kValues.push_back(0);
+      kValues.push_back(1);
+      for(auto kIter = kValues.begin(); kIter != kValues.end(); ++kIter) {
+        int k = *kIter;
+        std::pair<int64_t, int64_t> wordPair(k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2,
+                                             k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2);
+        if(wordPair.first == -1) { continue; }
+        
+        auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, wordPair);
+        if(!precomputedFeatures) { continue; }
+
+        // set the relative position of this token to the label being considered
+        featureId.emission.displacement = k;
+
+        // now, for each precomputed feature of this token:
+        for(auto precomputedIter = precomputedFeatures->begin();
+            precomputedIter != precomputedFeatures->end();
+            precomputedIter++) {
+          // now set the emission.word field to the precomputed feature. 
+          // TODO-REFACTOR: this is a misuse of the field names.
+          featureId.emission.word = precomputedIter->first.precomputed;
+          // now, all necessary fields of this featureId has been set
+          try {
+            AddParam(featureId);
+          } catch(LogLinearParamsException &ex) {
+            cerr << "been here"<< endl;
+            throw;
+          }
+          activeFeatures[paramIndexes[featureId]] += precomputedIter->second;
+        }
+      }
+    
+      break;
 
       case FeatureTemplate::LABEL_BIGRAM:
         featureId.bigram.current = yI;
         featureId.bigram.previous = yIM1;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
+        // label bias features
+        //featureId.bigram.previous = -1;
+        //AddParam(featureId);
+        //activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
 
       case FeatureTemplate::EMISSION:
         featureId.emission.label = yI;
         // y[i]:x[i+k]
-        for(int k = -2; k <= 2; ++k) {
+        kValues.clear();
+        kValues.push_back(0);
+        kValues.push_back(1);
+        kValues.push_back(2);
+        for(auto kIter = kValues.begin(); kIter != kValues.end(); ++kIter) {
+          int k = *kIter;
           featureId.emission.word = k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2;
           featureId.emission.displacement = k;
           AddParam(featureId);
@@ -665,7 +731,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
       break;
 
     case FeatureTemplate::BOUNDARY_LABELS:
-      if(i < 2 || i > x.size() - 3) {
+      if(i <= 0 || i >= x.size() - 1) {
         featureId.type = FeatureTemplate::BOUNDARY_LABELS;
         featureId.boundaryLabel.position = i < 2? i : i - x.size(); 
         featureId.boundaryLabel.label = yI;

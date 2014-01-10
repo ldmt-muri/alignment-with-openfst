@@ -11,6 +11,7 @@
 
 #include "LatentCrfPosTagger.h"
 #include "HmmModel.h"
+#include "FstUtils.h"
 
 using namespace fst;
 using namespace std;
@@ -28,19 +29,11 @@ string GetOutputPrefix(int argc, char **argv) {
       return string(argv[i+1]);
     }
   }
-  assert(false);
+  return "FAIL";
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo) {
-  assert(argc >= 3);
-  textFilename = argv[1];
-  outputFilenamePrefix = argv[2];
-  if(argc >= 4) {
-    goldLabelsFilename = argv[3];
-  } else {
-    goldLabelsFilename = "";
-  }
-
+void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename) {
+  
   string HELP = "help",
     TRAIN_DATA = "train-data", 
     INIT_LAMBDA = "init-lambda",
@@ -70,6 +63,8 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     GOLD_LABELS_FILENAME = "gold-labels-filename";
+        
+  
 
   string initialLambdaParamsFilename, initialThetaParamsFilename;
 
@@ -77,6 +72,7 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
     (HELP.c_str(), "produce help message")
+    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
     (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
     (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
@@ -114,6 +110,12 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     assert(false);
   }
 
+  if(vm.count(GOLD_LABELS_FILENAME.c_str())) {
+    learningInfo.goldFilename = vm[GOLD_LABELS_FILENAME.c_str()].as<string>();
+  } else {
+    assert(false);
+  }
+
   if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
     learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
       vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
@@ -133,8 +135,17 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
 
   if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L2_STRENGTH.c_str()].as<float>();
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "l2 regularizer, strength = " << learningInfo.optimizationMethod.subOptMethod->regularizationStrength << endl;
+    }
   } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L1_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1Strength = vm[L1_STRENGTH.c_str()].as<float>();
+    if(learningInfo.mpiWorld->rank() == 0){ 
+      cerr << "l1 regularizer, strength = " << learningInfo.optimizationMethod.subOptMethod->regularizationStrength << endl;
+    }
   }
 
   for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
@@ -145,6 +156,8 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
       learningInfo.featureTemplates.push_back(FeatureTemplate::BOUNDARY_LABELS);
     } else if(*featIter == "EMISSION") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::EMISSION);
+    } else if(*featIter == "PRECOMPUTED") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
     } else if(*featIter == "SRC_BIGRAM") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
@@ -160,9 +173,6 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     } else if(*featIter == "SRC0_TGT0") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
-    } else if(*featIter == "PRECOMPUTED") {
-      assert(false); // this feature does not make sense for POS tagging
-      learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
     } else if (*featIter == "DIAGONAL_DEVIATION") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
@@ -264,107 +274,146 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
   // configurations
   cerr << "rank #" << world.rank() << ": training the hmm model to initialize latentCrfPosTagger parameters..." << endl;
 
-  bool persistHmmParams = false;
+  bool persistHmmParams = true;
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 15;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+  learningInfo.tgtWordClassesFilename = latentCrfPosTagger.learningInfo.tgtWordClassesFilename;
 
   // initialize the model
   HmmModel2 hmmModel(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
 
+  int bestRank = 0;
   // train model parameters
   cerr << "rank #" << world.rank() << ": train the model..." << endl;
-  hmmModel.Train();
-  cerr << "rank #" << world.rank() << ": training finished!" << endl;
-  
-  // determine which rank got the best HMM model based on optimized likelihood
-  assert(learningInfo.logLikelihood.size() > 0);
-  // this processor's minimized nloglikelihood
-  double rankOptimizedLoglikelihood = learningInfo.logLikelihood[learningInfo.logLikelihood.size()-1];
-  cerr << "rank #" << world.rank() << ": the local maximum logliklihood i found is " << rankOptimizedLoglikelihood << endl; 
-  // the minimum nloglikelihood obtained by any of the processors
-  double globallyOptimizedLoglikelihood = 0;
-  mpi::all_reduce<double>(world, rankOptimizedLoglikelihood, globallyOptimizedLoglikelihood, mpi::maximum<double>());
-  assert(globallyOptimizedLoglikelihood != 0);
-  cerr << "rank #" << world.rank() << ": the global max loglikelihood is assumed to be " << globallyOptimizedLoglikelihood << endl;
-  // find the process that acheived the best nloglikelihood
-  bool localEqualsGlobal = (globallyOptimizedLoglikelihood == rankOptimizedLoglikelihood);
-  if(localEqualsGlobal) {
-    cerr << "rank #" << world.rank() << ": i think i'm the one that found the best loglikelihood" << endl;
-  }
-  int bestRank = localEqualsGlobal? world.rank() : -1; // -1 means i don't know!
-  mpi::all_reduce<int>(world, bestRank, bestRank, mpi::maximum<int>());
-  assert(bestRank >= 0);
-  cerr << "rank #" << world.rank() << ": i think the one that found the best loglikelihood is " << bestRank << endl;
-  localEqualsGlobal = (bestRank == world.rank());
-
-  // the process which found the best HMM parameters will do some work now
-  if(localEqualsGlobal) {
-    // persist hmm params
-    if(persistHmmParams) {
-      string finalParamsPrefix = outputFilenamePrefix + ".final";
-      hmmModel.PersistParams(finalParamsPrefix);
-    }
+  if(learningInfo.useMaxIterationsCount && learningInfo.maxIterationsCount == 0) {
+    // do nothing; to save time.
+  } else {
+    hmmModel.Train();
+    cerr << "rank #" << world.rank() << ": training finished!" << endl;
     
-    // viterbi
-    string labelsFilename = outputFilenamePrefix + ".labels";
-    hmmModel.Label(textFilename, labelsFilename);
-    cerr << "automatic labels can be found at " << labelsFilename << endl;
-
-    // compare to gold standard
-    if(goldLabelsFilename != "") {
-      cerr << "======================================" << endl;
-      cerr << "HMM model vs. gold standard tagging..." << endl;
-      double vi = hmmModel.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
-      cerr << "done. \nvariation of information = " << vi << endl;
-      double manyToOne = hmmModel.ComputeManyToOne(labelsFilename, goldLabelsFilename);
-      cerr << "many-to-one = " << manyToOne << endl;
+    // determine which rank got the best HMM model based on optimized likelihood
+    assert(learningInfo.logLikelihood.size() > 0);
+    // this processor's minimized nloglikelihood
+    double rankOptimizedLoglikelihood = learningInfo.logLikelihood[learningInfo.logLikelihood.size()-1];
+    cerr << "rank #" << world.rank() << ": the local maximum logliklihood i found is " << rankOptimizedLoglikelihood << endl; 
+    // the minimum nloglikelihood obtained by any of the processors
+    double globallyOptimizedLoglikelihood = 0;
+    mpi::all_reduce<double>(world, rankOptimizedLoglikelihood, globallyOptimizedLoglikelihood, mpi::maximum<double>());
+    assert(globallyOptimizedLoglikelihood != 0);
+    cerr << "rank #" << world.rank() << ": the global max loglikelihood is assumed to be " << globallyOptimizedLoglikelihood << endl;
+    // find the process that acheived the best nloglikelihood
+    bool localEqualsGlobal = (globallyOptimizedLoglikelihood == rankOptimizedLoglikelihood);
+    if(localEqualsGlobal) {
+      cerr << "rank #" << world.rank() << ": i think i'm the one that found the best loglikelihood" << endl;
     }
-
-    // now initialize the latentCrfPosTagger's theta parameters
-    for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
-	contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
-	contextIter++) {
-      for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-	probIter->second = hmmModel.nlogTheta[contextIter->first][probIter->second];
+    bestRank = localEqualsGlobal? world.rank() : -1; // -1 means i don't know!
+    mpi::all_reduce<int>(world, bestRank, bestRank, mpi::maximum<int>());
+    assert(bestRank >= 0);
+    cerr << "rank #" << world.rank() << ": i think the one that found the best loglikelihood is " << bestRank << endl;
+    localEqualsGlobal = (bestRank == world.rank());
+    
+    // the process which found the best HMM parameters will do some work now
+    if(localEqualsGlobal) {
+      // persist hmm params
+      if(persistHmmParams) {
+        string finalParamsPrefix = outputFilenamePrefix + ".final";
+        hmmModel.PersistParams(finalParamsPrefix);
+      }
+      
+      // viterbi
+      string labelsFilename = outputFilenamePrefix + ".labels";
+      hmmModel.Label(textFilename, labelsFilename);
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+      
+      // compare to gold standard
+      if(goldLabelsFilename != "") {
+        cerr << "======================================" << endl;
+        cerr << "HMM model vs. gold standard tagging..." << endl;
+        double vi = hmmModel.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
+        cerr << "done. \nvariation of information = " << vi << endl;
+        double manyToOne = hmmModel.ComputeManyToOne(labelsFilename, goldLabelsFilename);
+        cerr << "many-to-one = " << manyToOne << endl;
       }
     }
+  }
+  
+  if(bestRank == latentCrfPosTagger.learningInfo.mpiWorld->rank()) {
+    // first, initialize the latentCrfPosTagger's theta parameters to zeros
+    for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
+        contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
+        contextIter++) {
+      for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+        probIter->second = 0.0;
+      }
+    }
+    cerr << "latentCrfPosTagger.tgtWordToClass.size() = " << latentCrfPosTagger.tgtWordToClass.size() << endl;
+    // then, for each decision in the hmm theta, incrememnt the decision in the latentcrf theta
+    for(auto hmmContextIter = hmmModel.nlogTheta.params.begin();
+        hmmContextIter != hmmModel.nlogTheta.params.end(); 
+        hmmContextIter++) {
+      for(auto hmmProbIter = hmmContextIter->second.begin(); hmmProbIter != hmmContextIter->second.end(); hmmProbIter++) {
+        if(latentCrfPosTagger.learningInfo.tgtWordClassesFilename.size() > 0) {
+          assert( latentCrfPosTagger.tgtWordToClass.count(hmmProbIter->first) == 1 );
+        }
+        int64_t decision = latentCrfPosTagger.learningInfo.tgtWordClassesFilename.size() > 0?
+          latentCrfPosTagger.tgtWordToClass[ hmmProbIter->first ] :
+          hmmProbIter->first;
+        assert( latentCrfPosTagger.nLogThetaGivenOneLabel.params.count(hmmContextIter->first) == 1);
+        assert( latentCrfPosTagger.nLogThetaGivenOneLabel.params[hmmContextIter->first].count(decision) == 1);
+        latentCrfPosTagger.nLogThetaGivenOneLabel.params[hmmContextIter->first][decision] += MultinomialParams::nExp(hmmProbIter->second);
+      }
+    }
+    // then normalize
+    NormalizeParams(latentCrfPosTagger.nLogThetaGivenOneLabel, 1.1, false, true);
     
     // then initialize the "transition" latentCrfPosTagger's lambda parameters
     for(auto contextIter = hmmModel.nlogGamma.params.begin();
-	contextIter != hmmModel.nlogGamma.params.end();
-	contextIter++) {
+        contextIter != hmmModel.nlogGamma.params.end();
+        contextIter++) {
       const int yIM1 = contextIter->first;
       for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-	int yI = probIter->first;
-	const double hmmNlogProb = probIter->second;
-
-	FeatureId temp;
-  temp.type = FeatureTemplate::LABEL_BIGRAM;
-  temp.bigram.current = yI;
-  temp.bigram.previous = yIM1;
-	if(!latentCrfPosTagger.lambda->ParamExists(temp)) {
-	  cerr << "parameter " << temp << " exists as a transition feature in the hmm model, but was not found in the latentCrfPosTagger." << endl;
-	  cerr << "============================================" << endl;
-	  cerr << "hmm params: " << endl;
-	  hmmModel.nlogGamma.PrintParams();
-	  cerr << "============================================" << endl;
-	  cerr << "latentCrfPosTagger params: " << endl;
-	  latentCrfPosTagger.lambda->PrintParams();
-	  assert(false);
-	}
-	latentCrfPosTagger.lambda->UpdateParam(temp, hmmNlogProb);
+        int yI = probIter->first;
+        const double hmmNlogProb = probIter->second;
+        FeatureId temp;
+        temp.type = FeatureTemplate::LABEL_BIGRAM;
+        temp.bigram.current = yI;
+        temp.bigram.previous = yIM1;
+        //latentCrfPosTagger.lambda->UpdateParam(temp, 1.0-hmmNlogProb);
       }
     }
   }
   return bestRank;
+}
+
+void endOfKIterationsCallbackFunction() {
+  // get hold of the model
+  LatentCrfModel *model = LatentCrfPosTagger::GetInstance();
+  LatentCrfPosTagger &tagger = *( (LatentCrfPosTagger*) model );
+
+  // viterbi
+  stringstream labelsFilenameSs;
+  labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount;
+  string labelsFilename = labelsFilenameSs.str();
+  //string textFilename =  tagger.textFilename;
+  tagger.Label(labelsFilename);
+
+  // compare to gold standard
+  if(tagger.learningInfo.goldFilename != "" && tagger.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
+    cerr << "comparing to gold standard tagging..." << endl;
+    double vi = tagger.ComputeVariationOfInformation(labelsFilename, tagger.learningInfo.goldFilename);
+    cerr << "done. \nvariation of information = " << vi << endl;
+    double manyToOne = tagger.ComputeManyToOne(labelsFilename, tagger.learningInfo.goldFilename);
+    cerr << "many-to-one = " << manyToOne << endl ;
+  }
 }
 
 int main(int argc, char **argv) {  
@@ -399,7 +448,7 @@ int main(int argc, char **argv) {
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
-  int seed = time(NULL);
+  int seed = world.rank();//time(NULL);
   if(world.rank() == 0) {
     cerr << "master" << world.rank() << ": executing srand(" << seed << ")" << endl;
   }
@@ -412,7 +461,7 @@ int main(int argc, char **argv) {
   LearningInfo learningInfo(&world, GetOutputPrefix(argc, argv));
   // general 
   learningInfo.debugLevel = DebugLevel::MINI_BATCH;
-  learningInfo.useMaxIterationsCount = false;
+  learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = 50;
   learningInfo.mpiWorld = &world;
   learningInfo.initializeLambdasWithGaussian = false;
@@ -423,7 +472,7 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
-  learningInfo.persistParamsAfterNIteration = 10;
+  learningInfo.persistParamsAfterNIteration = 1;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
@@ -443,14 +492,19 @@ int main(int argc, char **argv) {
   // thetas
   learningInfo.thetaOptMethod = new OptMethod();
   learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
-  //learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+  learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+
+  learningInfo.nSentsPerDot = 250;
+  learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
+
+  learningInfo.useEarlyStopping = true;
 
   // parse command line arguments
-  string textFilename, outputFilenamePrefix, goldLabelsFilename;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo);
+  string textFilename, outputFilenamePrefix, goldLabelsFilename, wordPairFeaturesFilename;
+  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename);
 
   // initialize the model
-  LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
+  LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename);
   
   // hmm initialization
   unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
@@ -484,7 +538,8 @@ int main(int argc, char **argv) {
   
   // print best params
   if(learningInfo.mpiWorld->rank() == 0) {
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"));
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
+    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
     model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
   }
 
@@ -493,12 +548,6 @@ int main(int argc, char **argv) {
     return 0;
   }
     
-  // compute some statistics on a test set
-  cerr << "analyze the data using the trained model..." << endl;
-  string analysisFilename = outputFilenamePrefix + ".analysis";
-  model->Analyze(textFilename, analysisFilename);
-  cerr << "analysis can be found at " << analysisFilename << endl;
-  
   // viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
   model->Label(textFilename, labelsFilename);
@@ -512,4 +561,11 @@ int main(int argc, char **argv) {
     double manyToOne = model->ComputeManyToOne(labelsFilename, goldLabelsFilename);
     cerr << "many-to-one = " << manyToOne << endl ;
   }
+
+  // compute some statistics on a test set
+  cerr << "analyze the data using the trained model..." << endl;
+  string analysisFilename = outputFilenamePrefix + ".analysis";
+  model->Analyze(textFilename, analysisFilename);
+  cerr << "analysis can be found at " << analysisFilename << endl;
+  
 }
