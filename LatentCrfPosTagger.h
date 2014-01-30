@@ -11,7 +11,9 @@ class LatentCrfPosTagger : public LatentCrfModel {
                      LearningInfo &learningInfo,
                      unsigned numberOfLabels,
                      unsigned firstLabelId,
-                     const string &wordPairFeaturesFilename);
+                     const string &wordPairFeaturesFilename,
+                     const string &initLambdaFilename,
+                     const string &initThetaFilename);
   
   ~LatentCrfPosTagger();
 
@@ -36,7 +38,9 @@ class LatentCrfPosTagger : public LatentCrfModel {
                                      LearningInfo &learningInfo, 
                                      unsigned NUMBER_OF_LABELS, 
                                      unsigned FIRST_LABEL_ID,
-                                     const string &wordPairFeaturesFilename);
+                                     const string &wordPairFeaturesFilename,
+                                     const string &initLambdaFilename,
+                                     const string &initThetaFilename);
 
   std::vector<int64_t>& GetObservableSequence(int exampleId);
 
@@ -52,6 +56,7 @@ class LatentCrfPosTagger : public LatentCrfModel {
   std::vector<std::vector<int64_t> > data, testData;
 
   std::vector<int64_t> empty;
+
 
 };
 

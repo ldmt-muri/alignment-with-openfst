@@ -10,7 +10,7 @@ all: train-latentCrfPosTagger
 train-latentCrfPosTagger: train-latentCrfPosTagger.o
 	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  $(LIBS) -o train-latentCrfPosTagger
 
-train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o LatentCrfAligner.o train-latentCrfPosTagger.cc ClustersComparer.h StringUtils.h LearningInfo.h BasicTypes.h FstUtils.h
+train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o train-latentCrfPosTagger.cc ClustersComparer.h StringUtils.h LearningInfo.h BasicTypes.h FstUtils.h
 	$(CC) $(BEFORE) $(SINGLE) train-latentCrfPosTagger.cc $(OPT)
 
 LatentCrfPosTagger.o: LatentCrfModel.o LatentCrfPosTagger.h LatentCrfPosTagger.cc BasicTypes.h

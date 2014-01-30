@@ -7,6 +7,7 @@
 #include <time.h>
 #include <set>
 #include <algorithm>
+#include <ctime>
 
 #include "mpi.h"
 
@@ -183,6 +184,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   
   void BroadcastTheta(unsigned rankId);
 
+  // filenames
+  string GetLambdaFilename(int iteration, bool humane);
+  string GetThetaFilename(int iteration);
+
   // SETUP
   ////////
   
@@ -355,8 +360,12 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   Task task;
   // this is only set during training while optimizing loglinear parameters
   bool optimizingLambda;
+
+  // tagging dictionary
+  // this maps a word to the possible word classes
+  std::tr1::unordered_map<int64_t, std::tr1::unordered_set<int> > tagDict;
+  // this maps the vocab id of a POS tag (e.g. "NOUN") to the word class id used internally to represent it
+  std::tr1::unordered_map<int64_t, int> posTagVocabIdToClassId;
 };
-
-
 
 #endif

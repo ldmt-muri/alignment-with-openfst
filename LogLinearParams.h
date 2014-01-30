@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/containers/vector.hpp>
 #include <boost/interprocess/containers/map.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
@@ -399,6 +400,7 @@ class LogLinearParams {
     
   // this method seals the set of parameters being used, not their weights
   void Seal();
+  void Unseal();
   bool IsSealed() const;
 
   void LoadPrecomputedFeaturesWith2Inputs(const std::string &wordPairFeaturesFilename);

@@ -99,17 +99,17 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
-  if(initialThetaParamsFilename.size() == 0) {
-    BroadcastTheta(0);
-  } else {
+  if(initialThetaParamsFilename.size() > 0) {
     //assert(nLogThetaGivenOneLabel.params.size() == 0);
     if(learningInfo.mpiWorld->rank() == 0) {
       cerr << "initializing theta params from " << initialThetaParamsFilename << endl;
     }
     MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
     assert(nLogThetaGivenOneLabel.params.size() > 0);
+  } else {
+    BroadcastTheta(0);
   }
-  
+
   // load saved parameters
   if(initialLambdaParamsFilename.size() > 0) {
     lambda->LoadParams(initialLambdaParamsFilename);

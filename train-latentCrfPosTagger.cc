@@ -32,7 +32,7 @@ string GetOutputPrefix(int argc, char **argv) {
   return "FAIL";
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename) {
+void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename) {
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -62,11 +62,12 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
-    GOLD_LABELS_FILENAME = "gold-labels-filename";
-        
+    GOLD_LABELS_FILENAME = "gold-labels-filename",
+    TAG_DICT_FILENAME = "tag-dict-filename";
+    
   
 
-  string initialLambdaParamsFilename, initialThetaParamsFilename;
+  
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -99,6 +100,7 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     (GOLD_LABELS_FILENAME.c_str(), po::value<string>(&goldLabelsFilename), "(string) specifies filename of the hand-annotated POS tags corresponding to training data") 
+    (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
     ;
 
   po::variables_map vm;
@@ -158,6 +160,16 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
       learningInfo.featureTemplates.push_back(FeatureTemplate::EMISSION);
     } else if(*featIter == "PRECOMPUTED") {
       learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
+    } else if(*featIter == "PRECOMPUTED_XIM2") {
+      learningInfo.firePrecomputedFeaturesForXIM2 = true;
+    } else if(*featIter == "PRECOMPUTED_XIM1") {
+      learningInfo.firePrecomputedFeaturesForXIM1 = true;
+    } else if(*featIter == "PRECOMPUTED_XI") {
+      learningInfo.firePrecomputedFeaturesForXI = true;
+    } else if(*featIter == "PRECOMPUTED_XIP1") {
+      learningInfo.firePrecomputedFeaturesForXIP1 = true;
+    } else if(*featIter == "PRECOMPUTED_XIP2") {
+      learningInfo.firePrecomputedFeaturesForXIP2 = true;
     } else if(*featIter == "SRC_BIGRAM") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
@@ -244,9 +256,10 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
     cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
-	filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
+        filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
       cerr << *filename << " ";
     }
+    cerr << endl;
     cerr << GOLD_LABELS_FILENAME << "=" << goldLabelsFilename << endl;
     cerr << endl << "=====================" << endl;
   }
@@ -278,9 +291,9 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 15;
+  learningInfo.maxIterationsCount = 1;
   learningInfo.useMinLikelihoodRelativeDiff = true;
-  learningInfo.minLikelihoodRelativeDiff = 0.001;
+  learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterNIteration = 1;
@@ -497,18 +510,20 @@ int main(int argc, char **argv) {
   learningInfo.nSentsPerDot = 250;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
 
-  learningInfo.useEarlyStopping = true;
+  learningInfo.useEarlyStopping = false;
 
   // parse command line arguments
-  string textFilename, outputFilenamePrefix, goldLabelsFilename, wordPairFeaturesFilename;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename);
+  string textFilename, outputFilenamePrefix, goldLabelsFilename, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename;
+  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
 
   // initialize the model
-  LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename);
+  LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
   
-  // hmm initialization
-  unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
-  model->BroadcastTheta(bestRank);
+  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0) {
+    // hmm initialization
+    unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
+    model->BroadcastTheta(bestRank);
+  } 
   
   // sync all processes
   bool dummy = true;
@@ -563,9 +578,9 @@ int main(int argc, char **argv) {
   }
 
   // compute some statistics on a test set
-  cerr << "analyze the data using the trained model..." << endl;
-  string analysisFilename = outputFilenamePrefix + ".analysis";
-  model->Analyze(textFilename, analysisFilename);
-  cerr << "analysis can be found at " << analysisFilename << endl;
+  //cerr << "analyze the data using the trained model..." << endl;
+  //string analysisFilename = outputFilenamePrefix + ".analysis";
+  //model->Analyze(textFilename, analysisFilename);
+  //cerr << "analysis can be found at " << analysisFilename << endl;
   
 }

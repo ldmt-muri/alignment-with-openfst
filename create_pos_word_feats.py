@@ -39,25 +39,49 @@ for line in brown_file:
   frequency = int(frequency)
   
   features = {
-    u'cluster-{}'.format(cluster):1, 
-    u'clus-{}'.format(cluster[0:4]):1}
+#    u'cluster-{}'.format(cluster):1, 
+#    u'clus-{}'.format(cluster[0:4]):1
+    }
   
   for suffix_length in range(1,4):
     if len(word) > suffix_length and suffix_counts[word[-suffix_length:]] > min_suffix_count:
       features[u'{}-suff-{}'.format(suffix_length, word[-suffix_length:])]=1
 
-  if digit_regex.search(word):
-    features[u'contains-digit'] = 1
-  elif hyphen_regex.search(word):
-    features[u'contains-hyphen'] = 1
-  #if len(word) > 1 and word[0] == word[0].upper() and word[1] != word[1].upper():
-  #  features[u'capital-initial-only'] = 1
-  #if word == word.upper() and word != word.lower():
-  #  features[u'all-caps'] = 1
-  if word[0] == word[0].upper() and word[0] != word[0].lower():
-    features[u'capital-initial'] = 1
-  features[u'lower-{}'.format(word.lower())] = 1
+  # alphanumeric
+  if word.isdigit():
+    features[u'number'] = 1
+  elif word.isalpha():
+    features[u'word'] = 1
+  elif word.isalnum():
+    features[u'alphanumeric'] = 1
+  else:
+    features[u'nonalphanumeric'] = 1
 
+  # case
+  if word.islower():
+    features[u'lower'] = 1
+  elif word.isupper():
+    features[u'upper'] = 1
+  elif word[0].isupper():
+    features[u'upper-initial'] = 1
+
+  # word string
+  if frequency > 10:
+    features[word.lower().replace(u'=', u'eq')] = 1
+
+  # word shape
+  shape=[u'^']
+  for c in word:
+    if c.isdigit():
+      if shape[-1] != u'0': shape.append(u'0')
+    elif c.isalpha() and c.islower():
+      if shape[-1] != u'a': shape.append(u'a')
+    elif c.isalpha() and c.isupper():
+      if shape[-1] != u'A': shape.append(u'A')
+    else: 
+      if shape[-1] != u'#': shape.append(u'#')
+  features[u''.join(shape)] = 1
+  
   if len(features) == 0: 
     continue
 

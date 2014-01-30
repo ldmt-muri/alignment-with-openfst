@@ -170,11 +170,16 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
           yDomainIter++) {
 
         int yI = *yDomainIter;
-	
+
         // skip special classes
         if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == LatentCrfModel::END_OF_SENTENCE_Y_VALUE) {
           continue;
       	}
+
+        // also, if this observation appears in a tag dictionary, we only allow the corresponding word classes
+        //if(tagDict.count(x[i]) > 0 && tagDict[x[i]].count(yI) == 0) {
+        //  continue;
+        //}
 
         // compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
@@ -637,6 +642,11 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int64_t> 
 
         // skip special classes
         if(yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+          continue;
+        }
+
+        // also, if this observation appears in a tag dictionary, we only allow the corresponding word classes
+        if(tagDict.count(x[i]) > 0 && tagDict[x[i]].count(yI) == 0) {
           continue;
         }
 
@@ -1440,11 +1450,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
   if(learningInfo.firstKExamplesToLabel == 1) {
     learningInfo.firstKExamplesToLabel = examplesCount;
   }
-
+  
   // TRAINING ITERATIONS
   bool converged = false;
   do {
-    
+
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "starting coordinate descent iteration #" << learningInfo.iterationsCount <<  " at " << time(0) << endl;
+    }
+
     if(learningInfo.useMaxIterationsCount && learningInfo.maxIterationsCount == 0) {
       // no training at all!
       break;
@@ -1455,16 +1469,20 @@ void LatentCrfModel::BlockCoordinateDescent() {
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ====================== ITERATION " << learningInfo.iterationsCount << " =====================" << endl << endl;
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas using a few EM iterations: =========" << endl << endl;
     }
-    
+  
     if(learningInfo.iterationsCount == 0 && learningInfo.optimizeLambdasFirst) {
       // don't touch theta parameters
     } else if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
 
-
+    
 
       // run a few EM iterations to update thetas
       for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
-    
+        
+        if(learningInfo.mpiWorld->rank() == 0) {
+          cerr << "starting EM iteration #" << emIter <<  " at " << time(0) << endl;    
+        }
+
         lambda->GetParamsCount();
         // skip EM updates of the first block-coord-descent iteration
         //if(learningInfo.iterationsCount == 0) {
@@ -1499,7 +1517,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
             cerr << ".";
           }
         }
-        
+            
         // debug info
         cerr << learningInfo.mpiWorld->rank() << "|";
         
@@ -1529,20 +1547,17 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // update nLogTheta on slaves
         BroadcastTheta(0);
 
+        if(learningInfo.mpiWorld->rank() == 0) {
+          cerr << "ending EM iteration #" << emIter <<  " at " << time(0) << endl;    
+        }
+
       } // end of EM iterations
-      
+    
       // debug info
       if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
-        stringstream thetaParamsFilename;
-        thetaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount;
-        thetaParamsFilename << ".theta";
-        if(learningInfo.debugLevel >= DebugLevel::CORPUS) {
-          cerr << "master" << learningInfo.mpiWorld->rank() << ": persisting theta parameters in iteration " \
-               << learningInfo.iterationsCount << " at " << thetaParamsFilename.str() << endl;
-        }
-        PersistTheta(thetaParamsFilename.str());
+        PersistTheta(GetThetaFilename(learningInfo.iterationsCount));
       }
-      
+
       // end of if(thetaOptMethod->algorithm == EM)
     } else if (learningInfo.thetaOptMethod->algorithm == GRADIENT_DESCENT) {
       assert(learningInfo.mpiWorld->size() == 1); // this method is only supported for single-threaded runs
@@ -1597,10 +1612,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
       lambda->paramWeightsPtr->end() : lambda->paramWeightsPtr->begin();
     
     // hack adagrad is not effective after 5 iterations
-    if(learningInfo.iterationsCount >=5 ) {
-      learningInfo.optimizationMethod.subOptMethod->algorithm = LBFGS;
-      learningInfo.optimizationMethod.subOptMethod->miniBatchSize = examplesCount;
-    }
+    //if(learningInfo.iterationsCount >=5 ) {
+    //  learningInfo.optimizationMethod.subOptMethod->algorithm = LBFGS;
+    //  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = examplesCount;
+    //}
 
     double Nll = 0, devSetNll = 0;
     // note: batch == minibatch with size equals to data.size()
@@ -1633,12 +1648,21 @@ void LatentCrfModel::BlockCoordinateDescent() {
           lambdasArray = lambda->GetParamWeightsArray();
           lambdasArrayLength = lambda->GetParamsCount();
           
+
+          if(learningInfo.mpiWorld->rank() == 0) {
+            cerr << "will start LBFGS " <<  " at " << time(0) << endl;    
+          }
+
           // only the master executes lbfgs
           int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &optimizedMiniBatchNll, 
                                   LbfgsCallbackEvalZGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
           
           bool NEED_HELP = false;
           mpi::broadcast<bool>(*learningInfo.mpiWorld, NEED_HELP, 0);
+
+          if(learningInfo.mpiWorld->rank() == 0) {
+            cerr << "done with LBFGS " <<  " at " << time(0) << endl;    
+          }
           
           // debug
           if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
@@ -1718,6 +1742,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
         bool adagradConverged = false;
         // in each adagrad iter
         while(!adagradConverged) {    
+
+          if(learningInfo.mpiWorld->rank() == 0) {
+            cerr << "new adagrad iteration " <<  " at " << time(0) << endl;    
+          }
+
           // compute the loss and its gradient
           double* lambdasArray = lambda->GetParamWeightsArray();
           
@@ -1767,7 +1796,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           if(learningInfo.mpiWorld->rank() == 0) {
             // update param weight
             int miniBatchSize = toSentId - fromSentId;
-            double eta = 1.0;
+            double eta = 0.1;
             for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
               if(gradient[paramId] == 0.0 && lambdasArray[paramId] == 0.0) {continue;}
               // add l1 term
@@ -1803,6 +1832,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
           adagradConverged = true;
         }
         
+        if(learningInfo.mpiWorld->rank() == 0) {
+          cerr << "done with adagrad " << " at " << time(0) << endl;    
+        }
+        
       } else {
         assert(false);
       }
@@ -1825,22 +1858,17 @@ void LatentCrfModel::BlockCoordinateDescent() {
       }
       
     } // for each minibatch
-    
+
     // done optimizing lambdas
     this->optimizingLambda = false;
     
     // persist updated lambda params
-    stringstream lambdaParamsFilename;
     if(learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0 && 
        learningInfo.mpiWorld->rank() == 0) {
-      lambdaParamsFilename << outputPrefix << "." << learningInfo.iterationsCount << ".lambda";
-      if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
-        cerr << "persisting lambda parameters after iteration " << learningInfo.iterationsCount << " at " << lambdaParamsFilename.str() << endl;
-      }
-      lambda->PersistParams(lambdaParamsFilename.str(), false);
-      lambdaParamsFilename << ".humane";
-      lambda->PersistParams(lambdaParamsFilename.str(), true);
+      lambda->PersistParams(GetLambdaFilename(learningInfo.iterationsCount, false), false);
+      lambda->PersistParams(GetLambdaFilename(learningInfo.iterationsCount, true), true);
     }
+
     double dummy5;
     mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy5, dummy5, std::plus<double>());    
     
@@ -1858,9 +1886,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
     
     // update learningInfo
     mpi::broadcast<double>(*learningInfo.mpiWorld, Nll, 0);
-    learningInfo.logLikelihood.push_back(Nll);
+    learningInfo.logLikelihood.push_back(-Nll);
     if(learningInfo.useEarlyStopping) {
-      learningInfo.validationLogLikelihood.push_back(devSetNll);
+      learningInfo.validationLogLikelihood.push_back(-devSetNll);
     }
     learningInfo.iterationsCount++;
     
@@ -1872,11 +1900,27 @@ void LatentCrfModel::BlockCoordinateDescent() {
     if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
       cerr << "rank" << learningInfo.mpiWorld->rank() << ": coord descent converged = " << converged << endl;
     }
-    
+   
     // broadcast the convergence decision
     mpi::broadcast<bool>(*learningInfo.mpiWorld, converged, 0);    
-    
   } while(!converged);
+
+  if(learningInfo.persistParamsAfterNIteration == 1) {
+    // after convergence, set the model parameters to those obtained in the "best iteration"
+    int bestIteration = learningInfo.GetBestIterationNumber();
+    cerr << "best iteration is found to be #" << bestIteration << endl;
+    if(bestIteration != learningInfo.iterationsCount - 1) {
+      if(learningInfo.mpiWorld->rank() == 0) { cerr << "Now, lets load the parameters of that iteration to produce output labels." << endl; }
+      MultinomialParams::LoadParams(GetThetaFilename(bestIteration), nLogThetaGivenOneLabel, vocabEncoder, true, true);
+      if(learningInfo.mpiWorld->rank() == 0) { cerr << "unsealing..."; }
+      lambda->Unseal();
+      if(learningInfo.mpiWorld->rank() == 0) { cerr << "done." << endl << "loading params..."; }
+      lambda->LoadParams(GetLambdaFilename(bestIteration, false));
+      if(learningInfo.mpiWorld->rank() == 0) { cerr << "done." << endl << "sealing..."; }
+      lambda->Seal();
+      if(learningInfo.mpiWorld->rank() == 0) { cerr << "done." << endl; }
+    }
+  }
 }
 
 void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
@@ -2066,6 +2110,21 @@ void LatentCrfModel::InitLambda() {
            && lambda->paramIdsPtr->size() == lambda->paramWeightsPtr->size() \
            && lambda->paramIdsPtr->size() == lambda->paramIndexes.size());    
   }
+}
+
+string LatentCrfModel::GetThetaFilename(int iteration) {
+  stringstream thetaParamsFilename;
+  thetaParamsFilename << outputPrefix << "." << iteration << ".theta";
+  return thetaParamsFilename.str();
+}
+
+string LatentCrfModel::GetLambdaFilename(int iteration, bool humane) {
+  stringstream lambdaParamsFilename;
+  lambdaParamsFilename << outputPrefix << "." << iteration << ".lambda";
+  if(humane) {
+    lambdaParamsFilename << ".humane";
+  }
+  return lambdaParamsFilename.str();
 }
 
 // returns -log p(z|x)

@@ -41,10 +41,14 @@ LatentCrfModel* LatentCrfPosTagger::GetInstance(const string &textFilename,
                                                 LearningInfo &learningInfo, 
                                                 unsigned NUMBER_OF_LABELS, 
                                                 unsigned FIRST_LABEL_ID,
-                                                const string &wordPairFeaturesFilename) {
+                                                const string &wordPairFeaturesFilename,
+                                                const string &initLambdaFilename,
+                                                const string &initThetaFilename) {
   if(!instance) {
     instance = new LatentCrfPosTagger(textFilename, outputPrefix, learningInfo, NUMBER_OF_LABELS, 
-                                      FIRST_LABEL_ID, wordPairFeaturesFilename);
+                                      FIRST_LABEL_ID, wordPairFeaturesFilename,
+                                      initLambdaFilename,
+                                      initThetaFilename);
   } else {
     cerr << "A LatentCrfPosTagger object has already been initialized" << endl;
   }
@@ -63,11 +67,13 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
                                        LearningInfo &learningInfo, 
                                        unsigned NUMBER_OF_LABELS, 
                                        unsigned FIRST_LABEL_ID,
-                                       const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename, 
-                                                                                                outputPrefix, 
-                                                                                                learningInfo, 
-                                                                                                FIRST_LABEL_ID,
-                                                                                                LatentCrfModel::Task::POS_TAGGING) {
+                                       const string &wordPairFeaturesFilename,
+                                       const string &initLambdaFilename,
+                                       const string &initThetaFilename) : LatentCrfModel(textFilename, 
+                                                                                         outputPrefix, 
+                                                                                         learningInfo, 
+                                                                                         FIRST_LABEL_ID,
+                                                                                         LatentCrfModel::Task::POS_TAGGING) {
   // set constants
   LatentCrfModel::START_OF_SENTENCE_Y_VALUE = FIRST_LABEL_ID - 1;
   this->FIRST_ALLOWED_LABEL_VALUE = FIRST_LABEL_ID;
@@ -100,6 +106,25 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   vocabEncoder.Read(textFilename, data);
   examplesCount = data.size();
 
+  // read and encode tagging dictionary
+  vector<vector<int64_t> > rawTagDict;
+  int wordClassCounter = FIRST_ALLOWED_LABEL_VALUE;
+  if(learningInfo.tagDictFilename.size() > 0) {
+    vocabEncoder.Read(learningInfo.tagDictFilename, rawTagDict);
+    for(auto wordTags = rawTagDict.begin(); wordTags != rawTagDict.end(); ++wordTags) {
+      for(int i = 1; i < wordTags->size(); ++i) {
+        if(posTagVocabIdToClassId.count( (*wordTags)[i]) == 0) {
+          posTagVocabIdToClassId[(*wordTags)[i]] = wordClassCounter++;
+        } 
+        tagDict[(*wordTags)[0]].insert(posTagVocabIdToClassId[(*wordTags)[i]]);
+      }
+    }
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "|tagDict| = " << tagDict.size() << endl;
+      assert(wordClassCounter - FIRST_ALLOWED_LABEL_VALUE < yDomain.size());
+    }
+  }
+
   if(learningInfo.mpiWorld->rank() == 0 && wordPairFeaturesFilename.size() > 0) {
     cerr << "vocabEncoder.Count() = " << vocabEncoder.Count() << endl;
     lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
@@ -118,9 +143,15 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
     
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
-
-  // make sure all slaves have the same theta values
-  BroadcastTheta(0);
+  if(initThetaFilename.size() > 0) {
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "initializing theta params from " << initThetaFilename << endl;
+    }
+    MultinomialParams::LoadParams(initThetaFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
+    assert(nLogThetaGivenOneLabel.params.size() > 0);
+  } else {
+    BroadcastTheta(0);
+  }
 
   // persist initial parameters
   assert(learningInfo.iterationsCount == 0);
@@ -133,6 +164,13 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
     PersistTheta(thetaParamsFilename.str());
   }
   
+  // load saved parameters
+  if(initLambdaFilename.size() > 0) {
+    lambda->LoadParams(initLambdaFilename);
+    assert(lambda->paramWeightsTemp.size() == lambda->paramIndexes.size());
+    assert(lambda->paramIdsTemp.size() == lambda->paramIndexes.size());
+  }
+
   // initialize the lambda parameters
   // add all features in this data set to lambda.params
   InitLambda();
@@ -140,6 +178,7 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   if(learningInfo.mpiWorld->rank() == 0) {
     vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
   }
+
 }
 
 LatentCrfPosTagger::~LatentCrfPosTagger() {}

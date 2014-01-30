@@ -30,6 +30,7 @@ class LearningInfo {
     trainToDevDataSize = 10;
     iterationsCount = 0;
     minLikelihoodDiff = 1.0;
+    minIterationsCount = 5;
     maxIterationsCount = 10;
     saveAlignmentFstsOnDisk = false;
     neighborhood = DiscriminativeLexicon::ALL;
@@ -67,59 +68,106 @@ class LearningInfo {
     variationalInferenceOfMultinomials = false;
     testWithCrfOnly = false;
     optimizeLambdasFirst = false;
+    firePrecomputedFeaturesForXIM2 = firePrecomputedFeaturesForXIM1 = firePrecomputedFeaturesForXIP1 = firePrecomputedFeaturesForXIP2 = false;
+    firePrecomputedFeaturesForXI = true;
+    tagDictFilename="";
   }
 
   bool IsModelConverged() {
     assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping || useMinLikelihoodRelativeDiff);
     // logging
-    if(useMaxIterationsCount) {
-      cerr << "rank #" << mpiWorld->rank() << ": iterationsCount = " << iterationsCount << ". max = " << maxIterationsCount << endl;
-    }
-    if(useMinLikelihoodDiff && 
-       iterationsCount > 1) {
-      cerr << "rank #" << mpiWorld->rank() << ": loglikelihoodDiff = " << fabs(logLikelihood[iterationsCount-1] - 
-					  logLikelihood[iterationsCount-2]) << ". min = " << minLikelihoodDiff << endl;
-    }
-    if(useEarlyStopping &&
-       iterationsCount > 1) {
-      cerr << "rank #" << mpiWorld->rank() << ": validationLikelihood[" << iterationsCount-2 << "] = " << validationLogLikelihood[iterationsCount-2] << endl;
-      cerr << "rank #" << mpiWorld->rank() << ": validationLikelihood[" << iterationsCount-1 << "] = " << validationLogLikelihood[iterationsCount-1] << endl;
-      cerr << "rank #" << mpiWorld->rank() << ": convergence criterion: stop training when loglikelihood no longer decreases, after the second iteration" << endl;
-    }
-    
-    double absoluteDiff = 0.0, relativeDiff = 0.0;
-    if(useMinLikelihoodRelativeDiff &&
-       iterationsCount > 1) {
-      absoluteDiff = fabs(logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]);
-      assert(logLikelihood[iterationsCount-2] != 0);
-      relativeDiff = fabs(absoluteDiff / logLikelihood[iterationsCount-2]);
-      cerr << "rank #" << mpiWorld->rank() << ": loglikelihoodRelativeDiff = " << relativeDiff << ".min = " << minLikelihoodRelativeDiff << endl;
-    }
-    
+    cerr << "CONVERGENCE CHECK" << endl;
+    cerr << "minIterationsCount=" << minIterationsCount << endl;
+    cerr << "useMaxIterationsCount=" << useMaxIterationsCount << endl;
+    cerr << "maxIterationsCount=" << maxIterationsCount << endl;
+    cerr << "useMinLikelihoodDiff=" << useMinLikelihoodDiff << endl;
+    cerr << "minLikelihoodDiff=" << minLikelihoodDiff << endl;
+    cerr << "useMinLikelihoodRelativeDiff=" << useMinLikelihoodRelativeDiff << endl;
+    cerr << "minLikelihoodRelativeDiff=" << minLikelihoodRelativeDiff << endl;
+    cerr << "useEarlyStopping=" << useEarlyStopping << endl;
     cerr << endl;
+    cerr << "iterationsCount=" << iterationsCount << endl;
+    cerr << "ll[t  ] = " << logLikelihood[iterationsCount-1] << endl;
+    if(useEarlyStopping) {
+      cerr << "devll[t  ]=" << validationLogLikelihood[iterationsCount-1] << endl;
+    }
+    assert(minIterationsCount >= 3);
+    assert(logLikelihood.size() >= 1);
+    if(iterationsCount < minIterationsCount) {
+      cerr << "min iterations count not met ==> NOT CONVERGED" << endl;
+      return false;
+    }
+    assert( logLikelihood[iterationsCount-1] != 0.0 ); 
+    assert( logLikelihood[iterationsCount-2] != 0.0 );
+    assert( logLikelihood[iterationsCount-3] != 0.0 );
+    cerr << "ll[t-1] = " << logLikelihood[iterationsCount-2] << endl;
+    if(useEarlyStopping) {
+      cerr << "devll[t-1] = " << validationLogLikelihood[iterationsCount-2] << endl;
+    }
+    cerr << "(ll[t  ]-ll[t-1])             =" << logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2] << endl;
+    cerr << "(ll[t  ]-ll[t-1])/abs(ll[t-1])=" << (logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2])/ fabs(logLikelihood[iterationsCount-2]) << endl;
+    cerr << "(ll[t-1]-ll[t-2])             =" << logLikelihood[iterationsCount-2] - logLikelihood[iterationsCount-3] << endl;
+    cerr << "(ll[t-1]-ll[t-2])/abs(ll[t-2])=" << (logLikelihood[iterationsCount-2] - logLikelihood[iterationsCount-3])/ fabs(logLikelihood[iterationsCount-3]) << endl;
+    if(useEarlyStopping) {
+      cerr << "(devll[t  ]-devll[t-1])=" << validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2];
+      cerr << "(devll[t-1]-devll[t-2])=" << validationLogLikelihood[iterationsCount-2] - validationLogLikelihood[iterationsCount-3];
+    }
+    cerr << endl;
+    
     // check for convergnece conditions
     if(useMaxIterationsCount && 
        maxIterationsCount <= iterationsCount) {
+      cerr << "maxIterationsCount is met ==> CONVERGED" << endl;
       return true;
     } 
     if(useMinLikelihoodDiff && 
-       iterationsCount > 2 &&
-       minLikelihoodDiff > fabs(logLikelihood[iterationsCount-1] - 
-					    logLikelihood[iterationsCount-2])) {
+       minLikelihoodDiff > logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2] &&
+       minLikelihoodDiff > logLikelihood[iterationsCount-2] - logLikelihood[iterationsCount-3]) {
+      cerr << "loglikelihood improvement was less than the minimum allowed for two consecutive iterations ==> CONVERGED" << endl;
       return true;
     } 
     if(useEarlyStopping &&
-       iterationsCount > 5 &&
-       fabs((validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2]) / validationLogLikelihood[iterationsCount-2]) < minLikelihoodRelativeDiff) {
+       0 > validationLogLikelihood[iterationsCount-1] - validationLogLikelihood[iterationsCount-2] &&
+       0 > validationLogLikelihood[iterationsCount-2] - validationLogLikelihood[iterationsCount-3]) {
+      cerr << "validation loglikelihood didn't improve for two consecutive iterations ==> CONVERGED" << endl;
       return true;
     }
     if(useMinLikelihoodRelativeDiff && 
-       iterationsCount > 2 && 
-       minLikelihoodRelativeDiff > relativeDiff) {
+       minLikelihoodRelativeDiff > (logLikelihood[iterationsCount-1] - logLikelihood[iterationsCount-2]) / fabs(logLikelihood[iterationsCount-2]) &&
+       minLikelihoodRelativeDiff > (logLikelihood[iterationsCount-2] - logLikelihood[iterationsCount-3]) / fabs(logLikelihood[iterationsCount-3])) {
+      cerr << "loglikelihood relative improvement was less than the minimum allowed for two consecutive iterations ==> CONVERGED" << endl;
       return true;
     }
     // none of the convergence conditions apply!
+    cerr << "none of the conditions apply ==> NOT CONVERGED" << endl;
     return false;
+  }
+
+  int GetBestIterationNumber() {
+    assert(iterationsCount > 0);
+    int bestIteration = 0;
+    if(useMinLikelihoodRelativeDiff || useMinLikelihoodDiff) {
+      // the best iteration is the one with the highest regularized likelihood
+      for(int iteration = 1; iteration < logLikelihood.size(); iteration++) {
+        if(logLikelihood[iteration] > logLikelihood[bestIteration]) {
+          bestIteration = iteration;
+        }
+      }
+    } else if(useEarlyStopping) {
+      assert(validationLogLikelihood.size() > 0);
+      // the best iteration is the one with the highest unregularized dev set likelihood
+      for(int iteration = 1; iteration < validationLogLikelihood.size(); iteration++) {
+        if(validationLogLikelihood[iteration] > validationLogLikelihood[bestIteration]) {
+          bestIteration = iteration;
+        }
+      }
+    } else if(useMaxIterationsCount) {
+      bestIteration = iterationsCount - 1;
+    } else {
+      // don't know how to determine best iteration?!
+      assert(false);
+    }
+    return bestIteration;
   }
 
   // should be called only once when the shared memory is no longer needed
@@ -162,10 +210,13 @@ class LearningInfo {
     assert(sharedMemorySegment->get_size() == segmentSize);
   }
   
+  // you can't converge before this many iterations no matter what
+  int minIterationsCount;
+
   // criteria 1
   bool useMaxIterationsCount;
   int maxIterationsCount;
-
+  
   // criteria 2
   bool useMinLikelihoodDiff;
   float minLikelihoodDiff;
@@ -216,6 +267,11 @@ class LearningInfo {
 
   // list of feature templates to be fired
   std::vector<FeatureTemplate> featureTemplates;
+  bool firePrecomputedFeaturesForXIM2,
+    firePrecomputedFeaturesForXIM1,
+    firePrecomputedFeaturesForXI,
+    firePrecomputedFeaturesForXIP1,
+    firePrecomputedFeaturesForXIP2;
  
   // 0 = no debug info. 
   // 1 = corpus level debug info.
@@ -306,6 +362,8 @@ class LearningInfo {
   string outputFilenamePrefix;
 
   string goldFilename;
+ 
+  string tagDictFilename;
 
 };
 

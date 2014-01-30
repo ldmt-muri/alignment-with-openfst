@@ -89,11 +89,13 @@ bool LogLinearParams::IsSealed() const {
 }
 
 void* LogLinearParams::MapToSharedMemory(bool create, const string objectNickname) {
-
   if(string(objectNickname) == string("paramWeights")) {
     ShmemDoubleAllocator sharedMemoryDoubleAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
     if(create) {
-      return learningInfo->sharedMemorySegment->construct<ShmemVectorOfDouble> (objectNickname.c_str()) (sharedMemoryDoubleAllocator);
+      cerr << "before constructing paramWeights" << endl;
+      auto ptr = learningInfo->sharedMemorySegment->find_or_construct<ShmemVectorOfDouble> (objectNickname.c_str()) (sharedMemoryDoubleAllocator);
+      cerr << "after constructing paramWeights" << endl;
+      return ptr;
     } else {
       return learningInfo->sharedMemorySegment->find<ShmemVectorOfDouble> (objectNickname.c_str()).first;
     }
@@ -101,7 +103,10 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
   } else if (string(objectNickname) == string("paramIds")) {
     ShmemFeatureIdAllocator sharedMemoryFeatureIdAllocator(learningInfo->sharedMemorySegment->get_segment_manager());
     if(create) {
-      return learningInfo->sharedMemorySegment->construct<ShmemVectorOfFeatureId> (objectNickname.c_str()) (sharedMemoryFeatureIdAllocator);
+      cerr << "before constructing paramIds" << endl;
+      auto ptr = learningInfo->sharedMemorySegment->find_or_construct<ShmemVectorOfFeatureId> (objectNickname.c_str()) (sharedMemoryFeatureIdAllocator);
+      cerr << "after constructing paramIds" << endl;
+      return ptr;
     } else {
       return learningInfo->sharedMemorySegment->find<ShmemVectorOfFeatureId> (objectNickname.c_str()).first;
     }
@@ -125,15 +130,7 @@ OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create,
     ss << wordPair.first << " " << wordPair.second;
     string wordPairStr = ss.str();
     auto features = MapWordPairFeaturesToSharedMemory(create, wordPairStr);
-    //cerr << "ttt5:" << wordPairStr << endl;
-    if(!features) {
-      cerr << "will die! ";
-      cerr << wordPairStr << endl;
-    }
-    assert(features);
-    //cerr << "ttt6:" << features << endl;
     cacheWordPairFeatures[wordPair] = features;
-    //cerr << "ttt7:" << cacheWordPairFeatures[wordPair] << endl;
     return features;
   } else {
     return cacheWordPairFeatures[wordPair];
@@ -145,21 +142,16 @@ OuterMappedType* LogLinearParams::MapWordPairFeaturesToSharedMemory(bool create,
   ShmemInnerValueAllocator sharedMemorySimpleMapAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
   if(create) {
     try {
-      //cerr << "ttt1" << endl;
       auto temp = learningInfo->sharedMemorySegment->find< OuterMappedType > (objectNickname.c_str()).first;
       if(temp) {
         return temp;
-      } 
-      //cerr << "ttt2" << endl;
+      }
     } catch(std::exception const&  ex) {
-      cerr << "create == True, sharedMemorySegment->find( " << objectNickname << " ) threw " << ex.what() << endl;
       assert(false);
     }
 
     try {
-      //cerr << "ttt3" << endl;
       auto temp = learningInfo->sharedMemorySegment->construct< OuterMappedType > (objectNickname.c_str()) (std::less<InnerKeyType>(), sharedMemorySimpleMapAllocator);
-      //cerr << "ttt4:" << temp << endl;
       return temp;
     } catch(std::exception const& ex) {
       cerr << "sharedMemorySegment->construct( " << objectNickname << " ) threw " << ex.what() << endl;
@@ -222,6 +214,30 @@ void LogLinearParams::Seal() {
   sealed = true;
 }
 
+void LogLinearParams::Unseal() {
+  assert(sealed);
+  assert(paramWeightsTemp.size() == 0);
+  assert(paramIdsTemp.size() == 0);
+  paramIndexes.clear();
+  if(learningInfo->mpiWorld->rank() == 0) {
+    // sync
+    double dummy=1.0;
+    boost::mpi::all_reduce<double>(*learningInfo->mpiWorld, dummy, dummy, std::plus<double>());
+    // now, that all processes reached this method, you can delete the shared objects
+    paramIdsPtr = 0;
+    paramWeightsPtr = 0;
+  } else {
+    // this is done by the slaves, not the master
+    // sync
+    double dummy = 0.5;
+    boost::mpi::all_reduce<double>(*learningInfo->mpiWorld, dummy, dummy, std::plus<double>());
+    paramWeightsPtr = 0;
+    paramIdsPtr = 0;
+  }
+  assert(paramIdsPtr == 0 && paramWeightsPtr == 0);
+  sealed = false;
+}
+
 // by two inputs, i mean that a precomputed feature value is a function of two strings
 // example line in the precomputed features file:
 // madrasa ||| school ||| F52:editdistance=7 F53:capitalconsistency=1
@@ -237,6 +253,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     if(line.size() == 0) {
       continue;
     }
+    //cerr << line << endl;
     std::vector<string> splits;
     StringUtils::SplitString(line, ' ', splits);
     // check format
@@ -265,6 +282,13 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       // read feature id
       std::vector<string> featureIdAndValue;
       StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+      if(featureIdAndValue.size() != 2) {
+        cerr << "UH-OH: featureIdAndValue.size() == " << featureIdAndValue.size() << endl;
+        cerr << "elements:" << endl; 
+        for(auto field = featureIdAndValue.begin(); field != featureIdAndValue.end(); field++) {
+          cerr << *field << endl;
+        }
+      }
       assert(featureIdAndValue.size() == 2);
       FeatureId featureId;
       featureId.type = FeatureTemplate::PRECOMPUTED;
@@ -302,48 +326,49 @@ void LogLinearParams::LoadOtherAlignersOutput() {
   // each process independently reads the output of other word aligners
   if(learningInfo->otherAlignersOutputFilenames.size() > 0) {
     for(auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
-	filenameIter != learningInfo->otherAlignersOutputFilenames.end();
-	++filenameIter) {
+        filenameIter != learningInfo->otherAlignersOutputFilenames.end();
+        ++filenameIter) {
+      cerr << "alginer filename: " << *filenameIter << endl;
       auto alignerOutput = new vector< vector< set<int>* >* >();
       //cerr << "adding this aligner to the list of aligners" << endl;
       otherAlignersOutput.push_back(alignerOutput);
       std::ifstream infile(filenameIter->c_str());
       std::string line;
       while (std::getline(infile, line)) {
-	auto sentAlignments = new vector< set<int>* >();
-	//cerr << "adding this sentence to the list of sentences for this aligner" << endl;
-	alignerOutput->push_back(sentAlignments);
-	// each line consists of a number of word-to-word alignments
-	vector<std::string> srcpos_tgtpos_pairs;
-	StringUtils::SplitString(line, ' ', srcpos_tgtpos_pairs);
-	for(auto pairIter = srcpos_tgtpos_pairs.begin(); 
-	    pairIter != srcpos_tgtpos_pairs.end();
-	    ++pairIter) {
-	  // read this pair
-	  int srcpos, tgtpos; 
-	  char del;
-	  std::istringstream ss(*pairIter);
-	  ss >> srcpos >> del >> tgtpos;
-	  assert(del == '-');
-	  // if this is a 'reverse' training, swap srcpos with tgtpos
-	  if(learningInfo->reverse) {
-	    int temp = srcpos;
-	    srcpos = tgtpos;
-	    tgtpos = temp;
-	  }
-	  // increment srcpos because we insert the NULL src word at the beginning of each sentence
-	  srcpos++;
-	  // make room in the sentAlignments vector for this pair. tgt positions not mentioned are aligned to NULL
-	  while(sentAlignments->size() <= tgtpos) { 
-	    auto tgtPosAlignments = new set<int>();
-	    sentAlignments->push_back(tgtPosAlignments); 
-	  }
-	  // memorize this pair
-	  //cerr << "adding this word pair to this sentence" << endl;
-	  (*sentAlignments)[tgtpos]->insert(srcpos);
-	  //cerr << "tgtpos=" << tgtpos << " aligns to srcpos=" << srcpos << endl;
-	}
-	//cerr << endl;
+        auto sentAlignments = new vector< set<int>* >();
+        //cerr << "adding this sentence to the list of sentences for this aligner" << endl;
+        alignerOutput->push_back(sentAlignments);
+        // each line consists of a number of word-to-word alignments
+        vector<std::string> srcpos_tgtpos_pairs;
+        StringUtils::SplitString(line, ' ', srcpos_tgtpos_pairs);
+        for(auto pairIter = srcpos_tgtpos_pairs.begin(); 
+            pairIter != srcpos_tgtpos_pairs.end();
+            ++pairIter) {
+          // read this pair
+          int srcpos, tgtpos; 
+          char del;
+          std::istringstream ss(*pairIter);
+          ss >> srcpos >> del >> tgtpos;
+          assert(del == '-');
+          // if this is a 'reverse' training, swap srcpos with tgtpos
+          if(learningInfo->reverse) {
+            int temp = srcpos;
+            srcpos = tgtpos;
+            tgtpos = temp;
+          }
+          // increment srcpos because we insert the NULL src word at the beginning of each sentence
+          srcpos++;
+          // make room in the sentAlignments vector for this pair. tgt positions not mentioned are aligned to NULL
+          while(sentAlignments->size() <= tgtpos) { 
+            auto tgtPosAlignments = new set<int>();
+            sentAlignments->push_back(tgtPosAlignments); 
+          }
+          // memorize this pair
+          //cerr << "adding this word pair to this sentence" << endl;
+          (*sentAlignments)[tgtpos]->insert(srcpos);
+          //cerr << "tgtpos=" << tgtpos << " aligns to srcpos=" << srcpos << endl;
+        }
+        //cerr << endl;
       }
     }
   }
@@ -653,8 +678,11 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
       
       // a moving window of tokens y[i]:Precomputed(x[i+k])
       kValues.clear();
-      kValues.push_back(0);
-      kValues.push_back(1);
+      if(learningInfo->firePrecomputedFeaturesForXIM2) { kValues.push_back(-2); }
+      if(learningInfo->firePrecomputedFeaturesForXIM1) { kValues.push_back(-1); }
+      if(learningInfo->firePrecomputedFeaturesForXI) { kValues.push_back(0); }
+      if(learningInfo->firePrecomputedFeaturesForXIP1) { kValues.push_back(1); }
+      if(learningInfo->firePrecomputedFeaturesForXIP2) { kValues.push_back(2); }
       for(auto kIter = kValues.begin(); kIter != kValues.end(); ++kIter) {
         int k = *kIter;
         std::pair<int64_t, int64_t> wordPair(k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2,
@@ -703,8 +731,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
         // y[i]:x[i+k]
         kValues.clear();
         kValues.push_back(0);
-        kValues.push_back(1);
-        kValues.push_back(2);
+        //kValues.push_back(1);
+        //kValues.push_back(2);
         for(auto kIter = kValues.begin(); kIter != kValues.end(); ++kIter) {
           int k = *kIter;
           featureId.emission.word = k==-2? xIM2: k==-1? xIM1: k==0? xI: k==1? xIP1: xIP2;
