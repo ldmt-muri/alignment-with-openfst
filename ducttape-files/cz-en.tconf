@@ -1,0 +1,27 @@
+import cz-en-paths.tconf
+
+global {
+
+    # UseCustomAlignment controls whether to retrain word alignment from the train_corpus, or just use 
+    # alignments at 'alignment'
+    alignment="/dev/null"
+
+    # only use these two parameters if you want to build a language model. if you have a language model already built, specify "language_model=" instead
+    lm_order=4
+    lm_data="/usr1/home/wammar/monolingual/lm-for-wmt11-czen/text"
+    
+    # preprocess data
+    tokenize_corpus="false"
+    lowercase_corpus="false"
+    max_sentence_length=0
+
+    # language specific
+    src="cz"
+    tgt="en"
+    meteor_lang="english"
+
+    # aer
+    test_sents_count=515
+    
+}
+

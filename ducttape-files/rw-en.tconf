@@ -1,0 +1,23 @@
+import rw-en-paths.tconf
+
+global {
+
+    # UseCustomAlignment controls whether to retrain word alignment from the train_corpus, or just use 
+    # alignments at 'alignment'
+    alignment="/dev/null"
+
+    # preprocess data
+    tokenize_corpus="false"
+    lowercase_corpus="false"
+    max_sentence_length=0
+
+    # language specific
+    src="rw"
+    tgt="en"
+    meteor_lang="english"
+
+    # aer
+    test_sents_count=0
+    
+}
+

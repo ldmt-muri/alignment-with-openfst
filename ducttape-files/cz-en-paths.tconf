@@ -1,0 +1,33 @@
+global {
+
+    train_corpus="/usr1/home/wammar/parallel/100k+aer.cz-en"
+    tune_corpus="/usr1/home/wammar/parallel/dev/newstest2010.cz-en.tok"
+    test_corpus="/usr1/home/wammar/parallel/dev/newstest2011.cz-en.tok"
+    src_brown_clusters="/usr1/home/wammar/parallel/training/news-commentary10.cz-en.cz.tok.brown80"
+    tgt_brown_clusters="/usr1/home/wammar/parallel/training/news-commentary10.cz-en.en.tok.brown80"
+
+    # only specify when you want to reuse a previously built LM 
+    language_model=""
+    
+    # tool paths
+    cdec_dir="/home/wammar/cdec/"
+    multeval="/home/wammar/multeval/multeval.sh"
+    giza_bin="/opt/tools/mgizapp-0.7.2/bin"
+    moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
+    mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
+    wammar_utils_dir="/home/wammar/wammar-utils"
+    alignment_with_openfst_dir="/home/wammar/alignment-with-openfst/"
+
+    # aer
+    conv_pharaoh_script="/home/wammar/alignment-with-openfst/data/hansards/conv-pharaoh.pl"
+    aer_eval_script="/home/wammar/alignment-with-openfst/data/hansards/wa_eval_align.pl"
+    gold_alignment="/usr1/home/wammar/parallel/aer/czen/czen.wal"
+
+    # other aligner outputs
+    fwd_giza_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.giza.bwd-out"
+    bwd_giza_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.giza.fwd-out"
+    sym_giza_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.giza.sym-out"
+    fwd_fast_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.fast.fwd-out"
+    bwd_fast_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.fast.bwd-out"
+    sym_fast_alignments="/usr1/home/wammar/parallel/100k+aer.cz-en.fast.sym-out"
+}

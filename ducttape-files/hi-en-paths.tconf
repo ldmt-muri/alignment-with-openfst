@@ -1,0 +1,37 @@
+global {
+
+    #train_corpus="/usr1/home/wammar/parallel/training/parallel-preordered.hi-en"
+    #tune_corpus="/usr1/home/wammar/parallel/dev/tune-preordered.hien"
+    #test_corpus="/usr1/home/wammar/parallel/dev/devtest-preordered.hien"
+    train_corpus="/usr1/home/wammar/parallel/training/parallel-prime.hi-en"
+    tune_corpus="/usr1/home/wammar/parallel/dev/tune.hien"
+    test_corpus="/usr1/home/wammar/parallel/dev/devtest.hien"
+    src_brown_clusters="/usr0/home/wammar/git/brown-cluster/hindi-c80-p1.out/paths"
+    tgt_brown_clusters="/usr1/home/wammar/parallel/training/news-commentary10.cz-en.en.tok.brown80"
+
+    # only specify when you want to reuse a previously built LM 
+    language_model="/usr2/home/austinma/Systems/dede-enus-wmt14/ducttape/CompileLanguageModel/Corpus.cleaner/language_model"
+    
+    # tool paths
+    cdec_dir="/home/wammar/cdec/"
+    multeval="/home/wammar/git/multeval/multeval.sh"
+    giza_bin="/opt/tools/mgizapp-0.7.2/bin"
+    moses_train_script="/home/wammar/git/mosesdecoder/scripts/training/train-model.perl"
+    mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
+    wammar_utils_dir="/home/wammar/wammar-utils"
+    alignment_with_openfst_dir="/home/wammar/alignment-with-openfst/"
+    kenlm_dir="/home/wammar/git/kenlm"
+
+    # aer
+    conv_pharaoh_script="/home/wammar/alignment-with-openfst/data/hansards/conv-pharaoh.pl"
+    aer_eval_script=""
+    gold_alignment=""
+
+    # other aligner outputs
+    fwd_giza_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.giza.fwd"
+    bwd_giza_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.giza.bwd"
+    sym_giza_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.giza.sym"
+    fwd_fast_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.fast.fwd"
+    bwd_fast_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.fast.bwd"
+    sym_fast_alignments="/usr1/home/wammar/parallel/training/parallel.hi-en.fast.sym"
+}

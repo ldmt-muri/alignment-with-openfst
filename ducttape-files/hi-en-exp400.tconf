@@ -1,0 +1,22 @@
+import hi-en.tconf
+
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/wammar/mt-systems/hi-en-exp400"
+
+    # initial autoencoder params
+    init_theta_fwd=""
+    init_lambda_fwd=""
+    init_theta_bwd=""
+    init_lambda_bwd=""
+
+    # general
+    cores=16
+
+    # prefix; must be important for concurrent runs
+    output_prefix="exp500"
+}
+
+plan Full {
+    reach Evaluate via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder ) * (SymHeuristic: grow_diag_final_and ) * (L2Strength: point_o_one) * (L1Strength: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and )
+}

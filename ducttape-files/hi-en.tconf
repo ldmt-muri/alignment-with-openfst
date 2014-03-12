@@ -1,0 +1,27 @@
+import hi-en-paths.tconf
+
+global {
+
+    # UseCustomAlignment controls whether to retrain word alignment from the train_corpus, or just use 
+    # alignments at 'alignment'
+    alignment="/dev/null"
+
+    # only use these two parameters if you want to build a language model. if you have a language model already built, specify "language_model=" instead
+    lm_order=""
+    lm_data=""
+    
+    # preprocess data
+    tokenize_corpus="false"
+    lowercase_corpus="false"
+    max_sentence_length=0
+
+    # language specific
+    src="hi"
+    tgt="en"
+    meteor_lang="english"
+
+    # aer
+    test_sents_count=0
+    
+}
+
