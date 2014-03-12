@@ -35,26 +35,5 @@ FstUtils.o: FstUtils.cc FstUtils.h
 fdict.o:
 	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
 
-simann.o: 
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/simann.cxx $(OPT)
-
-random.o:
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/random.cxx $(OPT)
-
-r250.o:
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/r250.cxx $(OPT)
-
-randgen.o:
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/randgen.cxx $(OPT)
-
-registrar.o:
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/registrar.cxx $(OPT)
-
-rndlcg.o:
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/rndlcg.cxx $(OPT)
-
-erstream.o: 
-	$(CC) $(BEFORE) $(SINGLE) anneal/Cpp/erstream.cxx $(OPT)
-
 clean:
 	rm -rf FstUtils.o HmmAligner.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfAligner.o train-latentCrfAligner LatentCrfAligner.o IbmModel1.o

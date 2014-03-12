@@ -37,8 +37,6 @@
 #include "cdec-utils/semiring.h"
 #include "cdec-utils/fast_sparse_vector.h"
 
-#include "anneal/Cpp/simann.hpp"
-
 #include "ClustersComparer.h"
 #include "StringUtils.h"
 #include "FstUtils.h"
@@ -353,7 +351,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   static LatentCrfModel *instance;
   std::tr1::unordered_set<int> /*zDomain, */yDomain;
   GaussianSampler gaussianSampler;
-  SimAnneal simulatedAnnealer;
   // during training time, and by default, this should be set to false. 
   // When we use the trained model to predict the labels, we set it to true
   bool testingMode;

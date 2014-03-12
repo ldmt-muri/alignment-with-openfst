@@ -792,7 +792,6 @@ void LatentCrfModel::Train() {
   testingMode = false;
   switch(learningInfo.optimizationMethod.algorithm) {
   case BLOCK_COORD_DESCENT:
-  case SIMULATED_ANNEALING:
     BlockCoordinateDescent();
     break;
     /*  case EXPECTATION_MAXIMIZATION:
@@ -1705,30 +1704,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
           }
         } // end if master => run lbfgs() else help master
         
-      } else if(learningInfo.optimizationMethod.subOptMethod->algorithm == SIMULATED_ANNEALING) {
-        // use simulated annealing to optimize likelihood
-        
-        // populate lambdasArray and lambasArrayLength
-        // don't optimize all parameters. only optimize unconstrained ones
-        double* lambdasArray;
-        int lambdasArrayLength;
-        lambdasArray = lambda->GetParamWeightsArray();
-        lambdasArrayLength = lambda->GetParamsCount();
-        
-        simulatedAnnealer.set_up(EvaluateNll, lambdasArrayLength);
-        // initialize the parameters array
-        float simulatedAnnealingArray[lambdasArrayLength];
-        for(int i = 0; i < lambdasArrayLength; i++) {
-          simulatedAnnealingArray[i] = lambdasArray[i];
-        }
-        simulatedAnnealer.initial(simulatedAnnealingArray);
-        // optimize
-        simulatedAnnealer.anneal(10);
-        // get the optimum parameters
-        simulatedAnnealer.current(simulatedAnnealingArray);
-        for(int i = 0; i < lambdasArrayLength; i++) {
-          lambdasArray[i] = simulatedAnnealingArray[i];
-        }
       } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
         
         if(learningInfo.mpiWorld->rank() == 0) {
