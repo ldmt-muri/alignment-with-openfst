@@ -18,7 +18,7 @@
 #include <limits.h>
 
 #include "LearningInfo.h"
-#include "StringUtils.h"
+#include "../wammar-utils/StringUtils.h"
 
 using namespace std;
 

@@ -2,38 +2,38 @@ CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
 LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
-OPT=-g -O3
+OPT=-g
 
 all: train-latentCrfAligner
 
 # specific to the word alignment latent crf model
 train-latentCrfAligner: train-latentCrfAligner.o
-	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o  -o train-latentCrfAligner  $(LIBS)
+	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o -o alignment/train-latentCrfAligner  $(LIBS)
 
-train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o train-latentCrfAligner.cc ClustersComparer.h StringUtils.h LearningInfo.h
-	$(CC) $(BEFORE) $(SINGLE) train-latentCrfAligner.cc $(OPT) 
+train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o alignment/train-latentCrfAligner.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h
+	$(CC) $(BEFORE) $(SINGLE) alignment/train-latentCrfAligner.cc $(OPT) 
 
-LatentCrfAligner.o: LatentCrfModel.o LatentCrfAligner.h LatentCrfAligner.cc
-	$(CC) $(BEFORE) $(SINGLE) LatentCrfAligner.cc $(OPT)
+LatentCrfAligner.o: LatentCrfModel.o alignment/LatentCrfAligner.h alignment/LatentCrfAligner.cc
+	$(CC) $(BEFORE) $(SINGLE) alignment/LatentCrfAligner.cc $(OPT)
 
 # shared code
-LatentCrfModel.o: LogLinearParams.o simann.o random.o r250.o randgen.o registrar.o rndlcg.o erstream.o LatentCrfModel.cc LatentCrfModel.h LatentCrfModel-inl.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h LearningInfo.h Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h MultinomialParams.h
-	$(CC) $(BEFORE) $(SINGLE) LatentCrfModel.cc $(OPT)
+LatentCrfModel.o: LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h
+	$(CC) $(BEFORE) $(SINGLE) core/LatentCrfModel.cc $(OPT)
 
-LogLinearParams.o: fdict.o LogLinearParams.cc LogLinearParams.h LogLinearParams-inl.h
-	$(CC) $(BEFORE) $(SINGLE) LogLinearParams.cc $(OPT)
+LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h
+	$(CC) $(BEFORE) $(SINGLE) core/LogLinearParams.cc $(OPT)
 
-HmmModel.o: FstUtils.o HmmModel.cc HmmModel.h LearningInfo.h StringUtils.h MultinomialParams.h
-	$(CC) $(BEFORE) $(SINGLE) HmmModel.cc $(OPT)
+HmmModel.o: FstUtils.o core/HmmModel.cc core/HmmModel.h core/LearningInfo.h wammar-utils/StringUtils.h core/MultinomialParams.h
+	$(CC) $(BEFORE) $(SINGLE) core/HmmModel.cc $(OPT)
 
-IbmModel1.o: FstUtils.o IbmModel1.cc IbmModel1.h LearningInfo.h StringUtils.h IAlignmentModel.h MultinomialParams.h VocabEncoder.h
-	$(CC) $(BEFORE) $(SINGLE) IbmModel1.cc $(OPT)
+IbmModel1.o: FstUtils.o alignment/IbmModel1.cc alignment/IbmModel1.h core/LearningInfo.h wammar-utils/StringUtils.h alignment/IAlignmentModel.h core/MultinomialParams.h core/VocabEncoder.h
+	$(CC) $(BEFORE) $(SINGLE) alignment/IbmModel1.cc $(OPT)
 
-FstUtils.o: FstUtils.cc FstUtils.h
-	$(CC) $(BEFORE) $(SINGLE) FstUtils.cc $(OPT)
+FstUtils.o: wammar-utils/FstUtils.cc wammar-utils/FstUtils.h
+	$(CC) $(BEFORE) $(SINGLE) wammar-utils/FstUtils.cc $(OPT)
 
 fdict.o:
 	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
 
 clean:
-	rm -rf FstUtils.o HmmAligner.o erstream.o rndlcg.o registrar.o randgen.o r250.o random.o simann.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfAligner.o train-latentCrfAligner LatentCrfAligner.o IbmModel1.o
+	rm -rf FstUtils.o HmmAligner.o  fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfAligner.o train-latentCrfAligner LatentCrfAligner.o IbmModel1.o

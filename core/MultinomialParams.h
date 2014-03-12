@@ -15,11 +15,11 @@
 
 #include <boost/unordered_map.hpp>
 
-#include "unordered_map_serialization.hpp"
+#include "../wammar-utils/unordered_map_serialization.hpp"
 
-#include "Samplers.h"
+#include "../wammar-utils/Samplers.h"
 #include "VocabEncoder.h"
-#include "FstUtils.h"
+#include "../wammar-utils/FstUtils.h"
 
 namespace MultinomialParams {
 

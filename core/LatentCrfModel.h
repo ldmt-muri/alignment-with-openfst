@@ -33,14 +33,14 @@
 #include "MultinomialParams.h"
 
 //#define HAVE_CMPH 1
-#include "cdec-utils/logval.h"
-#include "cdec-utils/semiring.h"
-#include "cdec-utils/fast_sparse_vector.h"
+#include "../cdec-utils/logval.h"
+#include "../cdec-utils/semiring.h"
+#include "../cdec-utils/fast_sparse_vector.h"
 
-#include "ClustersComparer.h"
-#include "StringUtils.h"
-#include "FstUtils.h"
-#include "LbfgsUtils.h"
+#include "../wammar-utils/ClustersComparer.h"
+#include "../wammar-utils/StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
+#include "../wammar-utils/LbfgsUtils.h"
 #include "Functors.h"
 
 #include "LogLinearParams.h"

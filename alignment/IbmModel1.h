@@ -7,13 +7,13 @@
 
 #include <boost/unordered_map.hpp>
 
-#include "unordered_map_serialization.hpp"
+#include "../wammar-utils/unordered_map_serialization.hpp"
 
-#include "LearningInfo.h"
-#include "StringUtils.h"
-#include "FstUtils.h"
+#include "../core/LearningInfo.h"
+#include "../wammar-utils/StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
 #include "IAlignmentModel.h"
-#include "MultinomialParams.h"
+#include "../core/MultinomialParams.h"
 
 using namespace fst;
 using namespace std;

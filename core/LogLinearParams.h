@@ -27,14 +27,14 @@
 //#include "boost/archive/binary_oarchive.hpp"
 //#include "boost/archive/binary_iarchive.hpp"
 
-#include "unordered_map_serialization.hpp"
+#include "../wammar-utils/unordered_map_serialization.hpp"
 
-#include "cdec-utils/fast_sparse_vector.h"
+#include "../cdec-utils/fast_sparse_vector.h"
 
 #include "LearningInfo.h"
 #include "VocabEncoder.h"
-#include "Samplers.h"
-#include "tuple.h"
+#include "../wammar-utils/Samplers.h"
+#include "../wammar-utils/tuple.h"
 
 struct LogLinearParamsException : public std::exception
 {
