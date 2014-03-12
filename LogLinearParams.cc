@@ -641,22 +641,29 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
 				   FastSparseVector<double> &activeFeatures) {
   
   const int64_t &xI = x[i];
-  const std::string& xIString = types.Decode(x[i]);
-  unsigned xIStringSize = xIString.size();
   const int64_t &xIM1 = i-1 >= 0? x[i-1] : -1;
-  const std::string& xIM1String = i-1 >= 0? types.Decode(x[i-1]) : "_start_";
-  unsigned xIM1StringSize = xIM1String.size();
   const int64_t &xIM2 = i-2 >= 0? x[i-2] : -1;
-  const std::string& xIM2String = i-2 >= 0? types.Decode(x[i-2]) : "_start_";
   const int64_t &xIP1 = i+1 < x.size()? x[i+1] : -1;
-  const std::string &xIP1String = i+1 < x.size()?
-    types.Decode(x[i+1]):
-    "_end_";
-  unsigned xIP1StringSize = xIP1String.size();
   const int64_t &xIP2 = i+2 < x.size()? x[i+2] : -1; 
-  const std::string &xIP2String = i+2 < x.size()?
-    types.Decode(x[i+2]):
-    "_end_";
+
+  // return cached features for this factor id
+  PosFactorId factorId;
+  if(learningInfo->cacheActiveFeatures) {
+    factorId.yI = yI;
+    factorId.yIM1 = yIM1;
+    factorId.xIM2 = xIM2;
+    factorId.xIM1 = xIM1;
+    factorId.xI = xI;
+    factorId.xIP1 = xIP1;
+    factorId.xIP2 = xIP2;
+    if(posFactorIdToFeatures.count(factorId) == 1) {
+      activeFeatures = posFactorIdToFeatures[factorId];
+      // logging
+      //factorId.Print();
+      //cerr << "activeFeatures.size() = " << activeFeatures.size() << endl;
+      return;
+    }
+  }
   
   FeatureId featureId;
 
@@ -773,309 +780,18 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, i
       
     }
   }
-
-  /*
-  // F58: yI-prefix(xI)
-  if(enabledFeatureTypes.size() > 58 && enabledFeatureTypes[58]) {
-    //    if(xIStringSize > 0) {
-    //      temp.str("");
-    //      temp << "F58:" << yI << ":" << xIString[0];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
-    if(xIStringSize > 1) {
-      temp.str("");
-      temp << "F58:" << yI << ":" << xIString[0] << xIString[1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIStringSize > 2) {
-      temp.str("");
-      temp << "F58:" << yI << ":" << xIString[0] << xIString[1] << xIString[2];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F59: yI-suffix(xI)
-  if(enabledFeatureTypes.size() > 59 && enabledFeatureTypes[59]) {
-    if(xIStringSize > 0) {
-      temp.str("");
-      temp << "F59:" << yI << ":" << xIString[xIStringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIStringSize > 1) {
-      temp.str("");
-      temp << "F59:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIStringSize > 2) {
-      temp.str("");
-      temp << "F59:" << yI << ":" << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F60: yI-prefix(xIP1)
-  if(enabledFeatureTypes.size() > 60 && enabledFeatureTypes[60]) {
-    //    if(xIP1StringSize > 0 && i+1 < x.size()) {
-    //      temp.str("");
-    //      temp << "F60:" << yI << ":" << xIP1String[0];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
-    if(xIP1StringSize > 1 && i+1 < x.size()) {
-      temp.str("");
-      temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIP1StringSize > 2 && i+1 < x.size()) {
-      temp.str("");
-      temp << "F60:" << yI << ":" << xIP1String[0] << xIP1String[1] << xIP1String[2];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F61: yI-suffix(xIP1)
-  if(enabledFeatureTypes.size() > 61 && enabledFeatureTypes[61]) {
-    //    if(xIP1StringSize > 0 && i+1 < x.size()) {
-    //      temp.str("");
-    //      temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-1];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
-    if(xIP1StringSize > 1 && i+1 < x.size()) {
-      temp.str("");
-      temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIP1StringSize > 2 && i+1 < x.size()) {
-      temp.str("");
-      temp << "F61:" << yI << ":" << xIP1String[xIP1StringSize-3] << xIP1String[xIP1StringSize-2] << xIP1String[xIP1StringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F62: yI-prefix(xIM1)
-  if(enabledFeatureTypes.size() > 62 && enabledFeatureTypes[62]) {
-    //    if(xIM1StringSize > 0 && i-1 >= 0) {
-    //      temp.str("");
-    //      temp << "F62:" << yI << ":" << xIM1String[0];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
-    if(xIM1StringSize > 1 && i-1 >= 0) {
-      temp.str("");
-      temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIM1StringSize > 2 && i-1 >= 0) {
-      temp.str("");
-      temp << "F62:" << yI << ":" << xIM1String[0] << xIM1String[1] << xIM1String[2];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F63: yI-suffix(xIM1)
-  if(enabledFeatureTypes.size() > 63 && enabledFeatureTypes[63]) {
-    //    if(xIM1StringSize > 0 && i-1 >= 0) {
-    //      temp.str("");
-    //      temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-1];
-    //      activeFeatures[temp.str()] += 1.0;
-    //    }
-    if(xIM1StringSize > 1 && i-1 >= 0) {
-      temp.str("");
-      temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIM1StringSize > 2 && i-1 >= 0) {
-      temp.str("");
-      temp << "F63:" << yI << ":" << xIM1String[xIM1StringSize-3] << xIM1String[xIM1StringSize-2] << xIM1String[xIM1StringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F64: yI-hash(xI) ==> to be implemented in StringUtils ==> converts McDonald2s ==> AaAaaaia
-  if(enabledFeatureTypes.size() > 64 && enabledFeatureTypes[64]) {
-    temp.str("");
-    temp << "F64:" << yI << ":";
-    for(int j = 0; j < xIStringSize; j++) {
-      char xIStringJ = xIString[j];
-      if(xIStringJ >= 'a' && xIStringJ <= 'z') {
-	temp << 'a'; // for small
-      } else if(xIStringJ >= 'A' && xIStringJ <= 'Z') {
-	temp << 'A'; // for capital
-      } else if(xIStringJ >= '0' && xIStringJ <= '9') {
-	temp << '0'; // for digit
-      } else if(xIStringJ == '@') {
-	temp << '@'; // for 'at'
-      } else if(xIStringJ == '.') {
-	temp << '.'; // for period
-      } else {
-	temp << '*';
-      }
-    }
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-
-  // F65: yI-capitalInitial(xI)
-  if(enabledFeatureTypes.size() > 65 && enabledFeatureTypes[65]) {
-    if(xIString[0] >= 'A' && xIString[0] <= 'Z') { 
-      temp.str("");
-      temp << "F65:" << yI << ":CapitalInitial";
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F67: yI-capitalInitial(xI) && i > 0
-  if(enabledFeatureTypes.size() > 67 && enabledFeatureTypes[67]) {
-    if(i > 0 && xIString[0] >= 'A' && xIString[0] <= 'Z') { 
-      temp.str("");
-      temp << "F67:" << yI << ":CapitalInitialWithinSent";
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-  }
-
-  // F68: yI-specialSuffix(xI)
-  if(enabledFeatureTypes.size() > 68 && enabledFeatureTypes[68]) {
-    if(xIStringSize > 0 && xIString[xIStringSize-1] == 's') {
-      temp.str("");
-      temp << "F68:" << yI << ":" << xIString[xIStringSize-1];
-      AddParam(temp.str());
-      activeFeatures[paramIndexes[temp.str()]] += 1.0;
-    }
-    if(xIStringSize > 1) {
-      if((xIString[xIStringSize-2] == 'l' && xIString[xIStringSize-1] == 'y') ||
-	 (xIString[xIStringSize-2] == 'e' && xIString[xIStringSize-1] == 'd')) {
-	temp.str("");
-	temp << "F68:" << yI << ":" << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-	AddParam(temp.str());
-	activeFeatures[paramIndexes[temp.str()]] += 1.0;
-      }
-    }
-    if(xIStringSize > 2) {
-      if((xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'e' && xIString[xIStringSize-1] == 's') ||
-	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 't' && xIString[xIStringSize-1] == 'y') ||
-	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'o' && xIString[xIStringSize-1] == 'n') ||
-	 (xIString[xIStringSize-3] == 'o' && xIString[xIStringSize-2] == 'g' && xIString[xIStringSize-1] == 'y') ||
-	 (xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'n' && xIString[xIStringSize-1] == 'g')) {      
-	temp.str("");
-	temp << "F68:" << yI << ":" << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-	AddParam(temp.str());
-	activeFeatures[paramIndexes[temp.str()]] += 1.0;
-      }
-    }
-    if(xIStringSize > 3) {
-      if(xIString[xIStringSize-4] == 't' && xIString[xIStringSize-3] == 'i' && xIString[xIStringSize-2] == 'o' && xIString[xIStringSize-1] == 'n') {
-	temp.str("");
-	temp << "F68:" << yI << ":" << xIString[xIStringSize-4] << xIString[xIStringSize-3] << xIString[xIStringSize-2] << xIString[xIStringSize-1];
-	AddParam(temp.str());
-	activeFeatures[paramIndexes[temp.str()]] += 1.0;
-      }
-    }
-  }
-
-  // F69: yI-coarserHash(xI) ==> to be implemented in StringUtils ==> converts McDonald2s ==> AaAaaaia
-  if(enabledFeatureTypes.size() > 69 && enabledFeatureTypes[69]) {
-    bool small = false, capital = false, number = false, punctuation = false, other = false;
-    temp.str("");
-    temp << "F69:" << yI << ":";
-    for(int j = 0; j < xIStringSize; j++) {
-      char xIStringJ = xIString[j];
-      if(!small && xIStringJ >= 'a' && xIStringJ <= 'z') {
-	small = true;
-      } else if(!capital && xIStringJ >= 'A' && xIStringJ <= 'Z') {
-	capital = true;
-      } else if(!number && xIStringJ >= '0' && xIStringJ <= '9') {
-	number = true;
-      } else if(!punctuation && (xIStringJ == ':' || xIStringJ == '.' || xIStringJ == ';' || xIStringJ == ',' || xIStringJ == '?' || xIStringJ == '!')) {
-	punctuation = true;
-      } else if(!other) {
-	other = true;
-      }
-    }
-    if(small) {
-      temp << 'a'; 
-    }
-    if(capital) {
-      temp << 'A'; 
-    }
-    if(number) {
-      temp << '0';
+  
+  // save the active features in the cache
+  if(learningInfo->cacheActiveFeatures) {
+    assert(posFactorIdToFeatures.count(factorId) == 0);
+    posFactorIdToFeatures[factorId] = activeFeatures;
+    if(posFactorIdToFeatures.size() % 1000000 == 0) {
+      cerr << "|factorIds| is now " << posFactorIdToFeatures.size() << endl;
     } 
-    if(punctuation) {
-      temp << ';';
-    }
-    if(other) {
-      temp << '#';
-    }
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
+    // logging
+    //factorId.Print();
+    //cerr << "activeFeatures.size() = " << activeFeatures.size() << endl;
   }
-
-  // F70: yI-xIM2 pair, where xIM2 is closed vocab
-  if(enabledFeatureTypes.size() > 70 && enabledFeatureTypes[70]
-     && types.IsClosedVocab(xIM2)) {
-    temp.str("");
-    temp << "F70:" << yI << ":" << xIM2String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-
-  // F71: yI-xIM1 pair, where xIM1 is closed vocab
-  if(enabledFeatureTypes.size() > 71 && enabledFeatureTypes[71]
-     && types.IsClosedVocab(xIM1)) {
-    temp.str("");
-    temp << "F71:" << yI << ":" << xIM1String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-
-  // F72: yI-xI pair, where xI is closed vocab
-  if(enabledFeatureTypes.size() > 72 && enabledFeatureTypes[72]
-     && types.IsClosedVocab(xI)) {
-    temp.str("");
-    temp << "F72:" << yI << ":" << xIString;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  
-  // F73: yI-xIP1 pair, where xIP1 is closed vocab
-  if(enabledFeatureTypes.size() > 73 && enabledFeatureTypes[73]
-     && types.IsClosedVocab(xIP1)) {
-    temp.str("");
-    temp << "F73:" << yI << ":" << xIP1String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] = 1.0;
-  }
-
-  // F74: yI-xIP2 pair, where xIP2 is closed vocab
-  if(enabledFeatureTypes.size() > 74 && enabledFeatureTypes[74]
-     && types.IsClosedVocab(xIP2)) {
-    temp.str("");
-    temp << "F74:" << yI << ":" << xIP2String;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  
-  // F75: yI
-  if(enabledFeatureTypes.size() > 75 && enabledFeatureTypes[75]) {
-    temp.str("");
-    temp << "F75:" << yI;
-    AddParam(temp.str());
-    activeFeatures[paramIndexes[temp.str()]] += 1.0;
-  }
-  */
 }
 
 

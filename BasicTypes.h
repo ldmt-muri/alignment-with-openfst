@@ -91,95 +91,113 @@ struct OptMethod {
   }
 }; 
 
-/*
-namespace ConstraintType {
-  enum ConstraintType {
-    // an observed type xI must be assigned label yI
-    yIExclusive_xIString, 
-    // an observed type xI can be assigned label yI (i.e. other labels can also be valid)
-    yI_xIString};
-}
+struct PosFactorId
+{
+public:
+  int64_t yI, yIM1, xI, xIM1, xIM2, xIP1, xIP2;
+  inline void Print() const {
+    std::cerr << "(yI=" << yI << ", yIM1=" << yIM1 << ", xI=" << xI << ", xIM1=" << xIM1 << ", xIM2=" << xIM2 << ", xIP1=" << xIP1 << ", xIP2=" << xIP2 << ")" << std::endl;
+  }
 
-struct Constraint {
-  void *field1, *field2;
-  ConstraintType::ConstraintType type;
-
-  Constraint(const Constraint &c) {
-    int yI;
-    std::string xI;
-    switch(c.type) {
-    case ConstraintType::yIExclusive_xIString:
-      c.GetFieldsOfConstraintType_yIExclusive_xIString(yI, xI);
-      this->SetConstraintOfType_yIExclusive_xIString(yI, xI);
-      break;
-    case ConstraintType::yI_xIString:
-      c.GetFieldsOfConstraintType_yI_xIString(yI, xI);
-      this->SetConstraintOfType_yI_xIString(yI, xI);
-      break;
-    default:
-      assert(false);
-      break;
+  inline bool operator < (const PosFactorId &other) const {
+    if(yI != other.yI) {
+      return yI < other.yI;
+    } else if(yIM1 != other.yIM1) {
+      return yIM1 < other.yIM1;
+    } else if(xI != other.xI){
+      return xI < other.xI;
+    } else if(xIM1 != other.xIM1) {
+      return xIM1 < other.xIM1;
+    } else if(xIM2 != other.xIM2) {
+      return xIM2 < other.xIM2;
+    } else if(xIP1 != other.xIP1) {
+      return xIP1 < other.xIP1;
+    } else if(xIP2 != other.xIP2) {
+      return xIP2 < other.xIP2;
+    } else {
+      return false;
     }
   }
 
-  Constraint() {
-    field1 = 0;
-    field2 = 0;
-  }
-
-  ~Constraint() {
-    if(field1 != 0) {
-      switch(type) {
-      case ConstraintType::yIExclusive_xIString:
-      case ConstraintType::yI_xIString:
-	delete (int *)field1;
-	break;
-      default:
-	assert(false);
-	break;
-      }
+  struct PosFactorHash : public std::unary_function<PosFactorId, size_t> {
+    size_t operator()(const PosFactorId& x) const {
+      size_t seed = 0;
+      boost::hash_combine(seed, x.yI);
+      boost::hash_combine(seed, x.yIM1);
+      boost::hash_combine(seed, x.xI);
+      boost::hash_combine(seed, x.xIM2);
+      boost::hash_combine(seed, x.xIM1);
+      boost::hash_combine(seed, x.xI);
+      boost::hash_combine(seed, x.xIP1);
+      boost::hash_combine(seed, x.xIP2);
+      return seed;
     }
-    if(field2 != 0) {
-      switch(type) {
-      case ConstraintType::yIExclusive_xIString:
-      case ConstraintType::yI_xIString:
-	delete (string *)field2;
-	break;
-      default:
-	assert(false);
-	break;
-      }
+  };
+  
+  struct PosFactorEqual : public std::unary_function<PosFactorId, bool> {
+    bool operator()(const PosFactorId& left, const PosFactorId& right) const {
+      return left.yI == right.yI && left.yIM1 == right.yIM1 &&
+        left.xIM2 == right.xIM2 && left.xIM1 == right.xIM1 &&
+        left.xI == right.xI && left.xIP1 == right.xIP1 &&
+        left.xIP2 == right.xIP2;
     }
-  }
-  
-  void SetConstraintOfType_yIExclusive_xIString(int yI, const std::string &xI) {
-    type = ConstraintType::yIExclusive_xIString;
-    field1 = new int[1];
-    *((int*)field1) = yI;
-    field2 = new std::string();
-    *((string*)field2) = xI;
-  }
-  
-  void GetFieldsOfConstraintType_yIExclusive_xIString(int &yI, std::string &xI) const {
-    assert(type == ConstraintType::yIExclusive_xIString);
-    yI = *(int*)field1;
-    xI = *(string*)field2;
-  }
-
-  void SetConstraintOfType_yI_xIString(int yI, const std::string &xI) {
-    type = ConstraintType::yI_xIString;
-    field1 = new int[1];
-    *((int*)field1) = yI;
-    field2 = new std::string();
-    *((string*)field2) = xI;
-  }
-  
-  void GetFieldsOfConstraintType_yI_xIString(int &yI, std::string &xI) const {
-    assert(type == ConstraintType::yI_xIString);
-    yI = *(int*)field1;
-    xI = *(string*)field2;
-  }
+  };
 };
-*/
+
+struct AlignerFactorId 
+{ 
+public:
+  int yI, yIM1, i, srcWord, prevSrcWord, tgtWord, prevTgtWord, nextTgtWord; 
+  inline void Print() const {
+    std::cerr << "(yI=" << yI << ",yIM1=" << yIM1 << ",i=" << i << ",srcWord="  << srcWord << ",prevSrcWord=" << prevSrcWord << ",tgtWord=" <<  tgtWord << ",prevTgtWord=" << prevTgtWord << ",nextTgtWord=" << nextTgtWord << ")" << std::endl;
+  }
+  inline bool operator < (const AlignerFactorId &other) const {
+    if(yI != other.yI) {
+      return yI < other.yI;
+    } else if(yIM1 != other.yIM1) {
+      return yIM1 < other.yIM1;
+    } else if(i != other.i){
+      return i < other.i;
+    } else if(srcWord != other.srcWord) {
+      return srcWord < other.srcWord;
+    } else if(prevSrcWord != other.prevSrcWord) {
+      return prevSrcWord < other.prevSrcWord;
+    } else if(tgtWord != other.tgtWord) {
+      return tgtWord < other.tgtWord;
+    } else if(prevTgtWord != other.prevTgtWord) {
+      return prevTgtWord < other.prevTgtWord;
+    } else if(nextTgtWord != other.nextTgtWord){ 
+      return nextTgtWord < other.nextTgtWord;
+    } else {
+      return false;
+    }
+  }
+
+  struct AlignerFactorHash : public std::unary_function<AlignerFactorId, size_t> {
+    size_t operator()(const AlignerFactorId& x) const {
+      size_t seed = 0;
+      boost::hash_combine(seed, (unsigned char)x.i);
+      //boost::hash_combine(seed, x.nextTgtWord);
+      //boost::hash_combine(seed, x.prevSrcWord);
+      //boost::hash_combine(seed, x.prevTgtWord);
+      boost::hash_combine(seed, (unsigned short)x.srcWord);
+      boost::hash_combine(seed, (unsigned short)x.tgtWord);
+      boost::hash_combine(seed, (unsigned char)x.yI);
+      boost::hash_combine(seed, (unsigned char)x.yIM1);
+      return seed;
+      //return std::hash<int>()(x.i + x.nextTgtWord + x.prevSrcWord + x.prevTgtWord + x.srcWord + x.tgtWord + x.yI + x.yIM1);
+    }
+  };
+
+  struct AlignerFactorEqual : public std::unary_function<AlignerFactorId, bool> {
+    bool operator()(const AlignerFactorId& left, const AlignerFactorId& right) const {
+      return left.i == right.i && left.nextTgtWord == right.nextTgtWord &&
+              left.prevSrcWord == right.prevSrcWord && left.prevTgtWord == right.prevTgtWord &&
+              left.srcWord == right.srcWord && left.tgtWord == right.tgtWord &&
+        left.yI == right.yI && left.yIM1 == right.yIM1;
+    }
+  };
+
+};
 
 #endif

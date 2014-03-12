@@ -1905,11 +1905,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
     mpi::broadcast<bool>(*learningInfo.mpiWorld, converged, 0);    
   } while(!converged);
 
-  if(learningInfo.persistParamsAfterNIteration == 1) {
-    // after convergence, set the model parameters to those obtained in the "best iteration"
+  // after convergence, set the model parameters to those obtained in the "best iteration". Unfortunately,
+  // this is only possible when we persist the parameters after each iteration, and we don't use variational
+  // inference
+  if(learningInfo.iterationsCount > 0 && learningInfo.persistParamsAfterNIteration == 1 && !learningInfo.variationalInferenceOfMultinomials) {
     int bestIteration = learningInfo.GetBestIterationNumber();
-    cerr << "best iteration is found to be #" << bestIteration << endl;
-    if(bestIteration != learningInfo.iterationsCount - 1) {
+    if(bestIteration != learningInfo.iterationsCount - 1 && bestIteration != 0) {
+      if(learningInfo.mpiWorld->rank() == 0) {
+        cerr << "best iteration is found to be #" << bestIteration << endl;
+      }    
       if(learningInfo.mpiWorld->rank() == 0) { cerr << "Now, lets load the parameters of that iteration to produce output labels." << endl; }
       MultinomialParams::LoadParams(GetThetaFilename(bestIteration), nLogThetaGivenOneLabel, vocabEncoder, true, true);
       if(learningInfo.mpiWorld->rank() == 0) { cerr << "unsealing..."; }

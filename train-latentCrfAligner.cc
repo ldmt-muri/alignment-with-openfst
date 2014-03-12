@@ -353,8 +353,10 @@ void endOfKIterationsCallbackFunction() {
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
 
   // fix learningInfo.test_size
-  if(aligner.learningInfo.firstKExamplesToLabel == 0) {
+  cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
+  if(aligner.learningInfo.firstKExamplesToLabel <= 0) {
     aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
+    cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
   }
 
   // find viterbi alignment for the top K examples of the training set (i.e. our test set)
@@ -481,6 +483,15 @@ int main(int argc, char **argv) {
     
   // run viterbi (and write alignments in giza format)
   string labelsFilename = outputFilenamePrefix + ".labels";
+
+  // fix learningInfo.test_size
+  LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
+  cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
+  if(aligner.learningInfo.firstKExamplesToLabel <= 0) {
+    aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
+    cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
+  }
+  
   ((LatentCrfAligner*)model)->Label(labelsFilename);
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "alignments can be found at " << labelsFilename << endl;

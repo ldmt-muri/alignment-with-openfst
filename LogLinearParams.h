@@ -509,7 +509,9 @@ class LogLinearParams {
   std::vector< std::vector< std::vector< std::set<int>* >* >* > otherAlignersOutput;
 
   boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
-  
+ 
+  boost::unordered_map< PosFactorId, FastSparseVector<double>, PosFactorId::PosFactorHash, PosFactorId::PosFactorEqual > posFactorIdToFeatures;
+ 
  private:
   bool sealed;
   

@@ -167,6 +167,40 @@ class ClustersComparer {
     }
     return 1.0 * correct / a.size();
   }
+
+  // assumes b is the gold/reference
+  static double ComputeOneToOne(const std::vector<std::string> &a, const std::vector<std::string> &b) {
+    assert(VerifyTwoClusteringsAreValid(a, b));
+    std::map<std::string, std::map<std::string, unsigned> > confusionMatrix;
+    BuildConfusionMatrix(a, b, confusionMatrix);
+    std::set<std::string> consumedALabels, consumedBLabels;
+    unsigned correct = 0;
+    while( consumedALabels.size() < confusionMatrix.size() ){
+      // find the largest intersection which hasn't been consumed yet
+      unsigned max = 0;
+      string maxA, maxB;
+      for(std::map<std::string, std::map<std::string, unsigned> >::const_iterator aIter = confusionMatrix.begin(); 
+          aIter != confusionMatrix.end(); 
+          aIter++) {
+        if(consumedALabels.count(aIter->first) == 1) {continue;}
+        for(std::map<std::string, unsigned>::const_iterator bIter = aIter->second.begin();
+            bIter != aIter->second.end();
+            bIter++) {
+          if(consumedALabels.count(bIter->first) == 1) {continue;}
+          if(bIter->second > max) {
+            max = bIter->second;
+            maxA = aIter->first;
+            maxB = bIter->first;
+          }
+        }
+      }
+      correct += max;
+      consumedALabels.insert(maxA);
+      consumedBLabels.insert(maxB);
+    }
+    
+    return 1.0 * correct / a.size();
+  }
 };
 
 #endif

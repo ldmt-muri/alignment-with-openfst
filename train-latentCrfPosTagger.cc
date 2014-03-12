@@ -32,7 +32,7 @@ string GetOutputPrefix(int argc, char **argv) {
   return "FAIL";
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename) {
+void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, unsigned int &labelsCount) {
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -63,8 +63,9 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     GOLD_LABELS_FILENAME = "gold-labels-filename",
-    TAG_DICT_FILENAME = "tag-dict-filename";
-    
+    TAG_DICT_FILENAME = "tag-dict-filename",
+    LABELS_COUNT = "labels-count";
+  
   
 
   
@@ -101,6 +102,7 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     (GOLD_LABELS_FILENAME.c_str(), po::value<string>(&goldLabelsFilename), "(string) specifies filename of the hand-annotated POS tags corresponding to training data") 
     (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
+    (LABELS_COUNT.c_str(), po::value<unsigned int>(&labelsCount)->default_value(12), "(unsigned int) specifies the number of word classes that will be induced.")
     ;
 
   po::variables_map vm;
@@ -457,7 +459,7 @@ int main(int argc, char **argv) {
     cerr << "done." << endl;
   }
 
-  unsigned NUMBER_OF_LABELS = 12;
+  unsigned NUMBER_OF_LABELS = 0;
   unsigned FIRST_LABEL_ID = 4;
 
   // randomize draws
@@ -485,7 +487,7 @@ int main(int argc, char **argv) {
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.01;
   learningInfo.useSparseVectors = true;
-  learningInfo.persistParamsAfterNIteration = 1;
+  learningInfo.persistParamsAfterNIteration = 10;
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
@@ -505,7 +507,7 @@ int main(int argc, char **argv) {
   // thetas
   learningInfo.thetaOptMethod = new OptMethod();
   learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
-  learningInfo.invokeCallbackFunctionEveryKIterations = 1;
+  learningInfo.invokeCallbackFunctionEveryKIterations = 10;
 
   learningInfo.nSentsPerDot = 250;
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
@@ -514,7 +516,7 @@ int main(int argc, char **argv) {
 
   // parse command line arguments
   string textFilename, outputFilenamePrefix, goldLabelsFilename, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
+  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename, NUMBER_OF_LABELS);
 
   // initialize the model
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);

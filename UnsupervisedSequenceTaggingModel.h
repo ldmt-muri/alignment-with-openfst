@@ -60,12 +60,17 @@ class UnsupervisedSequenceTaggingModel {
     vector<vector<string> > clusteringAByLine, clusteringBByLine;
     StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
     StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
-    assert(clusteringAByLine.size() == clusteringBByLine.size());
+    if(clusteringAByLine.size() != clusteringBByLine.size()) {
+      cerr << "ERROR COMPUTING VARIATION OF INFORMATION." << endl;
+      cerr << "clusteringAByLine.size() = " << clusteringAByLine.size() << endl;
+      cerr << "clusteringBByLine.size() = " << clusteringBByLine.size() << endl;
+      assert(false);
+    }
     for(int i = 0; i < clusteringAByLine.size(); i++) {
       assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
       for(int j = 0; j < clusteringAByLine[i].size(); j++) {
-	clusteringA.push_back(clusteringAByLine[i][j]);
-	clusteringB.push_back(clusteringBByLine[i][j]);			    
+        clusteringA.push_back(clusteringAByLine[i][j]);
+        clusteringB.push_back(clusteringBByLine[i][j]);			    
       }
     }
     return ClustersComparer::ComputeVariationOfInformation(clusteringA, clusteringB);
@@ -80,8 +85,8 @@ class UnsupervisedSequenceTaggingModel {
     for(int i = 0; i < clusteringAByLine.size(); i++) {
       assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
       for(int j = 0; j < clusteringAByLine[i].size(); j++) {
-	clusteringA.push_back(clusteringAByLine[i][j]);
-	clusteringB.push_back(clusteringBByLine[i][j]);			    
+        clusteringA.push_back(clusteringAByLine[i][j]);
+        clusteringB.push_back(clusteringBByLine[i][j]);			    
       }
     }
     return ClustersComparer::ComputeManyToOne(clusteringA, clusteringB);
