@@ -13,7 +13,7 @@
 #include <boost/interprocess/managed_shared_memory.hpp>
 
 #include "BasicTypes.h"
-#include "IAlignmentSampler.h"
+#include "../alignment/IAlignmentSampler.h"
 
 using namespace std;
 

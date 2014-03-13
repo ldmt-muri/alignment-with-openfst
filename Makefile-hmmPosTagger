@@ -9,7 +9,7 @@ all: train-hmmPosTagger
 train-hmmPosTagger: FstUtils.o HmmModel.o train-hmmPosTagger.o
 	     $(CC) FstUtils.o HmmModel.o train-hmmPosTagger.o  $(LIBS) -o train-hmmPosTagger
 
-train-hmmPosTagger.o: FstUtils.o HmmModel.o train-hmmPosTagger.cc ClustersComparer.h StringUtils.h
+train-hmmPosTagger.o: FstUtils.o HmmModel.o parts-of-speech/train-hmmPosTagger.cc parts-of-speech/ClustersComparer.h wammar-utils/StringUtils.h
 	    $(CC) $(BEFORE) $(SINGLE) train-hmmPosTagger.cc $(OPT)
 
 HmmModel.o: FstUtils.o HmmModel.cc HmmModel.h Samplers.h VocabEncoder.h UnsupervisedSequenceTaggingModel.h

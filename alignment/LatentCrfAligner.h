@@ -2,7 +2,7 @@
 #define _LATENT_CRF_ALIGNER_H_
 
 #include <fstream>
-#include "LatentCrfModel.h"
+#include "../core/LatentCrfModel.h"
 
 class LatentCrfAligner : public LatentCrfModel {
 

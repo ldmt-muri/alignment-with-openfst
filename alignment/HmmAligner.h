@@ -16,13 +16,13 @@
 #include <boost/serialization/set.hpp>
 #include <boost/mpi/collectives.hpp>
 
-#include "LearningInfo.h"
-#include "StringUtils.h"
-#include "FstUtils.h"
+#include "../core/LearningInfo.h"
+#include "../wammar-utils/StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
 #include "IAlignmentModel.h"
 #include "IAlignmentSampler.h"
-#include "Samplers.h"
-#include "MultinomialParams.h"
+#include "../wammar-utils/Samplers.h"
+#include "../core/MultinomialParams.h"
 
 using namespace fst;
 using namespace std;

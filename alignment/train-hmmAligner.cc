@@ -1,6 +1,6 @@
-#include "LearningInfo.h"
-#include "FstUtils.h"
-#include "StringUtils.h"
+#include "../core/LearningInfo.h"
+#include "../wammar-utils/FstUtils.h"
+#include "../wammar-utils/StringUtils.h"
 #include "HmmAligner.h"
 #include "IbmModel1.h"
 

@@ -33,16 +33,14 @@
 #include "MultinomialParams.h"
 
 //#define HAVE_CMPH 1
-#include "cdec-utils/logval.h"
-#include "cdec-utils/semiring.h"
-#include "cdec-utils/fast_sparse_vector.h"
+#include "../cdec-utils/logval.h"
+#include "../cdec-utils/semiring.h"
+#include "../cdec-utils/fast_sparse_vector.h"
 
-#include "anneal/Cpp/simann.hpp"
-
-#include "ClustersComparer.h"
-#include "StringUtils.h"
-#include "FstUtils.h"
-#include "LbfgsUtils.h"
+#include "../wammar-utils/ClustersComparer.h"
+#include "../wammar-utils/StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
+#include "../wammar-utils/LbfgsUtils.h"
 #include "Functors.h"
 
 #include "LogLinearParams.h"
@@ -353,7 +351,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   static LatentCrfModel *instance;
   std::tr1::unordered_set<int> /*zDomain, */yDomain;
   GaussianSampler gaussianSampler;
-  SimAnneal simulatedAnnealer;
   // during training time, and by default, this should be set to false. 
   // When we use the trained model to predict the labels, we set it to true
   bool testingMode;

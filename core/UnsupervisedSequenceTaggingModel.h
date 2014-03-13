@@ -4,9 +4,9 @@
 #include <vector>
 #include <string>
 
-#include "FstUtils.h"
-#include "ClustersComparer.h"
-#include "StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
+#include "../wammar-utils/ClustersComparer.h"
+#include "../wammar-utils/StringUtils.h"
 #include "VocabEncoder.h"
 #include "LearningInfo.h"
 
