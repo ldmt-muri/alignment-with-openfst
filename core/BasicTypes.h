@@ -144,6 +144,50 @@ public:
   };
 };
 
+struct ParserFactorId
+{
+public:
+  int childPosition, childWord, parentPosition, parentWord;
+
+  inline void Print() const {
+    std::cerr << "(childPosition=" << childPosition << ", childWord=" << childWord << ", parentPosition=" << parentPosition << ", parentWord=" << parentWord << ")" << std::endl;
+  }
+
+  inline bool operator < (const ParserFactorId &other) const {
+    if(childPosition != other.childPosition) {
+      return childPosition < other.childPosition;
+    } else if(childWord != other.childWord) {
+      return childWord < other.childWord;
+    } else if(parentPosition != other.parentPosition) {
+      return parentPosition < other.parentPosition;
+    } else if(parentWord != other.parentWord) {
+      return parentWord < other.parentWord;
+    } else {
+      return false;
+    }
+  }
+
+  struct ParserFactorHash : public std::unary_function<ParserFactorId, size_t> {
+    size_t operator()(const ParserFactorId& x) const {
+      size_t seed = 0;
+      boost::hash_combine(seed, (unsigned char)x.childPosition);
+      boost::hash_combine(seed, (unsigned short)x.childWord);
+      boost::hash_combine(seed, (unsigned char)x.parentPosition);
+      boost::hash_combine(seed, (unsigned short)x.parentWord);
+      return seed;
+);
+    }
+  };
+
+  struct ParserFactorEqual : public std::unary_function<ParserFactorId, bool> {
+    bool operator()(const ParserFactorId& left, const ParserFactorId& right) const {
+      return left.childPosition == right.childPosition && left.childWord == right.childWord &&
+              left.parentPosition == right.parentPosition && left.parentWord == right.parentWord;
+    }
+  };
+
+}
+
 struct AlignerFactorId 
 { 
 public:
