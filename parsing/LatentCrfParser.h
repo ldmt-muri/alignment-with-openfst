@@ -39,14 +39,13 @@ class LatentCrfParser : public LatentCrfModel {
 				     const std::string &initialThetaParamsFilename,
 				     const std::string &wordPairFeaturesFilename);
 
- TODO: CONTINUE ADAPTING CRF ALIGNER TO CRF PARSER HERE
-  void Label(std::vector<int64_t> &tokens, std::vector<int> &labels) { assert(false); /* cannot label without context */ }
+  void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
 
   void Label(std::vector<int64_t> &tokens, std::vector<int64_t> &context, std::vector<int> &labels);
 
   void Label(const string &labelsFilename);
 
-  void SetTestExample(std::vector<int64_t> &x_t, std::vector<int64_t> &x_s);
+  void SetTestExample(std::vector<int64_t> &sent, std::vector<int64_t> &context);
 
  private:
   // vocabulary of src language
@@ -54,16 +53,16 @@ class LatentCrfParser : public LatentCrfModel {
 
 
   // data
-  std::vector< std::vector<int64_t> > srcSents, tgtSents, testSrcSents, testTgtSents;
+  std::vector< std::vector<int64_t> > sents, contexts, testSents, testContexts;
 
   // null token
   static int64_t NULL_TOKEN;
 
  public:
-  // the value of y_i that indicates an alignment to the NULL source token, and to the first token in the source sentence, respectively.
-  static unsigned FIRST_SRC_POSITION;
+  // the value of y_i that indicates the sentence HEAD 
+  static unsigned HEAD_ID;
   // the string representing the null token at the source sentence which produce "spurious" tgt words.
-  static string NULL_TOKEN_STR;
+  static string HEAD_STR;
 
 };
 
