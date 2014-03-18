@@ -2,7 +2,7 @@
 #define _LATENT_CRF_PARSER_H_
 
 #include <fstream>
-#include "LatentCrfParser.h"
+#include "../core/LatentCrfModel.h"
 
 class LatentCrfParser : public LatentCrfModel {
 
@@ -33,11 +33,11 @@ class LatentCrfParser : public LatentCrfModel {
   static LatentCrfModel* GetInstance();
 
   static LatentCrfModel* GetInstance(const std::string &textFilename, 
-				     const std::string &outputPrefix, 
-				     LearningInfo &learningInfo, 
-				     const std::string &initialLambdaParamsFilename, 
-				     const std::string &initialThetaParamsFilename,
-				     const std::string &wordPairFeaturesFilename);
+                                     const std::string &outputPrefix, 
+                                     LearningInfo &learningInfo, 
+                                     const std::string &initialLambdaParamsFilename, 
+                                     const std::string &initialThetaParamsFilename,
+                                     const std::string &wordPairFeaturesFilename);
 
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
 
@@ -45,7 +45,7 @@ class LatentCrfParser : public LatentCrfModel {
 
   void Label(const string &labelsFilename);
 
-  void SetTestExample(std::vector<int64_t> &sent, std::vector<int64_t> &context);
+  void SetTestExample(std::vector<int64_t> &sent);
 
  private:
   // vocabulary of src language
@@ -55,15 +55,12 @@ class LatentCrfParser : public LatentCrfModel {
   // data
   std::vector< std::vector<int64_t> > sents, contexts, testSents, testContexts;
 
-  // null token
-  static int64_t NULL_TOKEN;
-
  public:
   // the value of y_i that indicates the sentence HEAD 
-  static unsigned HEAD_ID;
+  static int64_t HEAD_ID;
   // the string representing the null token at the source sentence which produce "spurious" tgt words.
   static string HEAD_STR;
-
+  static int HEAD_POSITION;
 };
 
 #endif

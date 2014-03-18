@@ -166,7 +166,7 @@ public:
       return false;
     }
   }
-
+  
   struct ParserFactorHash : public std::unary_function<ParserFactorId, size_t> {
     size_t operator()(const ParserFactorId& x) const {
       size_t seed = 0;
@@ -175,18 +175,17 @@ public:
       boost::hash_combine(seed, (unsigned char)x.parentPosition);
       boost::hash_combine(seed, (unsigned short)x.parentWord);
       return seed;
-);
     }
   };
-
+  
   struct ParserFactorEqual : public std::unary_function<ParserFactorId, bool> {
     bool operator()(const ParserFactorId& left, const ParserFactorId& right) const {
       return left.childPosition == right.childPosition && left.childWord == right.childWord &&
-              left.parentPosition == right.parentPosition && left.parentWord == right.parentWord;
+        left.parentPosition == right.parentPosition && left.parentWord == right.parentWord;
     }
   };
 
-}
+};
 
 struct AlignerFactorId 
 { 

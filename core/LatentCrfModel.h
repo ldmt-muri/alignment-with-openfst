@@ -105,7 +105,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
  public: 
 
-  enum Task {POS_TAGGING=0, WORD_ALIGNMENT=1};
+  enum Task {POS_TAGGING=0, WORD_ALIGNMENT=1, DEPENDENCY_PARSING=2};
   
   // STATIC METHODS
   /////////////////

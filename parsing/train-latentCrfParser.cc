@@ -90,7 +90,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
     REVERSE = "reverse",
-    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
+    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first"
     //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename"
     ;
 
@@ -114,19 +114,19 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
-    (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
-    (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
+    //(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
+    //(CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
     (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
-    (LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
-    (MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
+    //(LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
+    //(MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
     (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
     (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
-    (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
-    (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
+    //(OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
+    //(TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     ;
 
   po::variables_map vm;
@@ -238,20 +238,20 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
     cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
     cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
-    cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
-    cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
+    //cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
+    //cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
     if(vm.count(OPTIMIZER.c_str())) {
       cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
     }
     cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
-    cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
-    cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
+    //cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
+    //cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
     cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
     cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
     cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
     cerr << REVERSE << "=" << learningInfo.reverse << endl;
     cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
-    cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
+    //cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
 	filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
       cerr << *filename << " ";
@@ -361,7 +361,7 @@ void endOfKIterationsCallbackFunction() {
   parser.Label(labelsFilename.str());
 }
 
-
+/*
 void register_my_handler() {
   struct sigaction sigIntHandler;
 
@@ -374,11 +374,12 @@ void register_my_handler() {
   sigaction(SIGUSR1, &sigIntHandler, NULL);
   sigaction(SIGUSR2, &sigIntHandler, NULL);
 }
+*/
 
 int main(int argc, char **argv) {  
 
   // register interrupt handlers
-  register_my_handler();
+  //register_my_handler();
 
   // boost mpi initialization
   mpi::environment env(argc, argv);
@@ -438,7 +439,7 @@ int main(int argc, char **argv) {
   int ibmModel1MaxIterCount = 15;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
-                      learningInfo, ibmModel1MaxIterCount)){
+                      learningInfo)){
     assert(false);
   }
   
@@ -446,7 +447,6 @@ int main(int argc, char **argv) {
   LatentCrfModel* model = LatentCrfParser::GetInstance(textFilename, 
 							outputFilenamePrefix, 
 							learningInfo, 
-							FIRST_LABEL_ID, 
 							initialLambdaParamsFilename, 
 							initialThetaParamsFilename,
 							wordPairFeaturesFilename);

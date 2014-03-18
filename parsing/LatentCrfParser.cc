@@ -58,7 +58,7 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
   
   // read and encode data
   sents.clear();
-  vocabEncoder.ReadCorpus(textFilename, sents);
+  vocabEncoder.Read(textFilename, sents);
   assert(sents.size() > 0);
   examplesCount = sents.size();
 
@@ -251,12 +251,12 @@ void LatentCrfParser::Label(const string &labelsFilename) {
 }
 
 int64_t LatentCrfParser::GetContextOfTheta(unsigned sentId, int y) {
-  vector<int64_t> &srcSent = GetObservableContext(sentId);
-  if(y == NULL_POSITION) {
-    return NULL_TOKEN;
+  vector<int64_t> &sent = GetObservableContext(sentId);
+  if(y == HEAD_POSITION) {
+    return HEAD_ID;
   } else {
-    assert(y - FIRST_SRC_POSITION < srcSent.size());
-    assert(y - FIRST_SRC_POSITION >= 0);
-    return srcSent[y - NULL_POSITION];
+    assert(y - HEAD_POSITION - 1 < sent.size());
+    assert(y - HEAD_POSITION - 1 >= 0);
+    return sent[y - HEAD_POSITION - 1];
   }
 }
