@@ -1470,11 +1470,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
   
     if(learningInfo.iterationsCount == 0 && learningInfo.optimizeLambdasFirst) {
-      // don't touch theta parameters
+      // don't touch theta parameters in the first iteration
     } else if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
-
-    
-
       // run a few EM iterations to update thetas
       for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
         

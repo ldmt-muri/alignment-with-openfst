@@ -47,6 +47,15 @@ class LatentCrfParser : public LatentCrfModel {
 
   void SetTestExample(std::vector<int64_t> &sent);
 
+  double UpdateThetaMleForSent(const unsigned sentId, 
+                               MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
+                               boost::unordered_map<int64_t, double> &mleMarginals) override;
+
+  double ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, 
+                                            int fromSentId, 
+                                            int toSentId, 
+                                            double *devSetNll) override;
+
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;

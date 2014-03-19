@@ -9,12 +9,15 @@
 #include <boost/program_options.hpp>
 #include <boost/foreach.hpp>
 
+#include <Eigen/Dense>
 #include "LatentCrfParser.h"
 
 using namespace fst;
 using namespace std;
 namespace mpi = boost::mpi;
 namespace po = boost::program_options;
+using Eigen::MatrixXd;
+
 
 /*
 void my_handler(int s) {
@@ -377,6 +380,15 @@ void register_my_handler() {
 */
 
 int main(int argc, char **argv) {  
+
+  /*
+  MatrixXd m(2,2);
+  m(0,0) = 3;
+  m(1,0) = 2.5;
+  m(0,1) = -1;
+  m(1,1) = m(1,0) + m(0,1);
+  std::cout << m << std::endl;
+  */
 
   // register interrupt handlers
   //register_my_handler();

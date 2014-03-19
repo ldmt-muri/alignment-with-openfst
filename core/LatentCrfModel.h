@@ -237,11 +237,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // SENT LEVEL
   ///////////
 
-  double UpdateThetaMleForSent(const unsigned sentId, 
+  virtual double UpdateThetaMleForSent(const unsigned sentId, 
 			       MultinomialParams::ConditionalMultinomialParam<pair<int64_t,int64_t> > &mle, 
 			       boost::unordered_map< pair<int64_t, int64_t> , double> &mleMarginals);
     
-  double UpdateThetaMleForSent(const unsigned sentId, 
+  virtual double UpdateThetaMleForSent(const unsigned sentId, 
 			       MultinomialParams::ConditionalMultinomialParam< int64_t > &mle, 
 			       boost::unordered_map< int64_t , double> &mleMarginals);
     
@@ -275,7 +275,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda=0, double *objective=0);
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
-  double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
+  virtual double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
 
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
