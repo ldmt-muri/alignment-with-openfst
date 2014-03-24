@@ -422,11 +422,11 @@ class LogLinearParams {
 		    unordered_map_featureId_double& activeFeatures);
 
   // for pos tagging
-  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
+  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, unsigned i, 
 		    FastSparseVector<double> &activeFeatures);
   
   // for word alignment
-  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
+  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, unsigned i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 		    FastSparseVector<double> &activeFeatures);
 

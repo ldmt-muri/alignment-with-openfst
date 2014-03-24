@@ -5,9 +5,7 @@ template <typename ContextType>
 void ComputeNllZGivenXThetaGradient(MultinomialParams::ConditionalMultinomialParam<ContextType> &gradient) {
   assert(learningInfo.thetaOptMethod->algorithm == OptAlgorithm::GRADIENT_DESCENT);
 
-  double Nll = 0;
-  
-  for(int sentId = 0; sentId < examplesCount; sentId++) {
+  for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
     
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;

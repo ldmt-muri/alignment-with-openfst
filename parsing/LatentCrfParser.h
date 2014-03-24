@@ -104,8 +104,8 @@ class LatentCrfParser : public LatentCrfModel {
   int64_t GetContextOfTheta(unsigned sentId, int y);
 
   void BuildMatrices(const unsigned sentId,
-                     Eigen::MatrixXd *adjacency,
-                     Eigen::MatrixXd *laplacianHat,
+                     Eigen::MatrixXd &adjacency,
+                     Eigen::MatrixXd &laplacianHat,
                      bool conditionOnZ);
  public:
 
@@ -138,6 +138,9 @@ class LatentCrfParser : public LatentCrfModel {
   double GetMaxSpanningTree(Eigen::MatrixXd &adjacency, vector<int> &maxSpanningTree, int &root);
   
   vector<int> GetViterbiParse(int sentId, bool conditionOnZ);
+
+  void FireFeatures(const unsigned sentId,
+                    FastSparseVector<double> &h) override;
   
  private:
   // vocabulary of src language

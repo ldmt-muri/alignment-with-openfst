@@ -69,7 +69,7 @@ public:
     return (*paramWeightsPtr)[paramIndex];
   }
   
-  inline int GetParamsCount() {
+  inline unsigned GetParamsCount() {
     if(sealed) {
       assert(paramWeightsPtr->size() == paramIdsPtr->size());
       assert(paramWeightsPtr->size() == paramIndexes.size());

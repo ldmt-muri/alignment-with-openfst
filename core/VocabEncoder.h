@@ -56,8 +56,8 @@ class VocabEncoder {
  public:
 
   // set with initialization list
-  const int64_t firstId;
   const LearningInfo &learningInfo;
+  const int64_t firstId;
   const std::string UNK;
 
   // set for master and slaves

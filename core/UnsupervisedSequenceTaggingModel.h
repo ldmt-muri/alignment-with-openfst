@@ -24,7 +24,7 @@ class UnsupervisedSequenceTaggingModel {
     assert(labels.size() == 0);
     assert(tokens.size() > 0);
     vector<int64_t> tokensInt;
-    for(int i = 0; i < tokens.size(); i++) {
+    for(unsigned i = 0; i < tokens.size(); i++) {
       tokensInt.push_back(vocabEncoder.Encode(tokens[i]));
     }
     Label(tokensInt, labels);
@@ -33,7 +33,7 @@ class UnsupervisedSequenceTaggingModel {
   void Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
-    for(int i = 0; i < tokens.size(); i++) {
+    for(unsigned i = 0; i < tokens.size(); i++) {
       Label(tokens[i], labels[i]);
     }
   }
@@ -41,7 +41,7 @@ class UnsupervisedSequenceTaggingModel {
   void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
-    for(int i = 0 ; i <tokens.size(); i++) {
+    for(unsigned i = 0 ; i <tokens.size(); i++) {
       Label(tokens[i], labels[i]);
     }
   }
@@ -66,9 +66,9 @@ class UnsupervisedSequenceTaggingModel {
       cerr << "clusteringBByLine.size() = " << clusteringBByLine.size() << endl;
       assert(false);
     }
-    for(int i = 0; i < clusteringAByLine.size(); i++) {
+    for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
       assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-      for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+      for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
         clusteringA.push_back(clusteringAByLine[i][j]);
         clusteringB.push_back(clusteringBByLine[i][j]);			    
       }
@@ -82,9 +82,9 @@ class UnsupervisedSequenceTaggingModel {
     StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
     StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
     assert(clusteringAByLine.size() == clusteringBByLine.size());
-    for(int i = 0; i < clusteringAByLine.size(); i++) {
+    for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
       assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-      for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+      for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
         clusteringA.push_back(clusteringAByLine[i][j]);
         clusteringB.push_back(clusteringBByLine[i][j]);			    
       }

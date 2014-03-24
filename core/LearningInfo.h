@@ -34,7 +34,6 @@ class LearningInfo {
     maxIterationsCount = 10;
     saveAlignmentFstsOnDisk = false;
     neighborhood = DiscriminativeLexicon::ALL;
-    samplesCount = 1000;
     distATGivenS = Distribution::TRUE;
     customDistribution = 0;
     neighborhoodMinIbm1FwdScore = 0.001;
@@ -116,7 +115,7 @@ class LearningInfo {
     
     // check for convergnece conditions
     if(useMaxIterationsCount && 
-       maxIterationsCount <= iterationsCount) {
+       (unsigned)maxIterationsCount <= iterationsCount) {
       cerr << "maxIterationsCount is met ==> CONVERGED" << endl;
       return true;
     } 
@@ -148,7 +147,7 @@ class LearningInfo {
     int bestIteration = 0;
     if(useMinLikelihoodRelativeDiff || useMinLikelihoodDiff) {
       // the best iteration is the one with the highest regularized likelihood
-      for(int iteration = 1; iteration < logLikelihood.size(); iteration++) {
+      for(unsigned iteration = 1; iteration < logLikelihood.size(); iteration++) {
         if(logLikelihood[iteration] > logLikelihood[bestIteration]) {
           bestIteration = iteration;
         }
@@ -156,7 +155,7 @@ class LearningInfo {
     } else if(useEarlyStopping) {
       assert(validationLogLikelihood.size() > 0);
       // the best iteration is the one with the highest unregularized dev set likelihood
-      for(int iteration = 1; iteration < validationLogLikelihood.size(); iteration++) {
+      for(unsigned iteration = 1; iteration < validationLogLikelihood.size(); iteration++) {
         if(validationLogLikelihood[iteration] > validationLogLikelihood[bestIteration]) {
           bestIteration = iteration;
         }
@@ -211,7 +210,7 @@ class LearningInfo {
   }
   
   // you can't converge before this many iterations no matter what
-  int minIterationsCount;
+  unsigned minIterationsCount;
 
   // criteria 1
   bool useMaxIterationsCount;
@@ -243,10 +242,10 @@ class LearningInfo {
   bool saveAlignmentFstsOnDisk;
 
   // number of samples used to approximate the posterior expectations
-  int samplesCount;
+  //int samplesCount;
 
   // output
-  int iterationsCount;
+  unsigned iterationsCount;
   vector< float > logLikelihood;
   vector< float > validationLogLikelihood;  
 

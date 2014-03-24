@@ -214,6 +214,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   virtual int64_t GetContextOfTheta(unsigned sentId, int y) = 0;
 
   // fire features in this sentence
+  virtual void FireFeatures(const unsigned sentId,
+                            FastSparseVector<double> &h);
+
   void FireFeatures(unsigned sentId,
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
 		    FastSparseVector<double> &h);

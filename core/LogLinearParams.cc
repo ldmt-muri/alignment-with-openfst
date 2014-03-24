@@ -187,7 +187,7 @@ void LogLinearParams::Seal() {
     
     // copy paramIdsTemp and paramWeightsTemp, and wipe off temporary parameters you had
     assert(paramWeightsTemp.size() == paramIdsTemp.size());
-    for(int i = 0; i < paramWeightsTemp.size(); ++i) {
+    for(unsigned i = 0; i < paramWeightsTemp.size(); ++i) {
       paramWeightsPtr->push_back(paramWeightsTemp[i]);
       paramIdsPtr->push_back(paramIdsTemp[i]);
     }
@@ -247,8 +247,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
   cerr << "rank " << learningInfo->mpiWorld->rank() << " is going to read the word pair features file..." << endl;
   ifstream wordPairFeaturesFile(wordPairFeaturesFilename.c_str(), ios::in);
   string line;
-  int featsCounter = 0;
-
+  
   while( getline(wordPairFeaturesFile, line) ) {
     if(line.size() == 0) {
       continue;
@@ -301,7 +300,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
       temp >> featureValue;
       
       try {
-        auto insertSuccess = tempMap->insert( std::pair<FeatureId, double>( featureId, featureValue ));
+        tempMap->insert( std::pair<FeatureId, double>( featureId, featureValue ));
        
       } catch(std::exception const&  ex) {
         cerr << "tempMap->insert( pair (" << featureId << ", " << featureValue << ") ) threw exception: "  << ex.what() << endl;
@@ -380,7 +379,7 @@ int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
   paramWeightsTemp.reserve(paramWeightsTemp.size() + paramIds.size());
   cerr << "paramIdsTemp.capacity() = " << paramIdsTemp.capacity() << endl;
   int newParamsCount = 0;
-  for(int i = 0; i < paramIds.size(); ++i) {
+  for(unsigned i = 0; i < paramIds.size(); ++i) {
     if(AddParam(paramIds[i])) {
       newParamsCount++;
     }
@@ -466,7 +465,7 @@ void LogLinearParams::FireFeatures(int64_t headId,
 
 // for word alignment
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, unsigned i, 
 				   int START_OF_SENTENCE_Y_VALUE, int FIRST_POS,
 				   FastSparseVector<double> &activeFeatures) {
   // debug info
@@ -651,7 +650,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 
 // for pos induction
 // features for the latent crf model
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
+void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, unsigned i, 
 				   FastSparseVector<double> &activeFeatures) {
   
   const int64_t &xI = x[i];
@@ -913,7 +912,7 @@ void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
   cerr << "pointer to internal weights: " << paramWeightsPtr->data() << ". pointer to external weights: " << array << endl;
   assert(arrayLength == paramWeightsPtr->size());
   assert(paramWeightsPtr->size() == paramIndexes.size());
-  for(int i = 0; i < arrayLength; i++) {
+  for(unsigned i = 0; i < arrayLength; i++) {
     (*paramWeightsPtr)[i] = array[i];
   }
 }
@@ -925,7 +924,7 @@ void LogLinearParams::ConvertFeatureMapToFeatureArray(
     unordered_map_featureId_double& valuesMap, double* valuesArray, 
     unsigned constrainedFeaturesCount) { 
   // init to 0 
-  for(int i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
+  for(unsigned i = constrainedFeaturesCount; i < paramIndexes.size(); i++) { 
     valuesArray[i-constrainedFeaturesCount] = 0; 
   } 
   // set the active features 
@@ -943,7 +942,7 @@ void LogLinearParams::ConvertFeatureMapToFeatureArray(
 double LogLinearParams::ComputeL2Norm() { 
   assert(sealed);
   double l2 = 0; 
-  for(int i = 0; i < paramWeightsPtr->size(); i++) { 
+  for(unsigned i = 0; i < paramWeightsPtr->size(); i++) { 
     l2 += (*paramWeightsPtr)[i] * (*paramWeightsPtr)[i]; 
   } 
   return l2/2; 
@@ -1041,7 +1040,7 @@ double LogLinearParams::DotProduct(const std::vector<double>& values, const Shme
   assert(sealed);
   assert(values.size() == weights.size());
   double dotProduct = 0;
-  for(int i = 0; i < values.size(); i++) {
+  for(unsigned i = 0; i < values.size(); i++) {
     dotProduct += values[i] * weights[i];
   }
   return dotProduct;

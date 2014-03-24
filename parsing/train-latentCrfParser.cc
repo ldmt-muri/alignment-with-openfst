@@ -97,8 +97,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename"
     ;
 
+  cerr << "t3.5.1" << endl;
   // Declare the supported options.
   po::options_description desc("train-latentCrfParser options");
+  cerr << "t3.5.2" << endl;
   desc.add_options()
     (HELP.c_str(), "produce help message")
     (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
@@ -112,7 +114,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
     (L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
-    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
@@ -171,40 +173,42 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.0;
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
   }
-  
-  for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-      featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
-    if(*featIter == "LABEL_BIGRAM") {
-      assert(false); // this feature does not make sense for word alignment
-      learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
-    } else if(*featIter == "SRC_BIGRAM") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
-    } else if(*featIter == "ALIGNMENT_JUMP") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
-    } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
-    } else if(*featIter == "ALIGNMENT_JUMP_IS_ZERO") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO);
-    } else if(*featIter == "SRC0_TGT0") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
-    } else if(*featIter == "PRECOMPUTED") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
-    } else if (*featIter == "DIAGONAL_DEVIATION") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
-    } else if (*featIter == "SRC_WORD_BIAS") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_WORD_BIAS);
-    } else if(*featIter == "SYNC_START" ){
-      learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
-    } else if(*featIter == "SYNC_END") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
-    } else if(*featIter == "OTHER_ALIGNERS") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
-    } else if(*featIter == "NULL_ALIGNMENT") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
-    } else if(*featIter == "NULL_ALIGNMENT_LENGTH_RATIO") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO);
-    } else {
-      assert(false);
+   
+  if(vm.count(FEAT.c_str()) > 0) {
+    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+      if(*featIter == "LABEL_BIGRAM") {
+        assert(false); // this feature does not make sense for word alignment
+        learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
+      } else if(*featIter == "SRC_BIGRAM") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
+      } else if(*featIter == "ALIGNMENT_JUMP") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
+      } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
+      } else if(*featIter == "ALIGNMENT_JUMP_IS_ZERO") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO);
+      } else if(*featIter == "SRC0_TGT0") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
+      } else if(*featIter == "PRECOMPUTED") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
+      } else if (*featIter == "DIAGONAL_DEVIATION") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
+      } else if (*featIter == "SRC_WORD_BIAS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_WORD_BIAS);
+      } else if(*featIter == "SYNC_START" ){
+        learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
+      } else if(*featIter == "SYNC_END") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
+      } else if(*featIter == "OTHER_ALIGNERS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
+      } else if(*featIter == "NULL_ALIGNMENT") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
+      } else if(*featIter == "NULL_ALIGNMENT_LENGTH_RATIO") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO);
+      } else {
+        assert(false);
+      }
     }
   }
   
@@ -381,25 +385,16 @@ void register_my_handler() {
 
 int main(int argc, char **argv) {  
 
-  /*
-  MatrixXd m(2,2);
-  m(0,0) = 3;
-  m(1,0) = 2.5;
-  m(0,1) = -1;
-  m(1,1) = m(1,0) + m(0,1);
-  std::cout << m << std::endl;
-  */
-
   // register interrupt handlers
   //register_my_handler();
+  cerr << "t1" << endl;
 
   // boost mpi initialization
   boost::mpi::environment env(argc, argv);
   boost::mpi::communicator world;
 
   LearningInfo learningInfo(&world, GetOutputPrefix(argc, argv));
-  unsigned FIRST_LABEL_ID = 4;
-
+  
   // randomize draws
   int seed = time(NULL);
   srand(seed);
@@ -445,10 +440,9 @@ int main(int argc, char **argv) {
   learningInfo.initializeLambdasWithGaussian = false;
   learningInfo.initializeLambdasWithZero = true;
   learningInfo.initializeLambdasWithOne = true;
-
+  
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;
-  int ibmModel1MaxIterCount = 15;
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
                       learningInfo)){
@@ -478,7 +472,7 @@ int main(int argc, char **argv) {
 
   // unsupervised training of the model
   model->Train();
-
+  
   // print best params
   if(world.rank() == 0) {
     model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);

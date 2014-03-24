@@ -22,8 +22,8 @@ void LatentCrfModel::EncodeTgtWordClasses() {
   string classString, wordString;
   int frequency;
   while(infile >> classString >> wordString >> frequency) {
-    int64_t wordClass = vocabEncoder.Encode(classString);
-    int64_t wordType = vocabEncoder.Encode(wordString);
+    vocabEncoder.Encode(classString);
+    vocabEncoder.Encode(wordString);
   }
   vocabEncoder.Encode("?");
 }
@@ -230,10 +230,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), and computes the potentials
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda, double *objective) {
-  clock_t timestamp = clock();
-
-  const vector<int64_t> &x = GetObservableSequence(sentId);
-
+  
   // first, build the fst
   BuildLambdaFst(sentId, fst, derivativeWRTLambda, objective);
 
@@ -252,7 +249,6 @@ void LatentCrfModel::ComputeF(unsigned sentId,
 			      const fst::VectorFst<FstUtils::LogArc> &fst,
 			      const vector<FstUtils::LogWeight> &alphas, const vector<FstUtils::LogWeight> &betas,
 			      FastSparseVector<LogVal<double> > &FXk) {
-  clock_t timestamp = clock();
   
   const vector<int64_t> &x = GetObservableSequence(sentId);
 
@@ -264,8 +260,7 @@ void LatentCrfModel::ComputeF(unsigned sentId,
   iStates.insert(fst.Start());
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int xI = x[i];
+  for(unsigned i = 0; i < x.size(); i++) {
     
     // from each state at timestep i
     for(auto iStatesIter = iStates.begin(); 
@@ -318,9 +313,19 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
 			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, firstPos, 
 			 activeFeatures);
     assert(GetObservableSequence(sentId).size() > 0);
+  } else if(task == Task::DEPENDENCY_PARSING) {
+    cerr << "this method is not implemented for dependency parsing" << endl;
+    assert(false);
   } else {
+    cerr << "i don't know about this task!" << endl;
     assert(false);
   }
+}
+
+void LatentCrfModel::FireFeatures(const unsigned sentId,
+                                  FastSparseVector<double> &h) {
+  fst::VectorFst<FstUtils::LogArc> fst;
+  FireFeatures(sentId, fst, h);
 }
 
 void LatentCrfModel::FireFeatures(unsigned sentId,
@@ -337,7 +342,7 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
   iStates.insert(fst.Start());
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
+  for(unsigned i = 0; i < x.size(); i++) {
     int64_t xI = x[i];
     
     // from each state at timestep i
@@ -384,23 +389,21 @@ void LatentCrfModel::ComputeD(unsigned sentId, const vector<int64_t> &z,
   // schedule for visiting states such that we know the timestep for each arc
   std::tr1::unordered_set<int> iStates, iP1States;
   iStates.insert(fst.Start());
-
+  
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int64_t xI = x[i];
-    int64_t zI = z[i];
+  for(unsigned i = 0; i < x.size(); i++) {
     
     // from each state at timestep i
     for(auto iStatesIter = iStates.begin(); 
-	iStatesIter != iStates.end(); 
-	iStatesIter++) {
+        iStatesIter != iStates.end(); 
+        iStatesIter++) {
       int fromState = *iStatesIter;
-
+      
       // for each arc leaving this state
       for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	FstUtils::LogArc arc = aiter.Value();
-	int yIM1 = arc.ilabel;
-	int yI = arc.olabel;
+        FstUtils::LogArc arc = aiter.Value();
+        int yIM1 = arc.ilabel;
+        int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
 	int toState = arc.nextstate;
 
@@ -460,8 +463,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int64_t> &z,
   iStates.insert(fst.Start());
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int64_t xI = x[i];
+  for(unsigned i = 0; i < x.size(); i++) {
     int64_t zI = z[i];
     
     // from each state at timestep i
@@ -473,7 +475,6 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int64_t> &z,
       // for each arc leaving this state
       for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
 	FstUtils::LogArc arc = aiter.Value();
-	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
 	double arcWeight = arc.weight.Value();
 	int toState = arc.nextstate;
@@ -517,8 +518,7 @@ void LatentCrfModel::ComputeB(unsigned sentId, const vector<int64_t> &z,
   iStates.insert(fst.Start());
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
-    int64_t xI = x[i];
+  for(unsigned i = 0; i < x.size(); i++) {
     int64_t zI = z[i];
     
     // from each state at timestep i
@@ -623,7 +623,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int64_t> 
   yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++) {
+  for(unsigned i = 0; i < x.size(); i++) {
 
     // timestep i hasn't reached any states yet
     yIToState.clear();
@@ -985,7 +985,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
 
   mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector, AggregateVectors2());
   assert(gradientVector.size() == lambdasCount);
-  for(int i = 0; i < gradientVector.size(); i++) {
+  for(unsigned i = 0; i < gradientVector.size(); i++) {
     gradient[i] = gradientVector[i];
     assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
   }
@@ -1475,7 +1475,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // don't touch theta parameters in the first iteration
     } else if(learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
       // run a few EM iterations to update thetas
-      for(int emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
+      for(unsigned emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
         
         if(learningInfo.mpiWorld->rank() == 0) {
           cerr << "starting EM iteration #" << emIter <<  " at " << time(0) << endl;    
@@ -1617,10 +1617,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     double Nll = 0, devSetNll = 0;
     // note: batch == minibatch with size equals to data.size()
-    for(int sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
+    for(unsigned sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
       
       int fromSentId = sentId;
-      int toSentId = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, (int)examplesCount);
+      int toSentId = min(sentId+learningInfo.optimizationMethod.subOptMethod->miniBatchSize, examplesCount);
         
       // debug info
       double optimizedMiniBatchNll = 0, miniBatchDevSetNll = 0;
@@ -1769,9 +1769,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
           // loop over params
           if(learningInfo.mpiWorld->rank() == 0) {
             // update param weight
-            int miniBatchSize = toSentId - fromSentId;
+            assert(toSentId >= fromSentId);
+            unsigned miniBatchSize = toSentId - fromSentId;
             double eta = 0.1;
-            for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+            for(unsigned paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
               if(gradient[paramId] == 0.0 && lambdasArray[paramId] == 0.0) {continue;}
               // add l1 term
               optimizedMiniBatchNll += fabs(lambdasArray[paramId]);
@@ -1905,7 +1906,7 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
   assert(labels.size() == 0);
   assert(tokens.size() > 0);
   vector<int64_t> tokensInt;
-  for(int i = 0; i < tokens.size(); i++) {
+  for(unsigned i = 0; i < tokens.size(); i++) {
     tokensInt.push_back(vocabEncoder.Encode(tokens[i]));
   }
   Label(tokensInt, labels);
@@ -1914,7 +1915,7 @@ void LatentCrfModel::Label(vector<string> &tokens, vector<int> &labels) {
 void LatentCrfModel::Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
   assert(labels.size() == 0);
   labels.resize(tokens.size());
-  for(int i = 0; i < tokens.size(); i++) {
+  for(unsigned i = 0; i < tokens.size(); i++) {
     Label(tokens[i], labels[i]);
   }
 }
@@ -1922,7 +1923,7 @@ void LatentCrfModel::Label(vector<vector<int64_t> > &tokens, vector<vector<int> 
 void LatentCrfModel::Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
   assert(labels.size() == 0);
   labels.resize(tokens.size());
-  for(int i = 0 ; i <tokens.size(); i++) {
+  for(unsigned i = 0 ; i <tokens.size(); i++) {
     Label(tokens[i], labels[i]);
   }
 }
@@ -1944,8 +1945,8 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
   // analyze
   boost::unordered_map<int, boost::unordered_map<string, int> > labelToTypesAndCounts;
   boost::unordered_map<string, boost::unordered_map<int, int> > typeToLabelsAndCounts;
-  for(int sentId = 0; sentId < tokens.size(); sentId++) {
-    for(int i = 0; i < tokens[sentId].size(); i++) {
+  for(unsigned sentId = 0; sentId < tokens.size(); sentId++) {
+    for(unsigned i = 0; i < tokens[sentId].size(); i++) {
       labelToTypesAndCounts[labels[sentId][i]][tokens[sentId][i]]++;
       typeToLabelsAndCounts[tokens[sentId][i]][labels[sentId][i]]++;
     }
@@ -1987,9 +1988,9 @@ double LatentCrfModel::ComputeVariationOfInformation(string &aLabelsFilename, st
   StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
   StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
   assert(clusteringAByLine.size() == clusteringBByLine.size());
-  for(int i = 0; i < clusteringAByLine.size(); i++) {
+  for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
     assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-    for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+    for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
       clusteringA.push_back(clusteringAByLine[i][j]);
       clusteringB.push_back(clusteringBByLine[i][j]);			    
     }
@@ -2003,9 +2004,9 @@ double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabels
   StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
   StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
   //assert(clusteringAByLine.size() == clusteringBByLine.size());
-  for(int i = 0; i < clusteringAByLine.size(); i++) {
+  for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
     assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-    for(int j = 0; j < clusteringAByLine[i].size(); j++) {
+    for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
       clusteringA.push_back(clusteringAByLine[i][j]);
       clusteringB.push_back(clusteringBByLine[i][j]);			    
     }
@@ -2022,7 +2023,7 @@ void LatentCrfModel::InitLambda() {
 
   assert(examplesCount > 0);
   // then, each process discovers the features that may show up in their sentences.
-  for(int sentId = 0; sentId < examplesCount; sentId++) {
+  for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
 
     assert(learningInfo.mpiWorld->size() > 0);
     
@@ -2034,9 +2035,8 @@ void LatentCrfModel::InitLambda() {
     // just to set learningInfo.currentSentId
     GetObservableSequence(sentId);
     
-    // build the FST
-    fst::VectorFst<FstUtils::LogArc> lambdaFst;
-    BuildLambdaFst(sentId, lambdaFst);
+    FastSparseVector<double> h;
+    FireFeatures(sentId, h);
   }
 
   if(learningInfo.mpiWorld->rank() == 0) {
