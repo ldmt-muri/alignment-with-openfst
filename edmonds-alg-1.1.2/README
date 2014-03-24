@@ -1,0 +1,14 @@
+This project contains an efficient implementation of Edmonds's optimum
+branching algorithm as originally described by Tarjan. The full
+documentation can be found at:
+
+                  http://edmonds-alg.sourceforge.net
+
+For information on the licence, please refer to the file COPYING. For
+usage information see the file INSTALL.
+
+The directory layout of this package:
+
+src/     the c++ sources
+doc/     sources for various documentation files
+test/    sources and scripts for testing

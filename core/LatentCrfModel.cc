@@ -1,5 +1,6 @@
 #include "LatentCrfModel.h"
 
+namespace mpi = boost::mpi;
 using namespace std;
 using namespace OptAlgorithm;
 
@@ -996,6 +997,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
 }
 
 void LatentCrfModel::AddWeightedL2Term(vector<double> *gradient, double *objective, FastSparseVector<double> &activeFeatures) {
+
   if(learningInfo.optimizationMethod.subOptMethod->regularizer != Regularizer::WeightedL2) return;
   if(gradient == NULL || objective == NULL) return;
   for(auto activeFeatureIter = activeFeatures.begin(); 

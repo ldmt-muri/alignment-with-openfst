@@ -284,7 +284,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 
 /*
 // returns the rank of the process which have found the best HMM parameters
-void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount, LearningInfo& originalLearningInfo) {
+void IbmModel1Initialize(boost::mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount, LearningInfo& originalLearningInfo) {
 
   // only the master does this
   if(world.rank() != 0){
@@ -394,8 +394,8 @@ int main(int argc, char **argv) {
   //register_my_handler();
 
   // boost mpi initialization
-  mpi::environment env(argc, argv);
-  mpi::communicator world;
+  boost::mpi::environment env(argc, argv);
+  boost::mpi::communicator world;
 
   LearningInfo learningInfo(&world, GetOutputPrefix(argc, argv));
   unsigned FIRST_LABEL_ID = 4;

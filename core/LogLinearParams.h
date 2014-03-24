@@ -54,7 +54,7 @@ public:
     struct { unsigned current, previous; } bigram;
     int alignmentJump;
     struct { int alignmentJump; int64_t wordBias; } biasedAlignmentJump;
-    struct { unsigned srcWord, tgtWord; } wordPair;
+    struct { int64_t srcWord, tgtWord; } wordPair;
     int64_t precomputed;
     struct { unsigned alignerId; bool compatible; } otherAligner;
     struct { int position; int label; } boundaryLabel;
@@ -416,18 +416,23 @@ class LogLinearParams {
   void LoadOtherAlignersOutput();
 
   // given the description of one transition on the alignment FST, find the features that would fire along with their values
-  // note: pos here is short for position
   void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
 		    int srcPos, int prevSrcPos, int tgtPos, 
 		    int srcSentLength, int tgtSentLength, 
 		    unordered_map_featureId_double& activeFeatures);
 
+  // for pos tagging
   void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, int i, 
 		    FastSparseVector<double> &activeFeatures);
   
+  // for word alignment
   void FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
 		    int START_OF_SENTENCE_Y_VALUE, int NULL_POS,
 		    FastSparseVector<double> &activeFeatures);
+
+  // for dependency parsing
+  void FireFeatures(int64_t headId, int64_t childId,                                    
+                    FastSparseVector<double> &activeFeatures);
 
   int AddParams(const std::vector< FeatureId > &paramIds);
 

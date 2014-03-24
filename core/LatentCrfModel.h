@@ -46,8 +46,6 @@
 #include "LogLinearParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
 
-namespace mpi = boost::mpi;
-
 namespace boost {
 namespace serialization{
 

@@ -450,6 +450,20 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
   }
 }
 
+// for dependnecy parsing
+void LogLinearParams::FireFeatures(int64_t headId, 
+                                   int64_t childId,
+                                   FastSparseVector<double> &activeFeatures) {
+  FeatureId featureId;
+  featureId.type = FeatureTemplate::SRC0_TGT0;
+  featureId.wordPair.srcWord = headId;
+  featureId.wordPair.tgtWord = childId;
+  
+  AddParam(featureId);
+  activeFeatures[paramIndexes[featureId]] += 1.0;
+}
+
+
 // for word alignment
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t, const vector<int64_t> &x_s, int i, 
