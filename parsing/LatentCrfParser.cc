@@ -164,28 +164,28 @@ vector<int64_t>& LatentCrfParser::GetReconstructedObservableSequence(int example
     // refactor: this following line does not logically belong here
     lambda->learningInfo->currentSentId = exampleId;
 
-    assert(exampleId < sents.size());
+    assert((unsigned)exampleId < sents.size());
     return sents[exampleId];
   }
 }
 
 vector<int64_t>& LatentCrfParser::GetObservableSequence(int exampleId) {
   if(testingMode) {
-    assert(exampleId < testSents.size());
+    assert((unsigned)exampleId < testSents.size());
     return testSents[exampleId];
   } else {
     lambda->learningInfo->currentSentId = exampleId;
-    assert(exampleId < sents.size());
+    assert((unsigned)exampleId < sents.size());
     return sents[exampleId];
   }
 }
 
 vector<int64_t>& LatentCrfParser::GetObservableContext(int exampleId) { 
   if(testingMode) {
-    assert(exampleId < testSents.size());
+    assert((unsigned)exampleId < testSents.size());
     return testSents[exampleId];
   } else {
-    assert(exampleId < sents.size());
+    assert((unsigned)exampleId < sents.size());
     return sents[exampleId];
   }
 }
@@ -217,7 +217,7 @@ void LatentCrfParser::Label(const string &labelsFilename) {
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
     lambda->learningInfo->currentSentId = exampleId;
-    if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+    if(exampleId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
       if(learningInfo.mpiWorld->rank() == 0){
         string labelSequence;
         learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
@@ -253,7 +253,7 @@ int64_t LatentCrfParser::GetContextOfTheta(unsigned sentId, int y) {
   if(y == ROOT_POSITION) {
     return LatentCrfParser::ROOT_ID;
   } else {
-    assert(y - ROOT_POSITION - 1 < sent.size());
+    assert(y - ROOT_POSITION - 1 < (int) sent.size());
     assert(y - ROOT_POSITION - 1 >= 0);
     return sent[y - ROOT_POSITION - 1];
   }
@@ -295,11 +295,11 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
       0.0;
     FastSparseVector<double> activeFeatures;
     lambda->FireFeatures(LatentCrfParser::ROOT_ID, tokens[rootPosition], activeFeatures);
-    rootScores(rootPosition) = MultinomialParams::nExp( lambda->DotProduct( activeFeatures ) );
+    rootScores(rootPosition) = MultinomialParams::nExp( multinomialTerm + lambda->DotProduct( activeFeatures ) );
   }
   // laplacian matrix L(y|x) in (Koo et al. 2007)
   laplacianHat = adjacency;
-  for(auto rowIndex = 0; rowIndex < tokens.size(); ++rowIndex) {
+  for(unsigned rowIndex = 0; rowIndex < tokens.size(); ++rowIndex) {
     laplacianHat(rowIndex, rowIndex) = laplacianHat.row(rowIndex).array().sum();
   }
   // modified laplacian matrix to allow for O(n^3) inference; \hat{L}(y|x) in (Koo et al. 2007)
@@ -507,7 +507,7 @@ double LatentCrfParser::GetMaxSpanningTree(MatrixXd &adjacency, vector<int> &max
 
   // set the root
   root = ( find(maxSpanningTree.begin(), maxSpanningTree.end(), -1) - maxSpanningTree.begin() );
-  assert( root < n_vertices );
+  assert( root > 0 && (unsigned)root < n_vertices );
 
   return ans;
 }

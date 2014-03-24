@@ -76,9 +76,9 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 			       const string &outputPrefix, 
 			       LearningInfo &learningInfo, 
 			       unsigned FIRST_LABEL_ID,
-			       LatentCrfModel::Task task) : gaussianSampler(0.0, 10.0),
-                                          UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
-                                          learningInfo(learningInfo) {
+			       LatentCrfModel::Task task) : UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
+                                          learningInfo(learningInfo),
+                                          gaussianSampler(0.0, 10.0) {
   
   
   AddEnglishClosedVocab();
@@ -154,7 +154,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
 
   // for each timestep
-  for(int i = 0; i < x.size(); i++){
+  for(unsigned i = 0; i < x.size(); i++){
 
     // timestep i hasn't reached any states yet
     yIToState.clear();
@@ -331,7 +331,7 @@ void LatentCrfModel::FireFeatures(const unsigned sentId,
 void LatentCrfModel::FireFeatures(unsigned sentId,
 				  const fst::VectorFst<FstUtils::LogArc> &fst,
 				  FastSparseVector<double> &h) {
-  clock_t timestamp = clock();
+  //clock_t timestamp = clock();
   
   const vector<int64_t> &x = GetObservableSequence(sentId);
 
@@ -343,7 +343,6 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
 
   // for each timestep
   for(unsigned i = 0; i < x.size(); i++) {
-    int64_t xI = x[i];
     
     // from each state at timestep i
     for(auto iStatesIter = iStates.begin(); 
@@ -356,7 +355,6 @@ void LatentCrfModel::FireFeatures(unsigned sentId,
 	FstUtils::LogArc arc = aiter.Value();
 	int yIM1 = arc.ilabel;
 	int yI = arc.olabel;
-	double arcWeight = arc.weight.Value();
 	int toState = arc.nextstate;
 
 	// for each feature that fires on this arc
@@ -604,7 +602,7 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int64_t> 
 					 fst::VectorFst<FstUtils::LogArc> &fst, 
 					 vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
 
-  clock_t timestamp = clock();
+  //clock_t timestamp = clock();
   PrepareExample(sentId);
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
@@ -825,7 +823,7 @@ float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   // unconstrained lambda parameters count
   unsigned lambdasCount = model.lambda->GetParamsCount();
   // which sentences to work on?
-  static int fromSentId = 0;
+  static unsigned fromSentId = 0;
   if(fromSentId >= model.examplesCount) {
     fromSentId = 0;
   }
@@ -857,14 +855,14 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   
   // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
 
-  double Nll = 0, devSetNll = 0;
+  double Nll = 0;
   FastSparseVector<double> nDerivative;
   unsigned from = 0, to = model.examplesCount;
   assert(model.examplesCount == model.labels.size());
 
   // for each training example (x, y)
   for(unsigned sentId = from; sentId < to; sentId++) {
-    if(sentId % model.learningInfo.mpiWorld->size() != model.learningInfo.mpiWorld->rank()) {
+    if(sentId % model.learningInfo.mpiWorld->size() != (unsigned) model.learningInfo.mpiWorld->rank()) {
       continue;
     }
 
@@ -984,7 +982,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   }
 
   mpi::all_reduce<vector<double> >(*model.learningInfo.mpiWorld, gradientVector, gradientVector, AggregateVectors2());
-  assert(gradientVector.size() == lambdasCount);
+  assert(gradientVector.size() == (unsigned)lambdasCount);
   for(unsigned i = 0; i < gradientVector.size(); i++) {
     gradient[i] = gradientVector[i];
     assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
@@ -1441,7 +1439,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
   vector<double> gradient(lambda->GetParamsCount());
   vector<double> u(lambda->GetParamsCount());
   vector<double> h(lambda->GetParamsCount());
-  for(int paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
+  for(unsigned paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
     u[paramId] = 0;
     h[paramId] = 0;
   }
@@ -1503,7 +1501,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
         for(unsigned sentId = 0; sentId < examplesCount; sentId++) {
           
           // sentId is assigned to the process # (sentId % world.size())
-          if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+          if(sentId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
             continue;
           }
 
@@ -1604,17 +1602,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
       cerr << endl << "master" << learningInfo.mpiWorld->rank() << ": ========== second, update lambdas ==========" << endl << endl;
     }
     
-    // make a copy of the lambda weights converged to in the previous iteration to use as
-    // an initialization for ADAGRAD
-    auto endIterator = learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD?
-      lambda->paramWeightsPtr->end() : lambda->paramWeightsPtr->begin();
-    
-    // hack adagrad is not effective after 5 iterations
-    //if(learningInfo.iterationsCount >=5 ) {
-    //  learningInfo.optimizationMethod.subOptMethod->algorithm = LBFGS;
-    //  learningInfo.optimizationMethod.subOptMethod->miniBatchSize = examplesCount;
-    //}
-
     double Nll = 0, devSetNll = 0;
     // note: batch == minibatch with size equals to data.size()
     for(unsigned sentId = 0; sentId < examplesCount; sentId += learningInfo.optimizationMethod.subOptMethod->miniBatchSize) {
@@ -1770,7 +1757,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
           if(learningInfo.mpiWorld->rank() == 0) {
             // update param weight
             assert(toSentId >= fromSentId);
-            unsigned miniBatchSize = toSentId - fromSentId;
             double eta = 0.1;
             for(unsigned paramId = 0; paramId < lambda->GetParamsCount(); ++paramId) {
               if(gradient[paramId] == 0.0 && lambdasArray[paramId] == 0.0) {continue;}
@@ -1884,7 +1870,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // this is only possible when we persist the parameters after each iteration, and we don't use variational
   // inference
   if(learningInfo.iterationsCount > 0 && learningInfo.persistParamsAfterNIteration == 1 && !learningInfo.variationalInferenceOfMultinomials) {
-    int bestIteration = learningInfo.GetBestIterationNumber();
+    unsigned bestIteration = learningInfo.GetBestIterationNumber();
     if(bestIteration != learningInfo.iterationsCount - 1 && bestIteration != 0) {
       if(learningInfo.mpiWorld->rank() == 0) {
         cerr << "best iteration is found to be #" << bestIteration << endl;
@@ -2028,7 +2014,7 @@ void LatentCrfModel::InitLambda() {
     assert(learningInfo.mpiWorld->size() > 0);
     
     // skip sentences not assigned to this process
-    if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+    if(sentId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
       continue;
     }
 
