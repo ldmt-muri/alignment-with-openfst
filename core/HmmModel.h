@@ -17,11 +17,11 @@
 #include <boost/mpi/collectives.hpp>
 
 #include "LearningInfo.h"
-#include "StringUtils.h"
-#include "FstUtils.h"
-#include "IAlignmentModel.h"
-#include "IAlignmentSampler.h"
-#include "Samplers.h"
+#include "../wammar-utils/StringUtils.h"
+#include "../wammar-utils/FstUtils.h"
+#include "../alignment/IAlignmentModel.h"
+#include "../alignment/IAlignmentSampler.h"
+#include "../wammar-utils/Samplers.h"
 #include "MultinomialParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
 

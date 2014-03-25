@@ -358,7 +358,8 @@ void LogLinearParams::LoadOtherAlignersOutput() {
           // increment srcpos because we insert the NULL src word at the beginning of each sentence
           srcpos++;
           // make room in the sentAlignments vector for this pair. tgt positions not mentioned are aligned to NULL
-          while(sentAlignments->size() <= tgtpos) { 
+          assert(tgtpos >= 0);
+          while(sentAlignments->size() <= (unsigned) tgtpos) { 
             auto tgtPosAlignments = new set<int>();
             sentAlignments->push_back(tgtPosAlignments); 
           }

@@ -10,8 +10,8 @@
 #include <boost/foreach.hpp>
 
 #include "LatentCrfPosTagger.h"
-#include "HmmModel.h"
-#include "FstUtils.h"
+#include "../core/HmmModel.h"
+#include "../wammar-utils/FstUtils.h"
 
 using namespace fst;
 using namespace std;

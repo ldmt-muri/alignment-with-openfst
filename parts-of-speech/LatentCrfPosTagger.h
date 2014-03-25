@@ -1,7 +1,7 @@
 #ifndef _LATENT_CRF_POS_TAGGER_H_
 #define _LATENT_CRF_POS_TAGGER_H_
 
-#include "LatentCrfModel.h"
+#include "../core/LatentCrfModel.h"
 
 class LatentCrfPosTagger : public LatentCrfModel {
 
