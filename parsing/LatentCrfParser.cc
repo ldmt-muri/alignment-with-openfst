@@ -110,27 +110,33 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
 
 void LatentCrfParser::InitTheta() {
 
+  // some initializers have not been implemented yet
+  assert((learningInfo.initializeThetasWithUniform && !learningInfo.initializeThetasWithGaussian) ||
+         (!learningInfo.initializeThetasWithUniform && learningInfo.initializeThetasWithGaussian));
+  assert(!learningInfo.initializeThetasWithModel1);
+  
   if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
   }
 
   assert(sents.size() > 0);
 
-  // first initialize nlogthetas to unnormalized gaussians
+  // first initialize nlogthetas 
   nLogThetaGivenOneLabel.params.clear();
   for(unsigned sentId = 0; sentId < sents.size(); ++sentId) {
     vector<int64_t> &sent = sents[sentId];
     vector<int64_t> &reconstructedSent = sents[sentId];
     for(unsigned i = 0; i < sent.size(); ++i) {
+      nLogThetaGivenOneLabel.params[ROOT_ID][sent[i]] = 
+        learningInfo.initializeThetasWithGaussian?
+        abs(gaussianSampler.Draw()) : 1.0;
       auto parentToken = sent[i];
       for(unsigned j = 0; j < reconstructedSent.size(); ++j) {
         if(i == j) { continue; }
-	auto childToken = reconstructedSent[j];
-	if(learningInfo.initializeThetasWithGaussian) {
-          nLogThetaGivenOneLabel.params[parentToken][childToken] = abs(gaussianSampler.Draw());
-        } else if (learningInfo.initializeThetasWithUniform || learningInfo.initializeThetasWithModel1) {
-          nLogThetaGivenOneLabel.params[parentToken][childToken] = 1;
-        }
+        auto childToken = reconstructedSent[j];
+        nLogThetaGivenOneLabel.params[parentToken][childToken] = 
+          learningInfo.initializeThetasWithGaussian?
+          abs(gaussianSampler.Draw()):1.0;
       }
     }
   }
@@ -298,9 +304,9 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
     rootScores(rootPosition) = MultinomialParams::nExp( multinomialTerm + lambda->DotProduct( activeFeatures ) );
   }
   // laplacian matrix L(y|x) in (Koo et al. 2007)
-  laplacianHat = adjacency;
+  laplacianHat = -1.0 * adjacency;
   for(unsigned rowIndex = 0; rowIndex < tokens.size(); ++rowIndex) {
-    laplacianHat(rowIndex, rowIndex) = laplacianHat.row(rowIndex).array().sum();
+    laplacianHat(rowIndex, rowIndex) = adjacency.row(rowIndex).array().sum();
   }
   // modified laplacian matrix to allow for O(n^3) inference; \hat{L}(y|x) in (Koo et al. 2007)
   laplacianHat.row(0) = rootScores;
@@ -327,6 +333,8 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   BuildMatrices(sentId, yGivenXZAdjacency, yGivenXZLaplacianHat, true);
   double C = yGivenXZLaplacianHat.determinant();
   MatrixXd yGivenXZLaplacianHatInverse = yGivenXZLaplacianHat.inverse();
+  cerr << "C = " << C << endl;
+  cerr << "Z = " << Z << endl;
   assert(C < Z);
 
   auto reconstructedTokens = GetReconstructedObservableSequence(sentId);
@@ -382,12 +390,22 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     BuildMatrices(sentId, yGivenXAdjacency, yGivenXLaplacianHat, false);
     double Z = yGivenXLaplacianHat.determinant();
     MatrixXd yGivenXLaplacianHatInverse = yGivenXLaplacianHat.inverse();
-    
+    cerr << "sentId = " << sentId << endl;
+    cerr << "A(y|x) = " << endl << yGivenXAdjacency << endl;
+    cerr << "hat{L}(y|x) = " << endl << yGivenXLaplacianHat << endl;
+    cerr << "inverse{hat{L}}(y|x) = " << endl << yGivenXLaplacianHatInverse << endl;
+
     // build A_{y|x,z} matrix and use matrix tree theorem to compute C(x), marginal(h,m;y|z,x)=\sum_{y:(h,m)\in y} p(y|x,z)
     MatrixXd yGivenXZAdjacency, yGivenXZLaplacianHat;
     BuildMatrices(sentId, yGivenXZAdjacency, yGivenXZLaplacianHat, true);
     double C = yGivenXZLaplacianHat.determinant();
     MatrixXd yGivenXZLaplacianHatInverse = yGivenXZLaplacianHat.inverse();
+    cerr << "sentId = " << sentId << endl;
+    cerr << "A(y|x,z) = " << endl << yGivenXZAdjacency << endl;
+    cerr << "hat{L}(y|x,z) = " << endl << yGivenXZLaplacianHat << endl;
+    cerr << "inverse{hat{L}}(y|x,z) = " << endl << yGivenXZLaplacianHatInverse << endl;
+
+    cerr << "C = " << C << endl << "Z = " << Z << endl;
     assert(C < Z);
     
     auto tokens = GetObservableSequence(sentId);
@@ -401,16 +419,43 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
         double marginalGivenXZ = childPosition == 0? 0.0 :
           yGivenXZAdjacency(headPosition, childPosition) * 
           yGivenXZLaplacianHatInverse(childPosition, childPosition);
+        if(childPosition == 0) {
+          cerr << "marginalGivenXZ = 0.0 = ";
+        } else {
+          cerr << "marginalGivenXZ = yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, childPosition) = "; 
+        }
+        cerr << marginalGivenXZ << endl;
         marginalGivenXZ -= headPosition == 0? 0.0 :
           yGivenXZAdjacency(headPosition, childPosition) * 
           yGivenXZLaplacianHatInverse(childPosition, headPosition);
+        if(headPosition == 0) {
+          cerr << "marginalGivenXZ -= 0.0 => ";
+        } else {
+          cerr << "marginalGivenXZ -= yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, headPosition) => "; 
+        }
+        cerr << marginalGivenXZ << endl;
         double marginalGivenX = childPosition == 0? 0.0 :
           yGivenXAdjacency(headPosition, childPosition) * 
           yGivenXLaplacianHatInverse(childPosition, childPosition);
+        if(childPosition == 0) {
+          cerr << "marginalGivenX = 0.0 = ";
+        } else {
+          cerr << "marginalGivenX = yGivenXAdjacency(headPosition, childPosition) * yGivenXLaplacianHatInverse(childPosition, childPosition) = "; 
+        }
+        cerr << marginalGivenX << endl;
         marginalGivenX -= headPosition == 0? 0.0 :
           yGivenXAdjacency(headPosition, childPosition) * 
           yGivenXLaplacianHatInverse(childPosition, headPosition);
+        if(headPosition == 0) {
+          cerr << "marginalGivenX -= 0.0 => ";
+        } else {
+          cerr << "marginalGivenX -= yGivenXAdjacency(headPosition, childPosition) * yGivenXLaplacianHatInverse(childPosition, headPosition) => "; 
+        }
+        cerr << marginalGivenX << endl;
         double marginal = marginalGivenXZ - marginalGivenX;
+        cerr << "marginal = " << marginal << endl;
+        cerr << "features fired: " << endl;
+        lambda->PrintFeatureValues(activeFeatures);
         for(auto featIter = activeFeatures.begin(); featIter != activeFeatures.end(); ++featIter) {
           derivativeWRTLambda[featIter->first] += featIter->second * marginal;
         }
@@ -507,7 +552,13 @@ double LatentCrfParser::GetMaxSpanningTree(MatrixXd &adjacency, vector<int> &max
 
   // set the root
   root = ( find(maxSpanningTree.begin(), maxSpanningTree.end(), -1) - maxSpanningTree.begin() );
-  assert( root > 0 && (unsigned)root < n_vertices );
+  cerr << "root is " << root << endl;
+  BOOST_FOREACH(int &parent, maxSpanningTree) 
+    {
+      cerr << parent << " ";
+    }
+  cerr << endl;
+  assert( root >= 0 && (unsigned)root < n_vertices );
 
   return ans;
 }

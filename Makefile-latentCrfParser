@@ -9,7 +9,7 @@ all: train-latentCrfParser
 # specific to the parsing model
 train-latentCrfParser: train-latentCrfParser.o
 	$(CC) train-latentCrfParser.o FstUtils.o LatentCrfModel.o LatentCrfParser.o LogLinearParams.o fdict.o -o parsing/train-latentCrfParser  $(LIBS)
-train-latentCrfParser.o: LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h
+train-latentCrfParser.o: LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h FstUtils.o
 	$(CC) $(BEFORE) $(SINGLE) parsing/train-latentCrfParser.cc $(OPT) 
 
 LatentCrfParser.o: LatentCrfModel.o parsing/LatentCrfParser.h parsing/LatentCrfParser.cc

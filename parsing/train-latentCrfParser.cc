@@ -125,11 +125,11 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
     //(LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
     //(MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
-    (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
+    (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.0), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
     (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
     (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
-    (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
+    (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(true), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     //(OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     //(TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     ;
@@ -434,12 +434,12 @@ int main(int argc, char **argv) {
   learningInfo.nSentsPerDot = 250;
 
   learningInfo.initializeThetasWithGaussian = false;
-  learningInfo.initializeThetasWithUniform = false;
-  learningInfo.initializeThetasWithModel1 = true;
+  learningInfo.initializeThetasWithUniform = true;
+  learningInfo.initializeThetasWithModel1 = false;
 
   learningInfo.initializeLambdasWithGaussian = false;
   learningInfo.initializeLambdasWithZero = true;
-  learningInfo.initializeLambdasWithOne = true;
+  learningInfo.initializeLambdasWithOne = false;
   
   // parse cmd params
   string textFilename, outputFilenamePrefix, initialLambdaParamsFilename, initialThetaParamsFilename, wordPairFeaturesFilename;

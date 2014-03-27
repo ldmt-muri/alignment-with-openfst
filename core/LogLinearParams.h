@@ -375,7 +375,7 @@ class LogLinearParams {
       assert(paramIdsPtr->size() == paramWeightsPtr->size());
       int count = paramIdsPtr->size();
       os << count;
-      for(int i = 0; i < paramIdsPtr->size(); i++) {
+      for(unsigned i = 0; i < paramIdsPtr->size(); i++) {
         os << (*paramIdsPtr)[i];
         os << (*paramWeightsPtr)[i];
       }

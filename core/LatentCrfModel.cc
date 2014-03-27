@@ -1073,6 +1073,12 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   mpi::reduce<double>(*model.learningInfo.mpiWorld, devSetNllPiece, reducedDevSetNll, std::plus<double>(), 0);
   assert(reducedNll != -1);
 
+  if(model.learningInfo.mpiWorld->rank() == 0) {
+    for(unsigned i = 0; i < reducedGradient.size(); ++i) {
+      cerr << "gradient(" << (*model.lambda->paramIdsPtr)[i] << ") = " << reducedGradient[i] << endl;
+    }
+  }
+  
   // fill in the gradient array allocated by lbfgs
   cerr << "before l2 reg, reducednll = " << reducedNll;
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
@@ -1464,9 +1470,15 @@ void LatentCrfModel::BlockCoordinateDescent() {
     }
     
     // debug info
-    if(learningInfo.debugLevel >= DebugLevel::CORPUS && learningInfo.mpiWorld->rank() == 0) {
+    if(learningInfo.mpiWorld->rank() == 0) {
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ====================== ITERATION " << learningInfo.iterationsCount << " =====================" << endl << endl;
       cerr << "master" << learningInfo.mpiWorld->rank() << ": ========== first, update thetas using a few EM iterations: =========" << endl << endl;
+      
+      cerr << "lambda->PrintParams()" << endl;
+      lambda->PrintParams();
+
+      cerr << endl << "nLogThetaGivenOneLabel.params.PrintParams()" << endl;
+      nLogThetaGivenOneLabel.PrintParams(vocabEncoder, true, true);
     }
   
     if(learningInfo.iterationsCount == 0 && learningInfo.optimizeLambdasFirst) {

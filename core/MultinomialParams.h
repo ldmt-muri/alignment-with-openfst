@@ -71,7 +71,6 @@ namespace MultinomialParams {
     // refactor variable names here (e.g. translations)
     void PrintParams() {
       // iterate over src tokens in the model
-      int64_t counter = 0;
       for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
@@ -82,14 +81,25 @@ namespace MultinomialParams {
     }
     
     // refactor variable names here (e.g. translations)
-    void PrintParams(const VocabEncoder &encoder) {
+    void PrintParams(const VocabEncoder &encoder, bool decodeContext=true, bool decodeDecision=false) {
       // iterate over src tokens in the model
-      int64_t counter = 0;
       for(typename boost::unordered_map<ContextType, MultinomialParam>::const_iterator srcIter = params.begin(); srcIter != params.end(); srcIter++) {
         const MultinomialParam &translations = (*srcIter).second;
         // iterate over tgt tokens 
         for(MultinomialParam::const_iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-          std::cerr << "-logp(" << encoder.Decode((*tgtIter).first) << "|" << (*srcIter).first << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
+          std::cerr << "-logp(";
+          if(decodeDecision) {
+            cerr << encoder.Decode((*tgtIter).first); 
+          } else {
+            cerr << tgtIter->first;
+          }
+          cerr << "|";
+          if(decodeContext) {
+            cerr << encoder.Decode((*srcIter).first);
+          } else {
+            cerr << srcIter->first;
+          }
+          cerr << ")=-log(" << nExp((*tgtIter).second) << ")=" << (*tgtIter).second << std::endl;
         }
       } 
     }

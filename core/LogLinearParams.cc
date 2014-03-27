@@ -489,8 +489,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
   auto srcToken = x_s[yI];
   auto prevSrcToken = yIM1 >= 0? x_s[yI] : START_OF_SENTENCE_Y_VALUE;
   auto tgtToken = x_t[i];
-  auto prevTgtToken = i > 0? x_t[i-1] : -1;
-  auto nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : (int64_t) -1;
+  //auto prevTgtToken = i > 0? x_t[i-1] : -1;
+  //auto nextTgtToken = (i < x_t.size() - 1)? x_t[i+1] : (int64_t) -1;
   std::pair<int64_t, int64_t> srcTgtPair(srcToken, tgtToken);
   auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, srcTgtPair);
   
@@ -596,7 +596,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       break;
       
       case FeatureTemplate::SYNC_END:
-      if(i == x_t.size() - 1 && yI == x_s.size() - 1) {
+        if(i == x_t.size() - 1 && yI == (int)x_s.size() - 1) {
         featureId.type = FeatureTemplate::SYNC_END;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
@@ -613,9 +613,9 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
       assert(false);
       break;
 
-      case FeatureTemplate::OTHER_ALIGNERS:
-      for(int alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
-	assert(learningInfo->currentSentId < otherAlignersOutput[alignerId]->size());
+    case FeatureTemplate::OTHER_ALIGNERS:
+      for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
+        assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
 	if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {continue;}
 	auto woodAlignments = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
 	featureId.type = FeatureTemplate::OTHER_ALIGNERS;
@@ -764,8 +764,8 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
       break;
 
       case FeatureTemplate::OTHER_ALIGNERS:
-      for(int alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
-        assert(learningInfo->currentSentId < otherAlignersOutput[alignerId]->size());
+      for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
+        assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
         if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
           continue;
         }
@@ -911,9 +911,9 @@ void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
   assert(sealed);
   cerr << "##################" << endl;
   cerr << "pointer to internal weights: " << paramWeightsPtr->data() << ". pointer to external weights: " << array << endl;
-  assert(arrayLength == paramWeightsPtr->size());
+  assert((unsigned)arrayLength == paramWeightsPtr->size());
   assert(paramWeightsPtr->size() == paramIndexes.size());
-  for(unsigned i = 0; i < arrayLength; i++) {
+  for(int i = 0; i < arrayLength; i++) {
     (*paramWeightsPtr)[i] = array[i];
   }
 }
@@ -931,7 +931,7 @@ void LogLinearParams::ConvertFeatureMapToFeatureArray(
   // set the active features 
   for(auto valuesMapIter = valuesMap.begin(); valuesMapIter != valuesMap.end(); valuesMapIter++) { 
     // skip constrained features 
-    if(paramIndexes[valuesMapIter->first] < constrainedFeaturesCount) { 
+    if(paramIndexes[valuesMapIter->first] < (int)constrainedFeaturesCount) { 
       continue; 
     } 
     // set the modified index in valuesArray 
