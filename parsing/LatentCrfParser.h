@@ -91,11 +91,12 @@ class LatentCrfParser : public LatentCrfModel {
   
   ~LatentCrfParser();
 
-  std::vector<int64_t>& GetObservableSequence(int exampleId);
+  std::vector<ObservationDetails>& GetObservableDetailsSequence(int exampleId);
+  std::vector<ObservationDetails>& GetReconstructedObservableDetailsSequence(int exampleId);
 
-  std::vector<int64_t>& GetObservableContext(int exampleId);
-
-  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId);
+  std::vector<int64_t>& GetObservableContext(int exampleId) override;
+  std::vector<int64_t>& GetObservableSequence(int exampleId) override;
+  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId) override;
 
   void InitTheta();
 
@@ -118,13 +119,13 @@ class LatentCrfParser : public LatentCrfModel {
                                      const std::string &initialThetaParamsFilename,
                                      const std::string &wordPairFeaturesFilename);
   
+  void Label(std::vector<ObservationDetails> &tokens, std::vector<int> &labels);
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
 
-  void Label(std::vector<int64_t> &tokens, std::vector<int64_t> &context, std::vector<int> &labels);
+  //void Label(std::vector<int64_t> &tokens, std::vector<int64_t> &context, std::vector<int> &labels);
 
   void Label(const string &labelsFilename);
-
-  void SetTestExample(std::vector<int64_t> &sent);
+  void SetTestExample(std::vector<ObservationDetails> &sent);
 
   double UpdateThetaMleForSent(const unsigned sentId, 
                                MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
@@ -148,7 +149,7 @@ class LatentCrfParser : public LatentCrfModel {
 
 
   // data
-  std::vector< std::vector<int64_t> > sents, contexts, testSents, testContexts;
+  std::vector< std::vector<ObservationDetails> > sents, testSents;
 
  public:
   // the value of y_i that indicates the sentence HEAD 
@@ -156,6 +157,7 @@ class LatentCrfParser : public LatentCrfModel {
   // the string representing the null token at the source sentence which produce "spurious" tgt words.
   static string ROOT_STR;
   static int ROOT_POSITION;
+  ObservationDetails ROOT_DETAILS;
 };
 
 #endif

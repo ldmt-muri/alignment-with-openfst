@@ -431,7 +431,7 @@ class LogLinearParams {
 		    FastSparseVector<double> &activeFeatures);
 
   // for dependency parsing
-  void FireFeatures(int64_t headId, int64_t childId,                                    
+  void FireFeatures(const ObservationDetails &headDetails, const ObservationDetails &childDetails,
                     FastSparseVector<double> &activeFeatures);
 
   int AddParams(const std::vector< FeatureId > &paramIds);

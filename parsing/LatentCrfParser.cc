@@ -54,14 +54,25 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
     boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
 
-  // encode the null token which is conventionally added to the beginning of the src sentnece. 
+  // encode the null token which is conventionally added to the beginning of the sentnece. 
   ROOT_STR = "__ROOT__";
   ROOT_ID = vocabEncoder.Encode(ROOT_STR);
   assert(ROOT_ID != vocabEncoder.UnkInt());
+  string zero = "0", minusOne = "-1";
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(zero));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(minusOne));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(minusOne));
+  ROOT_DETAILS.details.push_back(vocabEncoder.Encode(ROOT_STR));
   
   // read and encode data
   sents.clear();
-  vocabEncoder.Read(textFilename, sents);
+  vocabEncoder.ReadConll(textFilename, sents);
   assert(sents.size() > 0);
   examplesCount = sents.size();
 
@@ -124,17 +135,17 @@ void LatentCrfParser::InitTheta() {
   // first initialize nlogthetas 
   nLogThetaGivenOneLabel.params.clear();
   for(unsigned sentId = 0; sentId < sents.size(); ++sentId) {
-    vector<int64_t> &sent = sents[sentId];
-    vector<int64_t> &reconstructedSent = sents[sentId];
+    vector<ObservationDetails> &sent = sents[sentId];
+    vector<ObservationDetails> &reconstructedSent = sents[sentId];
     for(unsigned i = 0; i < sent.size(); ++i) {
-      nLogThetaGivenOneLabel.params[ROOT_ID][sent[i]] = 
+      nLogThetaGivenOneLabel.params[ROOT_ID][sent[i].details[1]] = 
         learningInfo.initializeThetasWithGaussian?
         abs(gaussianSampler.Draw()) : 1.0;
       auto parentToken = sent[i];
       for(unsigned j = 0; j < reconstructedSent.size(); ++j) {
         if(i == j) { continue; }
         auto childToken = reconstructedSent[j];
-        nLogThetaGivenOneLabel.params[parentToken][childToken] = 
+        nLogThetaGivenOneLabel.params[parentToken.details[1]][childToken.details[1]] = 
           learningInfo.initializeThetasWithGaussian?
           abs(gaussianSampler.Draw()):1.0;
       }
@@ -163,7 +174,7 @@ void LatentCrfParser::PrepareExample(unsigned exampleId) {
   }
 }
 
-vector<int64_t>& LatentCrfParser::GetReconstructedObservableSequence(int exampleId) {
+vector<ObservationDetails>& LatentCrfParser::GetReconstructedObservableDetailsSequence(int exampleId) {
   if(testingMode) {
     return testSents[exampleId];
   } else {
@@ -175,7 +186,23 @@ vector<int64_t>& LatentCrfParser::GetReconstructedObservableSequence(int example
   }
 }
 
-vector<int64_t>& LatentCrfParser::GetObservableSequence(int exampleId) {
+void LatentCrfParser::Label(std::vector<int64_t> &tokens, std::vector<int> &labels) { 
+  throw std::runtime_error("void LatentCrfParser::Label(std::vector<int64_t> &tokens, std::vector<int> &labels) is not implemented"); 
+}
+
+vector<int64_t>& LatentCrfParser::GetObservableSequence(int exampleId) { 
+  throw std::runtime_error("vector<int64_t>& LatentCrfParser::GetObservableSequence(int exampleId) is not implemented");
+}
+
+vector<int64_t>& LatentCrfParser::GetObservableContext(int exampleId) { 
+  throw std::runtime_error("vector<int64_t>& LatentCrfParser::GetObservableContext(int exampleId) is not implemented");
+}
+
+vector<int64_t>& LatentCrfParser::GetReconstructedObservableSequence(int exampleId) { 
+  throw std::runtime_error("vector<int64_t>& LatentCrfParser::GetReconstructedObservableSequence(int exampleId) is not implemented");
+}
+
+vector<ObservationDetails>& LatentCrfParser::GetObservableDetailsSequence(int exampleId) {
   if(testingMode) {
     assert((unsigned)exampleId < testSents.size());
     return testSents[exampleId];
@@ -186,22 +213,12 @@ vector<int64_t>& LatentCrfParser::GetObservableSequence(int exampleId) {
   }
 }
 
-vector<int64_t>& LatentCrfParser::GetObservableContext(int exampleId) { 
-  if(testingMode) {
-    assert((unsigned)exampleId < testSents.size());
-    return testSents[exampleId];
-  } else {
-    assert((unsigned)exampleId < sents.size());
-    return sents[exampleId];
-  }
-}
-
-void LatentCrfParser::SetTestExample(vector<int64_t> &sent) {
+void LatentCrfParser::SetTestExample(vector<ObservationDetails> &sent) {
   testSents.clear();
   testSents.push_back(sent);
 }
 
-void LatentCrfParser::Label(vector<int64_t> &tokens, vector<int> &labels) {
+void LatentCrfParser::Label(vector<ObservationDetails> &tokens, vector<int> &labels) {
 
   // set up
   assert(labels.size() == 0); 
@@ -232,7 +249,6 @@ void LatentCrfParser::Label(const string &labelsFilename) {
       continue;
     }
 
-    //std::vector<int64_t> &sent = GetObservableSequence(exampleId);
     std::vector<int> labels = GetViterbiParse(exampleId, true);
     
     // TODO: depparse. fix how the viterbi parses are written to file
@@ -265,6 +281,7 @@ int64_t LatentCrfParser::GetContextOfTheta(unsigned sentId, int y) {
   }
 }
 
+// convenience function
 void LatentCrfParser::FireFeatures(const unsigned sentId,
                                   FastSparseVector<double> &h) {
   MatrixXd adjacency, laplacianHat;
@@ -278,14 +295,14 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
                                     bool conditionOnZ) {
  
   // build A_{y|x} matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
-  auto tokens = GetObservableSequence(sentId);
-  auto reconstructedTokens = GetReconstructedObservableSequence(sentId);
+  auto tokens = GetObservableDetailsSequence(sentId);
+  auto reconstructedTokens = GetReconstructedObservableDetailsSequence(sentId);
   assert(tokens.size() == reconstructedTokens.size());
   // adjacency matrix A(y|x) in (Koo et al. 2007)
   adjacency.resize(tokens.size(), tokens.size());
   for(unsigned headPosition = 0; headPosition < tokens.size(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < tokens.size(); ++childPosition) {
-      double multinomialTerm = conditionOnZ? nLogThetaGivenOneLabel[reconstructedTokens[headPosition]][reconstructedTokens[childPosition]]: 0.0;
+      double multinomialTerm = conditionOnZ? nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[1]][reconstructedTokens[childPosition].details[1]]: 0.0;
       FastSparseVector<double> activeFeatures;
       lambda->FireFeatures(tokens[headPosition], tokens[childPosition], activeFeatures);
       adjacency(headPosition, childPosition) = 
@@ -297,10 +314,10 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   VectorXd rootScores(tokens.size());
   for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
     double multinomialTerm = conditionOnZ? 
-      nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition]]: 
+      nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[1]]: 
       0.0;
     FastSparseVector<double> activeFeatures;
-    lambda->FireFeatures(LatentCrfParser::ROOT_ID, tokens[rootPosition], activeFeatures);
+    lambda->FireFeatures(LatentCrfParser::ROOT_DETAILS, tokens[rootPosition], activeFeatures);
     rootScores(rootPosition) = MultinomialParams::nExp( multinomialTerm + lambda->DotProduct( activeFeatures ) );
   }
   // laplacian matrix L(y|x) in (Koo et al. 2007)
@@ -337,14 +354,14 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   cerr << "Z = " << Z << endl;
   assert(C < Z);
 
-  auto reconstructedTokens = GetReconstructedObservableSequence(sentId);
+  auto reconstructedTokens = GetReconstructedObservableDetailsSequence(sentId);
   
   // for (h,m) \in \cal{T}_{np}^s: mle[h][m] += nLogThetaGivenOneLabel[h][m] * marginal(h,m;y|z,x)
   for(unsigned rootPosition = 0; rootPosition < yGivenXZLaplacianHat.rows(); ++rootPosition) {
     // marginal probability of making this decision; \mu_{0,m} in (Koo et al. 2007)
     double marginal = yGivenXZLaplacianHat(0,rootPosition) * yGivenXZLaplacianHatInverse(rootPosition,0);
-    mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition]] += nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition]] * marginal;
-    mleMarginals[LatentCrfParser::ROOT_ID] += nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition]] * marginal;
+    mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[1]] += nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[1]] * marginal;
+    mleMarginals[LatentCrfParser::ROOT_ID] += nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[1]] * marginal;
   }
   for(unsigned headPosition = 0; headPosition < yGivenXZLaplacianHat.rows(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < yGivenXZLaplacianHat.cols(); ++childPosition) {
@@ -354,8 +371,8 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
       marginal -= headPosition == 0? 0.0 :
         yGivenXZAdjacency(headPosition, childPosition) * 
         yGivenXZLaplacianHatInverse(childPosition, headPosition);
-      mle[reconstructedTokens[headPosition]][reconstructedTokens[childPosition]] += marginal * nLogThetaGivenOneLabel[reconstructedTokens[headPosition]][reconstructedTokens[childPosition]];
-      mleMarginals[reconstructedTokens[headPosition]] += marginal * nLogThetaGivenOneLabel[reconstructedTokens[headPosition]][reconstructedTokens[childPosition]];
+      mle[reconstructedTokens[headPosition].details[1]][reconstructedTokens[childPosition].details[1]] += marginal * nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[1]][reconstructedTokens[childPosition].details[1]];
+      mleMarginals[reconstructedTokens[headPosition].details[1]] += marginal * nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[1]][reconstructedTokens[childPosition].details[1]];
     }
   }
 
@@ -381,7 +398,7 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     }
 
     // prune long sequences
-    if( GetObservableSequence(sentId).size() > learningInfo.maxSequenceLength ) {
+    if( GetObservableDetailsSequence(sentId).size() > learningInfo.maxSequenceLength ) {
       continue;
     }
     
@@ -408,7 +425,7 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     cerr << "C = " << C << endl << "Z = " << Z << endl;
     assert(C < Z);
     
-    auto tokens = GetObservableSequence(sentId);
+    auto tokens = GetObservableDetailsSequence(sentId);
     // for (h,m) in \cal{T}_{np}^s:
     //   for k in f(x,h,m):
     //     dll/d\lambda_k += f_k(x,h,m) * [marginal(h,m;y|z,x)-marginal(h,m;y|x)]
@@ -465,7 +482,7 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     // don't forget to also update the gradients of root selection features
     for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
       FastSparseVector<double> activeFeatures;
-      lambda->FireFeatures(ROOT_ID, tokens[rootPosition], activeFeatures);
+      lambda->FireFeatures(ROOT_DETAILS, tokens[rootPosition], activeFeatures);
       double marginalGivenXZ = yGivenXZLaplacianHat(0, rootPosition) * yGivenXZLaplacianHatInverse(rootPosition, 0);
       double marginalGivenX =   yGivenXLaplacianHat(0, rootPosition) * yGivenXLaplacianHatInverse(rootPosition, 0);
       double marginal = marginalGivenXZ - marginalGivenX;

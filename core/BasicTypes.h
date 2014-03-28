@@ -33,6 +33,13 @@ namespace DebugLevel {
   enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6, TEMP = 4};
 }
 
+// one rich observation (e.g. token, its brown cluster, its POS tag, its morphological analysis ...etc)
+struct ObservationDetails {
+  ObservationDetails() {}
+  ObservationDetails(const std::vector<int64_t> &_details) { this->details = _details; }
+  std::vector<int64_t> details;
+};
+
 // documentation can be found at the paper http://www.cs.berkeley.edu/~jduchi/projects/DuchiHaSi10.pdf
 struct AdagradParams {
   double eta;

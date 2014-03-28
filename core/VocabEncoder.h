@@ -281,6 +281,43 @@ class VocabEncoder {
     }
   }
   
+  void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data) {
+    assert(data.size() == 0);    
+    std::ifstream conllFile(conllFilename.c_str(), std::ios::in);
+    std::string line;
+
+    unsigned sentIndex = 0;
+    unsigned tokenIndex = 0;
+    // make room for the first sentence
+    data.resize(1);
+    while(getline(conllFile, line)) {
+      std::vector<std::string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      // sanity check
+      assert(tokenIndex == data[sentIndex].size());
+        
+      if(splits.size() == 0) {
+        // update indexes
+        sentIndex += 1;
+        tokenIndex = 0;
+        // make room for next sentence
+        data.resize(data.size()+1);
+      } else {
+        // encode the splits
+        vector<int64_t> encodedSplits;
+        Encode(splits, encodedSplits);
+        // update indexes
+        tokenIndex += 1;
+        // add a complex observation to the current sentence
+        ObservationDetails tokenDetails(encodedSplits);
+        data[sentIndex].push_back(tokenDetails);
+      }
+    }
+    if(data[data.size()-1].size() == 0) {
+      data.resize(data.size()-1);
+    }
+  }
+
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int64_t> > &data) {

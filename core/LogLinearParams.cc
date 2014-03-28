@@ -451,13 +451,13 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
 }
 
 // for dependnecy parsing
-void LogLinearParams::FireFeatures(int64_t headId, 
-                                   int64_t childId,
+void LogLinearParams::FireFeatures(const ObservationDetails &headDetails, 
+                                   const ObservationDetails &childDetails,
                                    FastSparseVector<double> &activeFeatures) {
   FeatureId featureId;
   featureId.type = FeatureTemplate::SRC0_TGT0;
-  featureId.wordPair.srcWord = headId;
-  featureId.wordPair.tgtWord = childId;
+  featureId.wordPair.srcWord = headDetails.details[1];
+  featureId.wordPair.tgtWord = childDetails.details[1];
   
   AddParam(featureId);
   activeFeatures[paramIndexes[featureId]] += 1.0;
