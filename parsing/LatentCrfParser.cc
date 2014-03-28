@@ -250,13 +250,23 @@ void LatentCrfParser::Label(const string &labelsFilename) {
     }
 
     std::vector<int> labels = GetViterbiParse(exampleId, true);
+    auto tokens = GetObservableDetailsSequence(exampleId);
+    assert(labels.size() == tokens.size());
     
-    // TODO: depparse. fix how the viterbi parses are written to file
     stringstream ss;
     for(unsigned i = 0; i < labels.size(); ++i) {
-      // determine the alignment (i.e. src position) for this tgt position (i)
-      int parent = labels[i] - ROOT_POSITION;
-      ss << parent << " ";
+      // conll token index is one based 
+      int parent = labels[i] + 1;
+      ss << tokens[i].details[0] << "\t" \
+         << tokens[i].details[1] << "\t" \
+         << tokens[i].details[2] << "\t" \
+         << tokens[i].details[3] << "\t" \
+         << tokens[i].details[4] << "\t" \
+         << tokens[i].details[5] << "\t" \
+         << parent << "\t" \
+         << "_" << "\t" \
+         << "_" << "\t" \
+         << "_" << endl;
     }
     ss << endl;
     if(learningInfo.mpiWorld->rank() == 0){

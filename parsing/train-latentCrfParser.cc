@@ -485,20 +485,20 @@ int main(int argc, char **argv) {
     //return 0;
   }
     
-  // run viterbi (and write alignments in giza format)
+  // run viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
 
   // fix learningInfo.test_size
-  LatentCrfParser &aligner = *( (LatentCrfParser*) model );
-  cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
-  if(aligner.learningInfo.firstKExamplesToLabel <= 0) {
-    aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
-    cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
+  LatentCrfParser &parser = *( (LatentCrfParser*) model );
+  cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
+  if(parser.learningInfo.firstKExamplesToLabel <= 0) {
+    parser.learningInfo.firstKExamplesToLabel = parser.examplesCount;
+    cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
   }
   
   ((LatentCrfParser*)model)->Label(labelsFilename);
   if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "alignments can be found at " << labelsFilename << endl;
+    cerr << "parses can be found at " << labelsFilename << endl;
   }
 
   learningInfo.ClearSharedMemorySegment();
