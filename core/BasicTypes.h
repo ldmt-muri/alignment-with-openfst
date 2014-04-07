@@ -36,7 +36,9 @@ namespace DebugLevel {
 // one rich observation (e.g. token, its brown cluster, its POS tag, its morphological analysis ...etc)
 struct ObservationDetails {
   ObservationDetails() {}
-  ObservationDetails(const std::vector<int64_t> &_details) { this->details = _details; }
+  ObservationDetails(const std::vector<int64_t> &_details) { 
+    this->details = _details;
+  }
   std::vector<int64_t> details;
 };
 
@@ -57,7 +59,7 @@ struct LbfgsParams {
   LbfgsParams() {
     maxIterations = 10;
     memoryBuffer = 6;
-    precision = 0.000000000000001;
+    precision = 0.000000000000000000000000001;
     maxEvalsPerIteration = 3;
     l1Strength = 0.0;
   }

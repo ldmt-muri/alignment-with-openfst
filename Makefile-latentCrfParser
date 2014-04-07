@@ -16,10 +16,10 @@ LatentCrfParser.o: LatentCrfModel.o parsing/LatentCrfParser.h parsing/LatentCrfP
 	$(CC) $(BEFORE) $(SINGLE) parsing/LatentCrfParser.cc $(OPT)
 
 # Share code
-LatentCrfModel.o: LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h
+LatentCrfModel.o: LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h core/BasicTypes.h
 	$(CC) $(BEFORE) $(SINGLE) core/LatentCrfModel.cc $(OPT)
 
-LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h
+LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h core/BasicTypes.h
 	$(CC) $(BEFORE) $(SINGLE) core/LogLinearParams.cc $(OPT)
 
 FstUtils.o: wammar-utils/FstUtils.cc wammar-utils/FstUtils.h

@@ -292,7 +292,7 @@ class VocabEncoder {
     data.resize(1);
     while(getline(conllFile, line)) {
       std::vector<std::string> splits;
-      StringUtils::SplitString(line, ' ', splits);
+      StringUtils::SplitString(line, '\t', splits);
       // sanity check
       assert(tokenIndex == data[sentIndex].size());
         
