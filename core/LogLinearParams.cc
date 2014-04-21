@@ -42,14 +42,57 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << "SRC0_TGT0";
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
+  case FeatureTemplate::HEAD_CHILD_TOKEN:
+    os << "HEAD_CHILD_TOKEN";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
+    break;
+  case FeatureTemplate::HEAD_CHILD_POS:
+    os << "HEAD_CHILD_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
+    break;
   case FeatureTemplate::PRECOMPUTED:
     os << "PRECOMPUTED";
     os << '|' << FeatureId::vocabEncoder->Decode(obj.precomputed);
     break;
   case FeatureTemplate::DIAGONAL_DEVIATION:
-  case FeatureTemplate::SRC_WORD_BIAS:
     os << "DIAGONAL_DEVIATION";
     os << '|' << obj.wordBias;
+    break;
+  case FeatureTemplate::SRC_WORD_BIAS:
+    os << "SRC_WORD_BIAS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::HEAD_POS:
+    os << "HEAD_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::CHILD_POS:
+    os << "CHILD_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::HCX_POS:
+    os << "HCX_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::CHX_POS:
+    os << "CHX_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::XHC_POS:
+    os << "XHC_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::XCH_POS:
+    os << "XCH_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::HXC_POS:
+    os << "HXC_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    break;
+  case FeatureTemplate::CXH_POS:
+    os << "CXH_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
     break;
   case FeatureTemplate::SYNC_START:
     os << "SYNC_START";
@@ -327,7 +370,7 @@ void LogLinearParams::LoadOtherAlignersOutput() {
     for(auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
         filenameIter != learningInfo->otherAlignersOutputFilenames.end();
         ++filenameIter) {
-      cerr << "alginer filename: " << *filenameIter << endl;
+      cerr << "aligner filename: " << *filenameIter << endl;
       auto alignerOutput = new vector< vector< set<int>* >* >();
       //cerr << "adding this aligner to the list of aligners" << endl;
       otherAlignersOutput.push_back(alignerOutput);
@@ -453,16 +496,98 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
 // for dependnecy parsing
 void LogLinearParams::FireFeatures(const ObservationDetails &headDetails, 
                                    const ObservationDetails &childDetails,
+                                   const vector<ObservationDetails> & sentDetails,
                                    FastSparseVector<double> &activeFeatures) {
   FeatureId featureId;
-  featureId.type = FeatureTemplate::SRC0_TGT0;
-  featureId.wordPair.srcWord = headDetails.details[1];
-  featureId.wordPair.tgtWord = childDetails.details[1];
-  
+
+  featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN;
+  featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
+  featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
   AddParam(featureId);
   activeFeatures[paramIndexes[featureId]] += 1.0;
-}
 
+  featureId.type = FeatureTemplate::HEAD_CHILD_POS;
+  featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+  featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+  AddParam(featureId);
+  activeFeatures[paramIndexes[featureId]] += 1.0;
+  
+  featureId.type = FeatureTemplate::HEAD_POS;
+  featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+  AddParam(featureId);
+  activeFeatures[paramIndexes[featureId]] += 1.0;
+
+  featureId.type = FeatureTemplate::CHILD_POS;
+  featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+  AddParam(featureId);
+  activeFeatures[paramIndexes[featureId]] += 1.0;
+
+  unsigned earlierIndex = min(headDetails.details[ObservationDetailsHeader::ID]-1, 
+                              childDetails.details[ObservationDetailsHeader::ID]-1);
+  unsigned laterIndex = max(headDetails.details[ObservationDetailsHeader::ID]-1, 
+                            childDetails.details[ObservationDetailsHeader::ID]-1);
+  
+  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
+  
+    // inbetween
+    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+      FeatureTemplate::HXC_POS: FeatureTemplate::CXH_POS;
+    for(unsigned inbetweenIndex = 1 + earlierIndex; inbetweenIndex < laterIndex; ++inbetweenIndex) {
+      assert(inbetweenIndex >= 0 && inbetweenIndex < sentDetails.size());
+      assert(ObservationDetailsHeader::CPOSTAG < sentDetails[inbetweenIndex].details.size());
+      featureId.wordBias = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+    }
+    
+
+    // outside to the left 
+    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+      FeatureTemplate::XHC_POS: FeatureTemplate::XCH_POS;
+    featureId.wordBias = 
+      earlierIndex == 0?
+      -1:
+      sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
+    
+    // outside to the right 
+    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+      FeatureTemplate::HCX_POS: FeatureTemplate::CHX_POS;
+    featureId.wordBias = 
+      laterIndex == sentDetails.size() - 1?
+      -1:
+      sentDetails[laterIndex+1].details[ObservationDetailsHeader::CPOSTAG];
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
+    
+  }
+
+  // log alignment jump (two versions below, with and without conjoining the head pos tag)
+  featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
+  featureId.biasedAlignmentJump.alignmentJump = 
+    headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+    log(1 + 2.0 * (laterIndex - earlierIndex)):
+    -1 * log(1 + 2.0 * (laterIndex - earlierIndex));
+  // biased version:
+  featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+  AddParam(featureId);
+  activeFeatures[paramIndexes[featureId]] += 1.0;
+  // unbiased version:
+  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
+    featureId.biasedAlignmentJump.wordBias = -1;
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
+  }
+
+  // alignment jump
+  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
+    featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
+    featureId.alignmentJump = headDetails.details[ObservationDetailsHeader::ID] - childDetails.details[ObservationDetailsHeader::ID];
+    AddParam(featureId);
+    activeFeatures[paramIndexes[featureId]] += 1.0;
+  }
+}
 
 // for word alignment
 // x_t is the tgt sentence, and x_s is the src sentence (which has a null token at position 0)

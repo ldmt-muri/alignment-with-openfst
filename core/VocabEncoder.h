@@ -306,6 +306,9 @@ class VocabEncoder {
         // encode the splits
         vector<int64_t> encodedSplits;
         Encode(splits, encodedSplits);
+        // replace the integral fields with their actual value instead of their vocab id
+        encodedSplits[ObservationDetailsHeader::ID] = (int64_t)stoi(splits[ObservationDetailsHeader::ID]);
+        encodedSplits[ObservationDetailsHeader::HEAD] = (int64_t)stoi(splits[ObservationDetailsHeader::HEAD]);
         // update indexes
         tokenIndex += 1;
         // add a complex observation to the current sentence

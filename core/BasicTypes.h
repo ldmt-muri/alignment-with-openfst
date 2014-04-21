@@ -1,7 +1,31 @@
 #ifndef _BASIC_TYPES_H_
 #define _BASIC_TYPES_H_
 
-enum FeatureTemplate { LABEL_BIGRAM=0, SRC_BIGRAM=1, ALIGNMENT_JUMP=2, LOG_ALIGNMENT_JUMP=3, ALIGNMENT_JUMP_IS_ZERO=4, SRC0_TGT0=5, PRECOMPUTED=6, DIAGONAL_DEVIATION=7, SYNC_START=8, SYNC_END=9, OTHER_ALIGNERS=10, NULL_ALIGNMENT=11 , NULL_ALIGNMENT_LENGTH_RATIO=12 , EMISSION=13, SRC_WORD_BIAS=14, BOUNDARY_LABELS=15};
+enum FeatureTemplate { 
+  // general
+  PRECOMPUTED, 
+  ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP,
+  // pos 
+  LABEL_BIGRAM, 
+  // alignment
+  SRC_BIGRAM, ALIGNMENT_JUMP_IS_ZERO, SRC0_TGT0, 
+  DIAGONAL_DEVIATION, SYNC_START, SYNC_END, OTHER_ALIGNERS, NULL_ALIGNMENT, NULL_ALIGNMENT_LENGTH_RATIO, 
+  EMISSION, SRC_WORD_BIAS, BOUNDARY_LABELS, 
+  // dependency parsing
+  HEAD_CHILD_TOKEN, HEAD_CHILD_POS, 
+  HEAD_POS, 
+  CHILD_POS, 
+  // in the middle (head before child)
+  HXC_POS, 
+  // in the middle (child before head)
+  CXH_POS,
+  // outside to the left 
+  XHC_POS,
+  XCH_POS,
+  // outside to the right
+  HCX_POS,
+  CHX_POS
+};
 
 namespace Distribution {
   enum Distribution {
@@ -41,6 +65,13 @@ struct ObservationDetails {
   }
   std::vector<int64_t> details;
 };
+
+// observation details headers
+namespace ObservationDetailsHeader {
+  enum ObservationDetailsHeader {
+    ID=0, FORM=1, LEMMA=2, CPOSTAG=3, RECONSTRUCTED=4, POSTAG=4, FEATS=5, HEAD=6, DEPREL=7, PHEAD=8, PDEPREL=9
+  };
+}
 
 // documentation can be found at the paper http://www.cs.berkeley.edu/~jduchi/projects/DuchiHaSi10.pdf
 struct AdagradParams {

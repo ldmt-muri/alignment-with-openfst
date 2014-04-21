@@ -64,53 +64,63 @@ public:
   void serialize(Archive & ar, const unsigned int version) {
     ar & type;
     switch(type) {
-      case FeatureTemplate::BOUNDARY_LABELS:
-        ar & boundaryLabel.position;
-        ar & boundaryLabel.label;
-        break;
-      case FeatureTemplate::DIAGONAL_DEVIATION:
-      case FeatureTemplate::SRC_WORD_BIAS:
-        ar & wordBias;
-        break;
-      case FeatureTemplate::ALIGNMENT_JUMP:
-      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
-        ar & alignmentJump;
-        break;
-      case FeatureTemplate::LOG_ALIGNMENT_JUMP:
-        ar & biasedAlignmentJump.alignmentJump;
-        ar & biasedAlignmentJump.wordBias;
-        break;
+    case FeatureTemplate::BOUNDARY_LABELS:
+      ar & boundaryLabel.position;
+      ar & boundaryLabel.label;
+      break;
+    case FeatureTemplate::DIAGONAL_DEVIATION:
+    case FeatureTemplate::SRC_WORD_BIAS:
+    case FeatureTemplate::HEAD_POS:
+    case FeatureTemplate::CHILD_POS:
+    case FeatureTemplate::HXC_POS:
+    case FeatureTemplate::CXH_POS:
+    case FeatureTemplate::XHC_POS:
+    case FeatureTemplate::XCH_POS:
+    case FeatureTemplate::HCX_POS:
+    case FeatureTemplate::CHX_POS:
+      ar & wordBias;
+      break;
+    case FeatureTemplate::ALIGNMENT_JUMP:
+    case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      ar & alignmentJump;
+      break;
+    case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      ar & biasedAlignmentJump.alignmentJump;
+      ar & biasedAlignmentJump.wordBias;
+      break;
       case FeatureTemplate::SYNC_END:
-      case FeatureTemplate::SYNC_START:
-      case FeatureTemplate::NULL_ALIGNMENT:
-      case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
-        break;
+    case FeatureTemplate::SYNC_START:
+    case FeatureTemplate::NULL_ALIGNMENT:
+    case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
+      break;
     case FeatureTemplate::EMISSION:
       ar & emission.displacement;
       ar & emission.label;
       ar & emission.word;
       break;
-      case FeatureTemplate::LABEL_BIGRAM:
-      case FeatureTemplate::SRC_BIGRAM:
-        ar & bigram.previous;
-        ar & bigram.current;
+    case FeatureTemplate::LABEL_BIGRAM:
+    case FeatureTemplate::SRC_BIGRAM:
+      ar & bigram.previous;
+      ar & bigram.current;
+      break;
+    case FeatureTemplate::PRECOMPUTED:
+      ar & precomputed;
         break;
-      case FeatureTemplate::PRECOMPUTED:
-        ar & precomputed;
-        break;
-      case FeatureTemplate::SRC0_TGT0:
-        ar & wordPair.srcWord;
-        ar & wordPair.tgtWord;
-        break;
+    case FeatureTemplate::SRC0_TGT0:
+    case FeatureTemplate::HEAD_CHILD_TOKEN:
+    case FeatureTemplate::HEAD_CHILD_POS:
+      ar & wordPair.srcWord;
+      ar & wordPair.tgtWord;
+      break;
     case FeatureTemplate::OTHER_ALIGNERS:
       ar & otherAligner.alignerId;
       ar & otherAligner.compatible;
       break;
     default:
-        assert(false);
+      assert(false);
     }
   }
-
+  
   bool operator<(const FeatureId& rhs) const {
     if(type < rhs.type) return true;
     switch(type) {
@@ -143,7 +153,9 @@ public:
           (biasedAlignmentJump.alignmentJump == rhs.biasedAlignmentJump.alignmentJump && biasedAlignmentJump.wordBias < rhs.biasedAlignmentJump.wordBias);
         break;
       case SRC0_TGT0:
-        return wordPair.srcWord < rhs.wordPair.srcWord || \
+      case FeatureTemplate::HEAD_CHILD_TOKEN:
+      case FeatureTemplate::HEAD_CHILD_POS:        
+        return wordPair.srcWord < rhs.wordPair.srcWord ||               \
           (wordPair.srcWord == rhs.wordPair.srcWord && wordPair.tgtWord < rhs.wordPair.tgtWord);
         break;
       case PRECOMPUTED:
@@ -151,6 +163,14 @@ public:
         break;
       case DIAGONAL_DEVIATION:
       case SRC_WORD_BIAS:
+      case FeatureTemplate::HEAD_POS:
+      case FeatureTemplate::CHILD_POS:
+      case FeatureTemplate::HXC_POS:
+      case FeatureTemplate::CXH_POS:
+      case FeatureTemplate::XHC_POS:
+      case FeatureTemplate::XCH_POS:
+      case FeatureTemplate::HCX_POS:
+      case FeatureTemplate::CHX_POS:
         return wordBias < rhs.wordBias; 
         break;
       case SYNC_START:
@@ -162,6 +182,7 @@ public:
     case OTHER_ALIGNERS:
       return otherAligner.alignerId < rhs.otherAligner.alignerId || \
         (otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible);
+      
       default:
         assert(false);
     }
@@ -193,6 +214,8 @@ public:
         biasedAlignmentJump.wordBias != rhs.biasedAlignmentJump.wordBias;
       break;
     case SRC0_TGT0:
+    case HEAD_CHILD_TOKEN:
+    case HEAD_CHILD_POS:
       return wordPair.srcWord != rhs.wordPair.srcWord || wordPair.tgtWord != rhs.wordPair.tgtWord;
       break;
     case PRECOMPUTED:
@@ -200,6 +223,14 @@ public:
       break;
     case DIAGONAL_DEVIATION:
     case SRC_WORD_BIAS:
+    case FeatureTemplate::HEAD_POS:
+    case FeatureTemplate::CHILD_POS:
+    case FeatureTemplate::HXC_POS:
+    case FeatureTemplate::CXH_POS:
+    case FeatureTemplate::XHC_POS:
+    case FeatureTemplate::XCH_POS:
+    case FeatureTemplate::HCX_POS:
+    case FeatureTemplate::CHX_POS:
       return wordBias != rhs.wordBias;
       break;
     case SYNC_START:
@@ -247,6 +278,8 @@ public:
           boost::hash_combine(seed, x.biasedAlignmentJump.wordBias);
           break;
         case SRC0_TGT0:
+        case HEAD_CHILD_TOKEN:
+        case HEAD_CHILD_POS:
           boost::hash_combine(seed, x.wordPair.srcWord);
           boost::hash_combine(seed, x.wordPair.tgtWord);
           break;
@@ -255,6 +288,14 @@ public:
           break;
         case DIAGONAL_DEVIATION:
         case SRC_WORD_BIAS:
+        case HEAD_POS:
+        case CHILD_POS:
+        case HXC_POS:
+        case CXH_POS:
+        case XHC_POS:
+        case XCH_POS:
+        case HCX_POS:
+        case CHX_POS:
           boost::hash_combine(seed, x.wordBias);
           break;
         case SYNC_START:
@@ -299,6 +340,8 @@ public:
             left.biasedAlignmentJump.wordBias == right.biasedAlignmentJump.wordBias;
           break;
         case FeatureTemplate::SRC0_TGT0:
+        case FeatureTemplate::HEAD_CHILD_TOKEN:
+        case FeatureTemplate::HEAD_CHILD_POS:
           return left.wordPair.srcWord == right.wordPair.srcWord && left.wordPair.tgtWord == right.wordPair.tgtWord;
           break;
         case FeatureTemplate::PRECOMPUTED:
@@ -306,6 +349,14 @@ public:
           break;
         case FeatureTemplate::DIAGONAL_DEVIATION:
         case FeatureTemplate::SRC_WORD_BIAS:
+        case FeatureTemplate::HEAD_POS:
+        case FeatureTemplate::CHILD_POS:
+        case FeatureTemplate::HXC_POS:
+        case FeatureTemplate::CXH_POS:
+        case FeatureTemplate::HCX_POS:
+        case FeatureTemplate::CHX_POS:
+        case FeatureTemplate::XHC_POS:
+        case FeatureTemplate::XCH_POS:
           return left.wordBias == right.wordBias;
           break;
         case FeatureTemplate::SYNC_START:
@@ -432,6 +483,7 @@ class LogLinearParams {
 
   // for dependency parsing
   void FireFeatures(const ObservationDetails &headDetails, const ObservationDetails &childDetails,
+                    const std::vector<ObservationDetails> &sentDetails,
                     FastSparseVector<double> &activeFeatures);
 
   int AddParams(const std::vector< FeatureId > &paramIds);

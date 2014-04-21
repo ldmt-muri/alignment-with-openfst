@@ -60,7 +60,7 @@ class LearningInfo {
     initializeLambdasWithOne = false;
     initializeLambdasWithGaussian = false;
     allowNullAlignments = true;
-    maxSequenceLength = 40;
+    maxSequenceLength = 0;
     hiddenSequenceIsMarkovian = true;
     cacheActiveFeatures = false;
     multinomialSymmetricDirichletAlpha = 1.0;
@@ -70,8 +70,9 @@ class LearningInfo {
     firePrecomputedFeaturesForXIM2 = firePrecomputedFeaturesForXIM1 = firePrecomputedFeaturesForXIP1 = firePrecomputedFeaturesForXIP2 = false;
     firePrecomputedFeaturesForXI = true;
     tagDictFilename="";
+    preventSelfAlignments=false;
   }
-
+  
   bool IsModelConverged() {
     assert(useMaxIterationsCount || useMinLikelihoodDiff || useEarlyStopping || useMinLikelihoodRelativeDiff);
     // logging
@@ -363,6 +364,8 @@ class LearningInfo {
   string goldFilename;
  
   string tagDictFilename;
+
+  bool preventSelfAlignments;
 
 };
 

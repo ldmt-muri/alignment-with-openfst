@@ -13,6 +13,7 @@
 #include <utility>
 #include <tuple>
 
+#include <boost/iterator.hpp>
 #include <boost/unordered_map.hpp>
 
 #include "../wammar-utils/unordered_map_serialization.hpp"
@@ -112,6 +113,47 @@ namespace MultinomialParams {
   static const int NLOG_ZERO = 300;
   static const int NLOG_INF = -200;
 
+  // refactor variable names here (e.g. translations)
+  // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
+  // for smoothing, use alpha > 1.0
+  // for sparsity, use alpha < 1.0
+  // for MLE, use alpha = 1.0
+  template <typename ContextType>
+    void NormalizeParams(ConditionalMultinomialParam<ContextType> &params, 
+                         double symDirichletAlpha = 1.0, bool unnormalizedParamsAreInNLog = true,
+                         bool normalizedParamsAreInNLog = true, bool useVariationalInference = false) {
+    assert(symDirichletAlpha >= 1.0 || useVariationalInference); // for smaller values, we should use variational bayes
+    // iterate over src tokens in the model
+    for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
+      MultinomialParam &translations = (*srcIter).second;
+      double fTotalProb = 0.0;
+      // iterate over tgt tokens logsumming over the logprob(tgt|src) 
+      for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+        // MAP inference with dirichlet prior
+        double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
+        fTotalProb += useVariationalInference?
+          temp + symDirichletAlpha :
+          temp + symDirichletAlpha - 1;
+      }
+      // fix fTotalProb
+      if(fTotalProb == 0.0 && !useVariationalInference){
+        fTotalProb = 1.0;
+      } else if (useVariationalInference) {
+        fTotalProb = exp( boost::math::digamma(fTotalProb) );
+      }
+      // exponentiate to find p(*|src) before normalization
+      // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
+      for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
+        // MAP inference with dirichlet prior
+        double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
+        double fUnnormalized = useVariationalInference?
+          exp( boost::math::digamma( temp + symDirichletAlpha) ) :
+          temp + symDirichletAlpha - 1;
+        double fNormalized = fUnnormalized / fTotalProb;
+        (*tgtIter).second = normalizedParamsAreInNLog? nLog(fNormalized) : fNormalized;
+      }
+    }
+  }
 
   // line format:
   // event context logP(event|context)
@@ -121,25 +163,26 @@ namespace MultinomialParams {
 			    const VocabEncoder &vocabEncoder,
 			    bool decodeContext=false,
 			    bool decodeEvent=false) {
+    cerr << "persisting multinomial parameters in " << paramsFilename << endl;
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
     for (boost::unordered_map<int64_t, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
-	 srcIter != params.params.end(); 
-	 srcIter++) {
+         srcIter != params.params.end(); 
+         srcIter++) {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-	// write event
-	if(decodeEvent) {
-	  paramsFile << vocabEncoder.Decode(tgtIter->first) << " ";
-	} else {
-	  paramsFile << tgtIter->first << " ";
-	}
-	// write context
-	if(decodeContext) {
-	  paramsFile << vocabEncoder.Decode(srcIter->first) << " ";
-	} else {
-	  paramsFile << srcIter->first << " ";
-	}
-	// print logprob
-	paramsFile << tgtIter->second << std::endl;
+        // write context
+        if(decodeContext) {
+          paramsFile << vocabEncoder.Decode(srcIter->first) << " ";
+        } else {
+          paramsFile << srcIter->first << " ";
+        }
+        // write event
+        if(decodeEvent) {
+          paramsFile << vocabEncoder.Decode(tgtIter->first) << " ";
+        } else {
+          paramsFile << tgtIter->first << " ";
+        }
+        // print logprob
+        paramsFile << -tgtIter->second << std::endl;
       }
     }
     
@@ -150,12 +193,19 @@ namespace MultinomialParams {
   // event context nlogP(event|context)
   // event and/or context can be an integer or a string
   inline void LoadParams(const std::string &paramsFilename,
-			 ConditionalMultinomialParam<int64_t> &params,
-			 const VocabEncoder &vocabEncoder,
-			 bool encodeContext=false,
-			 bool encodeEvent=false) {
-    std::ifstream paramsFile(paramsFilename.c_str(), std::ios::in);
+                         ConditionalMultinomialParam<int64_t> &params,
+                         const VocabEncoder &vocabEncoder,
+                         bool encodeContext=false,
+                         bool encodeEvent=false) {
     
+    // set all parameters to zeros
+    for ( auto & context : params.params) {
+      for (auto & decision : context.second) {
+        decision.second = NLOG_ZERO;
+      }
+    }
+    
+    std::ifstream paramsFile(paramsFilename.c_str(), std::ios::in);
     string line;
     while( getline(paramsFile, line) ) {
       if(line.size() == 0) {
@@ -165,58 +215,54 @@ namespace MultinomialParams {
       StringUtils::SplitString(line, ' ', splits);
       // check format
       if(splits.size() != 3) {
-	assert(false);
-	exit(1);
+        assert(false);
+        exit(1);
       }
       // nlogp
       stringstream nlogPString;
       nlogPString << splits[2];
       double nlogP;
       nlogPString >> nlogP;
+      nlogP *= -1.0;
+      assert(nlogP >= 0);
       // event
       int64_t event = -1;
       if(encodeEvent) {
-	event = vocabEncoder.ConstEncode(splits[0]);
-	if(event == vocabEncoder.UnkInt()) {
-	  cerr << "vocabEncoder.ConstEncode(" << splits[0] << ") = " << event << " = vocabEncoder.UnkInt() = " << vocabEncoder.UnkInt() << endl;
-	  cerr << "vocabEncoder.Count() = " << vocabEncoder.Count() << endl;
-	  assert(false);
-	}
+        event = vocabEncoder.ConstEncode(splits[1]);
       } else {
-	stringstream ss;
-	ss << splits[0];
-	ss >> event;
+        stringstream ss;
+        ss << splits[1];
+        ss >> event;
       }
       assert(event >= 0);
+      if(event == vocabEncoder.UnkInt()) { 
+        //cerr << "WARNING: event '" << splits[1] << "' is == vocabEncoder.UnkInt()" << endl;
+        continue; 
+      }
       // context
       int64_t context = -1;
       if(encodeContext) {
-	context = vocabEncoder.ConstEncode(splits[1]);
+        context = vocabEncoder.ConstEncode(splits[0]);
       } else {
-	stringstream ss;
-	ss << splits[1];
-	ss >> context;
+        stringstream ss;
+        ss << splits[0];
+        ss >> context;
       }
       assert(context >= 0);
-      // add p(event|context)
+      if(context == vocabEncoder.UnkInt()) { 
+        //cerr << "WARNING: context '" << splits[0] << "' is == vocabEncoder.UnkInt()" << endl;
+        continue; 
+      }
+      // skip irrelevant parameters
+      if(params.params.find(context) == params.params.end() || params[context].find(event) == params[context].end()) {
+        continue;
+      }
       params[context][event] = nlogP;
     }
     paramsFile.close();
-  }
-
-  inline void PersistParams(const std::string &paramsFilename, 
-			    const ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &params, 
-			    const VocabEncoder &vocabEncoder) {
-    std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
-    for (auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-      for (auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-        // line format: 
-        // srcTokenId tgtTokenId logP(tgtTokenId|srcTokenId) p(tgtTokenId|srcTokenId)
-        paramsFile << srcIter->first.first << "->" << srcIter->first.second << " " << vocabEncoder.Decode(tgtIter->first) << " " << tgtIter->second << " " << nExp(tgtIter->second) << std::endl;
-      }
-    }
-    paramsFile.close();
-    
+    // renormalize
+    NormalizeParams(params, 1.0, true, true, false);
+    cerr << "finished loading theta parameters. |unique_contexts| = " << params.params.size() << endl;
   }
   
   template <typename ContextType>
@@ -269,47 +315,6 @@ namespace MultinomialParams {
     return exp(-1.0 * exponent);
   }
   
-  // refactor variable names here (e.g. translations)
-  // normalizes ConditionalMultinomialParam parameters such that \sum_t p(t|s) = 1 \forall s
-  // for smoothing, use alpha > 1.0
-  // for sparsity, use alpha < 1.0
-  // for MLE, use alpha = 1.0
-  template <typename ContextType>
-    void NormalizeParams(ConditionalMultinomialParam<ContextType> &params, 
-                         double symDirichletAlpha = 1.0, bool unnormalizedParamsAreInNLog = true,
-                         bool normalizedParamsAreInNLog = true, bool useVariationalInference = false) {
-    assert(symDirichletAlpha >= 1.0 || useVariationalInference); // for smaller values, we should use variational bayes
-    // iterate over src tokens in the model
-    for(auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
-      MultinomialParam &translations = (*srcIter).second;
-      double fTotalProb = 0.0;
-      // iterate over tgt tokens logsumming over the logprob(tgt|src) 
-      for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-        // MAP inference with dirichlet prior
-        double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
-        fTotalProb += useVariationalInference?
-          temp + symDirichletAlpha :
-          temp + symDirichletAlpha - 1;
-      }
-      // fix fTotalProb
-      if(fTotalProb == 0.0 && !useVariationalInference){
-        fTotalProb = 1.0;
-      } else if (useVariationalInference) {
-        fTotalProb = exp( boost::math::digamma(fTotalProb) );
-      }
-      // exponentiate to find p(*|src) before normalization
-      // iterate again over tgt tokens dividing p(tgt|src) by p(*|src)
-      for(MultinomialParam::iterator tgtIter = translations.begin(); tgtIter != translations.end(); tgtIter++) {
-        // MAP inference with dirichlet prior
-        double temp = unnormalizedParamsAreInNLog? nExp((*tgtIter).second) : (*tgtIter).second;
-        double fUnnormalized = useVariationalInference?
-          exp( boost::math::digamma( temp + symDirichletAlpha) ) :
-          temp + symDirichletAlpha - 1;
-        double fNormalized = fUnnormalized / fTotalProb;
-        (*tgtIter).second = normalizedParamsAreInNLog? nLog(fNormalized) : fNormalized;
-      }
-    }
-  }
   
   // zero all parameters
   template <typename ContextType>

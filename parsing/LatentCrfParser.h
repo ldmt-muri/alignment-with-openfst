@@ -21,9 +21,18 @@
 
 #include "../edmonds-alg-1.1.2/src/edmonds_optimum_branching.hpp"
 #include "../core/LatentCrfModel.h"
+#include "../cdec-utils/logval.h"
 
 using namespace std;
 using namespace boost;
+
+
+// Define a matrix of doubles using Eigen.
+typedef LogVal<double> LogValD;
+namespace Eigen {
+  typedef Eigen::Matrix<LogValD, Dynamic, Dynamic> MatrixXlogd;
+  typedef Eigen::Matrix<LogValD, Dynamic, 1> VectorXlogd;
+}
 
 // definitions of a complete graph that implements the EdgeListGraph
 // concept of Boost's graph library.
@@ -91,6 +100,7 @@ class LatentCrfParser : public LatentCrfModel {
   
   ~LatentCrfParser();
 
+ public:
   std::vector<ObservationDetails>& GetObservableDetailsSequence(int exampleId);
   std::vector<ObservationDetails>& GetReconstructedObservableDetailsSequence(int exampleId);
 
@@ -102,11 +112,12 @@ class LatentCrfParser : public LatentCrfModel {
 
   void PrepareExample(unsigned exampleId);
 
-  int64_t GetContextOfTheta(unsigned sentId, int y);
-
   void BuildMatrices(const unsigned sentId,
+                     Eigen::VectorXd &rootScores,
                      Eigen::MatrixXd &adjacency,
                      Eigen::MatrixXd &laplacianHat,
+                     Eigen::MatrixXd &laplacianHatInverse,
+                     double &laplacianHatDeterminant,
                      bool conditionOnZ);
  public:
 
@@ -127,16 +138,22 @@ class LatentCrfParser : public LatentCrfModel {
   void Label(const string &labelsFilename);
   void SetTestExample(std::vector<ObservationDetails> &sent);
 
+  void SupervisedTrainTheta() override;
+
   double UpdateThetaMleForSent(const unsigned sentId, 
                                MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
                                boost::unordered_map<int64_t, double> &mleMarginals) override;
+
+  double ComputeNllYGivenXAndLambdaGradient(vector<double> &gradient, 
+                                            int fromSentId, 
+                                            int toSentId) override;
 
   double ComputeNllZGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, 
                                             int fromSentId, 
                                             int toSentId, 
                                             double *devSetNll) override;
 
-  double GetMaxSpanningTree(Eigen::MatrixXd &adjacency, vector<int> &maxSpanningTree, int &root);
+  double GetMaxSpanningTree(Eigen::VectorXd &rootSelection, Eigen::MatrixXd &adjacency, vector<int> &maxSpanningTree);
   
   vector<int> GetViterbiParse(int sentId, bool conditionOnZ);
 

@@ -11,13 +11,13 @@ IbmModel1::IbmModel1(const string& bitextFilename,
                      const string& outputFilenamePrefix, 
                      const LearningInfo& learningInfo,
                      const string &NULL_SRC_TOKEN,
-                     const VocabEncoder &vocabEncoder) : vocabEncoder(vocabEncoder), learningInfo(learningInfo) {
+                     const VocabEncoder &vocabEncoder) : learningInfo(learningInfo), vocabEncoder(vocabEncoder) {
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN);
 }
 
 IbmModel1::IbmModel1(const string& bitextFilename, 
                      const string& outputFilenamePrefix, 
-                     const LearningInfo& learningInfo) : vocabEncoder(bitextFilename, learningInfo), learningInfo(learningInfo) {
+                     const LearningInfo& learningInfo) : learningInfo(learningInfo), vocabEncoder(bitextFilename, learningInfo) {
   
   CoreConstructor(bitextFilename, outputFilenamePrefix, learningInfo, "__null__");
 }
@@ -74,10 +74,9 @@ void IbmModel1::CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFst
     
     // create the fst
     VectorFst< FstUtils::LogArc > tgtFst;
-    size_t statesCount = intTokens.size() + 1;
-    for(int stateId = 0; stateId < intTokens.size()+1; stateId++) {
+    for(unsigned stateId = 0; stateId < intTokens.size()+1; stateId++) {
       int temp = tgtFst.AddState();
-      assert(temp == stateId);
+      assert(temp == (int)stateId);
       if(stateId == 0) continue;
       tgtFst.AddArc(stateId-1, FstUtils::LogArc(intTokens[stateId-1], intTokens[stateId-1], 0, stateId));
     }
@@ -97,7 +96,7 @@ void IbmModel1::NormalizeParams() {
 }
 
 void IbmModel1::PrintParams() {
-  params.PrintParams();
+  params.PrintParams(vocabEncoder, true, true);
 }
 
 void IbmModel1::PersistParams(const string& outputFilename) {
@@ -175,7 +174,11 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >
     assert(stateId == 0);
     for(auto srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
       for(auto tgtTokenIter = tgtTokens.begin(); tgtTokenIter != tgtTokens.end(); tgtTokenIter++) {
-	grammarFst.AddArc(stateId, FstUtils::LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));	
+        if(learningInfo.preventSelfAlignments && *tgtTokenIter == *srcTokenIter) {
+          // prevent this self alignment.
+        } else {
+          grammarFst.AddArc(stateId, FstUtils::LogArc(*tgtTokenIter, *srcTokenIter, params[*srcTokenIter][*tgtTokenIter], stateId));
+        }
       }
     }
     grammarFst.SetStart(stateId);
@@ -204,7 +207,6 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
     CreatePerSentGrammarFsts(perSentGrammarFsts);
     grammarConstructionClocks += clock() - t05;
 
-    clock_t t10 = clock();
     float logLikelihood = 0, validationLogLikelihood = 0;
     //    cout << "iteration's loglikelihood = " << logLikelihood << endl;
     
@@ -229,7 +231,6 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       vector<FstUtils::LogWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
-      double alignmentsCount = pow( (srcSents[sentsCounter].size()), tgtSents[sentsCounter].size());
       float fSentLogLikelihood = betas[alignmentFst.Start()].Value();
       
       forwardBackwardClocks += clock() - t30;
@@ -366,7 +367,7 @@ void IbmModel1::Align(const string &alignmentsFilename) {
   assert(tgtSents.size() == srcSents.size());
 
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
-    vector<int64_t> &srcSent = srcSents[sentId], &tgtSent = tgtSents[sentId];
+    vector<int64_t> &srcSent = srcSents[sentId];
     VectorFst< FstUtils::LogArc > &perSentGrammarFst = perSentGrammarFsts[sentId], &tgtFst = tgtFsts[sentId], alignmentFst;
     
     // given a src token id, what are the possible src position (in this sentence)
@@ -380,7 +381,6 @@ void IbmModel1::Align(const string &alignmentsFilename) {
     vector<FstUtils::LogWeight> alphas, betas;
     ShortestDistance(alignmentFst, &alphas, false);
     ShortestDistance(alignmentFst, &betas, true);
-    double fSentLogLikelihood = betas[alignmentFst.Start()].Value();
     
     // tropical has the path property. we need this property to compute the shortest path
     VectorFst< FstUtils::StdArc > alignmentFstProbsWithPathProperty, bestAlignment, corrected;

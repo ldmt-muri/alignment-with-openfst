@@ -147,7 +147,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // train the model
   void Train();
 
-  void SupervisedTrain(std::string goldLabelsFilename);
+  void SupervisedTrain();
+  virtual void SupervisedTrainTheta();
 
   void BlockCoordinateDescent();
 
@@ -211,7 +212,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // given a sentId and the value of y, find the conditioning context of the relevant multinomial
   // in word alignment, this should return the corresponding src word.
   // in pos tagging, this should return y itself.
-  virtual int64_t GetContextOfTheta(unsigned sentId, int y) = 0;
+  virtual int64_t GetContextOfTheta(unsigned sentId, int y);
 
   // fire features in this sentence
   virtual void FireFeatures(const unsigned sentId,
@@ -277,6 +278,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
   virtual double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
+  virtual double ComputeNllYGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId);
+
 
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
