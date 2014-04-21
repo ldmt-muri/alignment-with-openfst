@@ -753,10 +753,10 @@ double LatentCrfParser::GetMaxSpanningTree(VectorXlogd &rootSelection, MatrixXlo
     for(unsigned columnId = 0; columnId < n_vertices; ++columnId) {
       weights[rowId][columnId] = 
         rowId < adjacency.rows() && columnId < adjacency.rows()?
-        MultinomialParams::nLog( adjacency(rowId, columnId).as_float() ):
+        -MultinomialParams::nLog( adjacency(rowId, columnId).as_float() ):
         rowId == adjacency.rows() && columnId < adjacency.rows()? 
-        MultinomialParams::nLog( rootSelection(columnId).as_float() ) : 
-        MultinomialParams::NLOG_ZERO; 
+        -MultinomialParams::nLog( rootSelection(columnId).as_float() ) : 
+        -MultinomialParams::NLOG_ZERO; 
     }
   }
   

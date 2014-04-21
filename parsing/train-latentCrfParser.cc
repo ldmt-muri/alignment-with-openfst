@@ -115,7 +115,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MAX_SEQUENCE_LENGTH.c_str(), po::value<unsigned>(&learningInfo.maxSequenceLength)->default_value( 200 ), "(unsigned) max length of a sentence used for training. A value of zero indicates no limit.")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
-    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(10), "(int) quit LBFGS optimization after this many iterations")
+    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     //(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
@@ -289,10 +289,8 @@ void endOfKIterationsCallbackFunction() {
   LatentCrfModel *model = LatentCrfParser::GetInstance();
   LatentCrfParser &parser = *( (LatentCrfParser*) model );
 
-  cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
   if(parser.learningInfo.firstKExamplesToLabel <= 0) {
     parser.learningInfo.firstKExamplesToLabel = parser.examplesCount;
-    cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
   }
 
   // find viterbi alignment for the top K examples of the training set (i.e. our test set)
@@ -654,9 +652,8 @@ int main(int argc, char **argv) {
 
   // unsupervised training of the model
   model->Train();
-  (*learningInfo.endOfKIterationsCallbackFunction)();
-  return 0;
-
+  //(*learningInfo.endOfKIterationsCallbackFunction)();
+  
   // print best params
   if(world.rank() == 0) {
     model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
@@ -674,10 +671,8 @@ int main(int argc, char **argv) {
 
   // fix learningInfo.test_size
   LatentCrfParser &parser = *( (LatentCrfParser*) model );
-  cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
   if(parser.learningInfo.firstKExamplesToLabel <= 0) {
     parser.learningInfo.firstKExamplesToLabel = parser.examplesCount;
-    cerr << "firstKExamplesToLabel = " << parser.learningInfo.firstKExamplesToLabel << endl;
   }
   
   ((LatentCrfParser*)model)->Label(labelsFilename);
