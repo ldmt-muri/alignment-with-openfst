@@ -5,12 +5,15 @@ LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serializati
 OPT=-Wall -g
 
 all: train-latentCrfParser
-
 # specific to the parsing model
 train-latentCrfParser: train-latentCrfParser.o
-	$(CC) train-latentCrfParser.o FstUtils.o LatentCrfModel.o LatentCrfParser.o LogLinearParams.o fdict.o -o parsing/train-latentCrfParser  $(LIBS)
-train-latentCrfParser.o: LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h FstUtils.o
+	$(CC) train-latentCrfParser.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfParser.o LogLinearParams.o fdict.o -o parsing/train-latentCrfParser  $(LIBS)
+  
+train-latentCrfParser.o: IbmModel1.o LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h FstUtils.o
 	$(CC) $(BEFORE) $(SINGLE) parsing/train-latentCrfParser.cc $(OPT) 
+
+IbmModel1.o: FstUtils.o alignment/IbmModel1.cc alignment/IbmModel1.h core/LearningInfo.h wammar-utils/StringUtils.h alignment/IAlignmentModel.h core/MultinomialParams.h core/VocabEncoder.h
+	$(CC) $(BEFORE) $(SINGLE) alignment/IbmModel1.cc $(OPT)
 
 LatentCrfParser.o: LatentCrfModel.o parsing/LatentCrfParser.h parsing/LatentCrfParser.cc
 	$(CC) $(BEFORE) $(SINGLE) parsing/LatentCrfParser.cc $(OPT)
@@ -29,4 +32,4 @@ fdict.o:
 	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
 
 clean:
-	rm -rf FstUtils.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfParser.o train-latentCrfParser LatentCrfParser.o
+	rm -rf FstUtils.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfParser.o train-latentCrfParser LatentCrfParser.o IbmModel1.o

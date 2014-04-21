@@ -113,11 +113,11 @@ class LatentCrfParser : public LatentCrfModel {
   void PrepareExample(unsigned exampleId);
 
   void BuildMatrices(const unsigned sentId,
-                     Eigen::VectorXd &rootScores,
-                     Eigen::MatrixXd &adjacency,
-                     Eigen::MatrixXd &laplacianHat,
-                     Eigen::MatrixXd &laplacianHatInverse,
-                     double &laplacianHatDeterminant,
+                     Eigen::VectorXlogd &rootScores,
+                     Eigen::MatrixXlogd &adjacency,
+                     Eigen::MatrixXlogd &laplacianHat,
+                     Eigen::MatrixXlogd &laplacianHatInverse,
+                     LogValD &laplacianHatDeterminant,
                      bool conditionOnZ);
  public:
 
@@ -153,7 +153,7 @@ class LatentCrfParser : public LatentCrfModel {
                                             int toSentId, 
                                             double *devSetNll) override;
 
-  double GetMaxSpanningTree(Eigen::VectorXd &rootSelection, Eigen::MatrixXd &adjacency, vector<int> &maxSpanningTree);
+  double GetMaxSpanningTree(Eigen::VectorXlogd &rootSelection, Eigen::MatrixXlogd &adjacency, vector<int> &maxSpanningTree);
   
   vector<int> GetViterbiParse(int sentId, bool conditionOnZ);
 

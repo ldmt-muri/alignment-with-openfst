@@ -1,7 +1,7 @@
 #include "LatentCrfParser.h"
 
-using Eigen::MatrixXd;
-using Eigen::VectorXd;
+using Eigen::MatrixXlogd;
+using Eigen::VectorXlogd;
 
 string LatentCrfParser::ROOT_STR = "__ROOT__";
 int64_t LatentCrfParser::ROOT_ID = -1000000;
@@ -301,21 +301,20 @@ void LatentCrfParser::FireFeatures(const unsigned sentId,
   if(tokens.size() > learningInfo.maxSequenceLength) {
     return;
   }
-  MatrixXd adjacency, laplacianHat, laplacianHatInverse;
-  VectorXd rootSelection;
-  double laplacianHatDeterminant = -1;
+  MatrixXlogd adjacency, laplacianHat, laplacianHatInverse;
+  VectorXlogd rootSelection;
+  LogValD laplacianHatDeterminant;
   BuildMatrices(sentId, rootSelection, adjacency, laplacianHat,
                 laplacianHatInverse, laplacianHatDeterminant, false);
-  assert(laplacianHatDeterminant != -1);
 }
 
 // build the matrixes which can be used to marginalize proper dependency trees as of Koo et al 2007.
 void LatentCrfParser::BuildMatrices(const unsigned sentId,
-                                    VectorXd &rootScores,
-                                    MatrixXd &adjacency,
-                                    MatrixXd &laplacianHat,
-                                    MatrixXd &laplacianHatInverse,
-                                    double &laplacianHatDeterminant,
+                                    VectorXlogd &rootScores,
+                                    MatrixXlogd &adjacency,
+                                    MatrixXlogd &laplacianHat,
+                                    MatrixXlogd &laplacianHatInverse,
+                                    LogValD &laplacianHatDeterminant,
                                     bool conditionOnZ) {
  
   // build A_{y|x} matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
@@ -329,10 +328,11 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
       double multinomialTerm = conditionOnZ? nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]: 0.0;
       FastSparseVector<double> activeFeatures;
       if(headPosition == childPosition) {
-        adjacency(headPosition, childPosition) = 0.0;
+        adjacency(headPosition, childPosition) = LogValD::Zero(); // 0.0;
       } else {
         lambda->FireFeatures(tokens[headPosition], tokens[childPosition], tokens, activeFeatures);
-        adjacency(headPosition, childPosition) = MultinomialParams::nExp( multinomialTerm - lambda->DotProduct( activeFeatures ) );
+        adjacency(headPosition, childPosition) = LogValD(- multinomialTerm + lambda->DotProduct( activeFeatures ), false);
+        //MultinomialParams::nExp( multinomialTerm - lambda->DotProduct( activeFeatures ) );
       }
     }
   }
@@ -349,7 +349,8 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
       0.0;
     FastSparseVector<double> activeFeatures;
     lambda->FireFeatures(LatentCrfParser::ROOT_DETAILS, tokens[rootPosition], tokens, activeFeatures);
-    rootScores(rootPosition) = MultinomialParams::nExp( multinomialTerm - lambda->DotProduct( activeFeatures ) );
+    rootScores(rootPosition) = LogValD(- multinomialTerm + lambda->DotProduct( activeFeatures ), false);
+    //MultinomialParams::nExp( multinomialTerm - lambda->DotProduct( activeFeatures ) );
   }
   // laplacian matrix L(y|x) in (Koo et al. 2007)
   laplacianHat = -1.0 * adjacency;
@@ -368,7 +369,7 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   //cerr << "laplacianHat is " << laplacianHat << endl;
   //cerr << "laplacianHat.maxCoeff() = " << laplacianHat.maxCoeff() << " ";
   //cerr << "laplacianHat.minCoeff() = " << laplacianHat.minCoeff() << endl;
-  double scalingConstant = max(laplacianHat.maxCoeff(), fabs(laplacianHat.minCoeff()));
+  double scalingConstant = max(laplacianHat.maxCoeff().as_float(), fabs(laplacianHat.minCoeff().as_float()));
   assert(scalingConstant > 0.0);
   //cerr << "scalingConstant = " << scalingConstant << endl;
   laplacianHat /= scalingConstant;
@@ -378,12 +379,7 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   // now compute determinant
   laplacianHatDeterminant = laplacianHat.determinant();
   for(unsigned i = 0; i < laplacianHat.rows(); ++i) {
-    laplacianHatDeterminant *= scalingConstant;
-  }
-  if(std::isinf(laplacianHatDeterminant)) {
-    cerr << "laplacianHat.cols() = " << laplacianHat.cols() << endl;
-    cerr << "laplacianHatDeterminant = " << laplacianHatDeterminant << " = " << laplacianHat.determinant() << " * " << pow(scalingConstant, (double) laplacianHat.rows()) << endl << endl;
-    assert(false);
+    laplacianHatDeterminant *= LogValD(scalingConstant);
   }
   
   // then compute inverse
@@ -442,22 +438,20 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   // build A_{y|x} matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
   // TODO: WE DON'T REALLY NEED THIS MATRIX; AFTERALL, COMPUTING LIKELIHOOD IN EM IS ONLY USEFUL FOR
   // DEBUGGING PURPOSES
-  MatrixXd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
-  VectorXd yGivenXRootSelection;
-  double yGivenXLaplacianHatDeterminant = -1;
+  MatrixXlogd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
+  VectorXlogd yGivenXRootSelection;
+  LogValD yGivenXLaplacianHatDeterminant;
   BuildMatrices(sentId, yGivenXRootSelection, yGivenXAdjacency, yGivenXLaplacianHat, 
                 yGivenXLaplacianHatInverse, yGivenXLaplacianHatDeterminant, false);
-  assert(yGivenXLaplacianHatDeterminant != -1);
-  double Z = yGivenXLaplacianHatDeterminant;
-  
+  LogValD Z = yGivenXLaplacianHatDeterminant;
+
   // build A_{y|x,z} matrix and use matrix tree theorem to compute C(x), marginal(h,m;y|z,x)=\sum_{y:(h,m)\in y} p(y|x,z)
-  MatrixXd yGivenXZAdjacency, yGivenXZLaplacianHat, yGivenXZLaplacianHatInverse;
-  VectorXd yGivenXZRootSelection;
-  double yGivenXZLaplacianHatDeterminant = -1;
+  MatrixXlogd yGivenXZAdjacency, yGivenXZLaplacianHat, yGivenXZLaplacianHatInverse;
+  VectorXlogd yGivenXZRootSelection;
+  LogValD yGivenXZLaplacianHatDeterminant = -1;
   BuildMatrices(sentId, yGivenXZRootSelection, yGivenXZAdjacency, yGivenXZLaplacianHat, 
                 yGivenXZLaplacianHatInverse, yGivenXZLaplacianHatDeterminant, true);
-  assert(yGivenXZLaplacianHatDeterminant != -1);
-  double C = yGivenXZLaplacianHatDeterminant;
+  LogValD C = yGivenXZLaplacianHatDeterminant;
   if(C > Z) {
     cerr << "C = " << C << endl;
     cerr << "Z = " << Z << endl;
@@ -469,7 +463,7 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   // for (h,m) \in \cal{T}_{np}^s: mle[h][m] += nLogThetaGivenOneLabel[h][m] * marginal(h,m;y|z,x)
   for(unsigned rootPosition = 0; rootPosition < yGivenXZLaplacianHat.rows(); ++rootPosition) {
     // marginal probability of making this decision; \mu_{0,m} in (Koo et al. 2007)
-    double marginal = yGivenXZLaplacianHat(0,rootPosition) * yGivenXZLaplacianHatInverse(rootPosition,0);
+    double marginal = (yGivenXZLaplacianHat(0,rootPosition) * yGivenXZLaplacianHatInverse(rootPosition,0)).as_float();
     //if(marginal == 0.0) { cerr << "WARNING: marginal == 0.0 when rootPosition = " << rootPosition << endl; } 
     mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]) * marginal;
     mleMarginals[LatentCrfParser::ROOT_ID] += MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]) * marginal;
@@ -477,11 +471,9 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   for(unsigned headPosition = 0; headPosition < yGivenXZLaplacianHat.rows(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < yGivenXZLaplacianHat.cols(); ++childPosition) {
       double marginal = childPosition == 0? 0.0 :
-        yGivenXZAdjacency(headPosition, childPosition) * 
-        yGivenXZLaplacianHatInverse(childPosition, childPosition);
+        (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, childPosition)).as_float();
       marginal -= headPosition == 0? 0.0 :
-        yGivenXZAdjacency(headPosition, childPosition) * 
-        yGivenXZLaplacianHatInverse(childPosition, headPosition);
+        (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, headPosition)).as_float();
       /*if(marginal == 0.0 && headPosition != childPosition) { 
         cerr << "WARNING: marginal == 0.0, when headPosition = " << headPosition << ", childPosition = " << childPosition << endl; 
         } */
@@ -491,7 +483,8 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   }
 
   // nlog p(z|x)
-  double nLogC = MultinomialParams::nLog(C), nLogZ = MultinomialParams::nLog(Z);
+  assert(C.as_float() >= 0 && Z.as_float() >= 0);
+  double nLogC = -log(C), nLogZ = -log(Z);
   //cerr << "sent " << sentId << ": -log p(z|x) = " << nLogC << " - " << nLogZ << " = " << nLogC - nLogZ << endl;
   return nLogC - nLogZ;
 }
@@ -520,52 +513,41 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     }
 
     // build A_{y|x} matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
-    MatrixXd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
-    VectorXd yGivenXRootSelection;
-    double yGivenXLaplacianHatDeterminant;
+    MatrixXlogd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
+    VectorXlogd yGivenXRootSelection;
+    LogValD yGivenXLaplacianHatDeterminant;
     BuildMatrices(sentId, yGivenXRootSelection, yGivenXAdjacency, yGivenXLaplacianHat, 
                   yGivenXLaplacianHatInverse, yGivenXLaplacianHatDeterminant, false);
-    double Z = yGivenXLaplacianHatDeterminant;
+    LogValD Z = yGivenXLaplacianHatDeterminant;
     
     // build A_{y|x,z} matrix and use matrix tree theorem to compute C(x), marginal(h,m;y|z,x)=\sum_{y:(h,m)\in y} p(y|x,z)
-    MatrixXd yGivenXZAdjacency, yGivenXZLaplacianHat, yGivenXZLaplacianHatInverse;
-    VectorXd yGivenXZRootSelection;
-    double yGivenXZLaplacianHatDeterminant;
+    MatrixXlogd yGivenXZAdjacency, yGivenXZLaplacianHat, yGivenXZLaplacianHatInverse;
+    VectorXlogd yGivenXZRootSelection;
+    LogValD yGivenXZLaplacianHatDeterminant;
     BuildMatrices(sentId, yGivenXZRootSelection, yGivenXZAdjacency, yGivenXZLaplacianHat, 
                   yGivenXZLaplacianHatInverse, yGivenXZLaplacianHatDeterminant, true);
-    if(yGivenXZLaplacianHatDeterminant <= 0.0) {
-      cerr << "yGivenXZLaplacianHatDeterminant = " << yGivenXZLaplacianHatDeterminant << endl;
-      cerr << "yGivenXZLaplacianHat = " << endl << yGivenXZLaplacianHat << endl << endl;
-      assert(false);
+    if(yGivenXZLaplacianHatDeterminant.as_float() <= 0.0) {
+      cerr << "Warning: yGivenXZLaplacianHatDeterminant = " << yGivenXZLaplacianHatDeterminant.as_float() << endl;
     }
-    double C = yGivenXZLaplacianHatDeterminant;
-    assert(!std::isinf(Z));
-    assert(!std::isinf(C));
+    LogValD C = yGivenXZLaplacianHatDeterminant;
     if(C > Z) {
       cerr << "ERROR: C = " << C << " > Z = " << Z << endl;
     }
     assert(C <= Z);
     // update the loglikelihood
     assert(!learningInfo.useEarlyStopping);
-    double nLogC = MultinomialParams::nLog(C), nLogZ = MultinomialParams::nLog(Z);
+    double nLogC = -log(C), nLogZ = -log(Z);
     // keep an eye on bad numbers
     if(std::isinf(nLogZ) || std::isinf(nLogC)) {
       cerr << "WARNING: nLogZ = " << nLogZ << ", nLogC = " << nLogC << ". ";
       cerr << "WARNING: Z = " << Z << ", C = " << C << ". ";
       cerr << "I will just ignore this sentence ..." << endl;
-      
-      //cerr << "yGivenXZAdjacency = " << endl << yGivenXZAdjacency << endl << endl;
-      cerr << "yGivenXZLaplacianHat = " << endl << yGivenXZLaplacianHat << endl << endl;
-      cerr << "yGivenXLaplacianHat = " << endl << yGivenXLaplacianHat << endl << endl;
-      //cerr << "yGivenXZLaplacianHatInverse = " << endl << yGivenXZLaplacianHatInverse << endl << endl;
-      //cerr << "yGivenXZRootSelection = " << endl << yGivenXZRootSelection << endl << endl;
-
-      assert(false);
       continue;
     } else if(std::isnan(nLogZ) || std::isnan(nLogC)) {
       cerr << "ERROR: nLogZ = " << nLogZ << ", nLogC = " << nLogC << endl;
-      assert(false);
-    }
+      cerr << "WARNING: nLogZ = " << nLogZ << ", nLogC = " << nLogC << endl;
+      continue;
+   }
 
     if(nLogC < nLogZ) {
       cerr << "this must be a bug. nLogC always be >= nLogZ. " << endl;
@@ -589,17 +571,17 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
           lambda->FireFeatures(tokens[headPosition], tokens[childPosition], tokens, activeFeatures);
         }
         double marginalGivenXZ = childPosition == 0? 0.0 :
-          yGivenXZAdjacency(headPosition, childPosition) * 
-          yGivenXZLaplacianHatInverse(childPosition, childPosition);
+          (yGivenXZAdjacency(headPosition, childPosition) * 
+           yGivenXZLaplacianHatInverse(childPosition, childPosition)).as_float();
         marginalGivenXZ -= headPosition == 0? 0.0 :
-          yGivenXZAdjacency(headPosition, childPosition) * 
-          yGivenXZLaplacianHatInverse(childPosition, headPosition);
+          (yGivenXZAdjacency(headPosition, childPosition) * 
+           yGivenXZLaplacianHatInverse(childPosition, headPosition)).as_float();
         double marginalGivenX = childPosition == 0? 0.0 :
-          yGivenXAdjacency(headPosition, childPosition) * 
-          yGivenXLaplacianHatInverse(childPosition, childPosition);
+          (yGivenXAdjacency(headPosition, childPosition) * 
+           yGivenXLaplacianHatInverse(childPosition, childPosition)).as_float();
         marginalGivenX -= headPosition == 0? 0.0 :
-          yGivenXAdjacency(headPosition, childPosition) * 
-          yGivenXLaplacianHatInverse(childPosition, headPosition);
+          (yGivenXAdjacency(headPosition, childPosition) * 
+           yGivenXLaplacianHatInverse(childPosition, headPosition)).as_float();
         
         double marginalDiff = marginalGivenX - marginalGivenXZ;
         for(auto featIter = activeFeatures.begin(); featIter != activeFeatures.end(); ++featIter) {
@@ -612,8 +594,10 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
       FastSparseVector<double> activeFeatures;
       lambda->FireFeatures(ROOT_DETAILS, tokens[rootPosition], tokens, activeFeatures);
-      double marginalGivenXZ = yGivenXZLaplacianHat(0, rootPosition) * yGivenXZLaplacianHatInverse(rootPosition, 0);
-      double marginalGivenX =   yGivenXLaplacianHat(0, rootPosition) * yGivenXLaplacianHatInverse(rootPosition, 0);
+      double marginalGivenXZ = (yGivenXZLaplacianHat(0, rootPosition) * 
+                                yGivenXZLaplacianHatInverse(rootPosition, 0)).as_float();
+      double marginalGivenX = (yGivenXLaplacianHat(0, rootPosition) * 
+                               yGivenXLaplacianHatInverse(rootPosition, 0)).as_float();
       double marginalDiff = marginalGivenX - marginalGivenXZ;
       for(auto featIter = activeFeatures.begin(); featIter != activeFeatures.end(); ++featIter) {
         derivativeWRTLambda[featIter->first] += featIter->second * marginalDiff;
@@ -661,19 +645,19 @@ double LatentCrfParser::ComputeNllYGivenXAndLambdaGradient(
     }
     
     // build A_{y|x} matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
-    MatrixXd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
-    VectorXd yGivenXRootSelection;
-    double yGivenXLaplacianHatDeterminant;
+    MatrixXlogd yGivenXAdjacency, yGivenXLaplacianHat, yGivenXLaplacianHatInverse;
+    VectorXlogd yGivenXRootSelection;
+    LogValD yGivenXLaplacianHatDeterminant;
     BuildMatrices(sentId, yGivenXRootSelection, yGivenXAdjacency, yGivenXLaplacianHat, 
                   yGivenXLaplacianHatInverse, yGivenXLaplacianHatDeterminant, false);
-    double Z = yGivenXLaplacianHatDeterminant;
+    LogValD Z = yGivenXLaplacianHatDeterminant;
     
     // update the loglikelihood
-    double nLogZ = MultinomialParams::nLog(Z);
+    double nLogZ = -log(Z);
     // keep an eye on bad numbers
     if(std::isinf(nLogZ)) {
       cerr << "WARNING: nLogZ = " << nLogZ << ". ";
-      cerr << "the yGivenXLaplacianHat matrix looks like: " << endl << yGivenXLaplacianHat << endl;
+      //cerr << "the yGivenXLaplacianHat matrix looks like: " << endl << yGivenXLaplacianHat << endl;
       cerr << "I will just ignore this sentence ..." << endl;
       assert(false);
       continue;
@@ -697,11 +681,11 @@ double LatentCrfParser::ComputeNllYGivenXAndLambdaGradient(
           lambda->FireFeatures(tokens[headPosition], tokens[childPosition], tokens, activeFeatures);
         }
         double marginalGivenX = childPosition == 0? 0.0 :
-          yGivenXAdjacency(headPosition, childPosition) * 
-          yGivenXLaplacianHatInverse(childPosition, childPosition);
+          (yGivenXAdjacency(headPosition, childPosition) * 
+           yGivenXLaplacianHatInverse(childPosition, childPosition)).as_float();
         marginalGivenX -= headPosition == 0? 0.0 :
-          yGivenXAdjacency(headPosition, childPosition) * 
-          yGivenXLaplacianHatInverse(childPosition, headPosition);
+          (yGivenXAdjacency(headPosition, childPosition) * 
+           yGivenXLaplacianHatInverse(childPosition, headPosition)).as_float();
         
         bool goldAttachment = 
           (unsigned) tokens[childPosition].details[ObservationDetailsHeader::HEAD] == headPosition + 1;
@@ -726,7 +710,8 @@ double LatentCrfParser::ComputeNllYGivenXAndLambdaGradient(
     for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
       FastSparseVector<double> activeFeatures;
       lambda->FireFeatures(ROOT_DETAILS, tokens[rootPosition], tokens, activeFeatures);
-      double marginalGivenX = yGivenXLaplacianHat(0, rootPosition) * yGivenXLaplacianHatInverse(rootPosition, 0);
+      double marginalGivenX = (yGivenXLaplacianHat(0, rootPosition) * 
+                               yGivenXLaplacianHatInverse(rootPosition, 0)).as_float();
       bool goldAttachment = 
         tokens[rootPosition].details[ObservationDetailsHeader::HEAD] == 0;
       if(goldAttachment) {
@@ -755,7 +740,7 @@ double LatentCrfParser::ComputeNllYGivenXAndLambdaGradient(
 }
 
 // run Tarjan's implementation of Chiu-Liu-Edmonds for maximum spanning trees
-double LatentCrfParser::GetMaxSpanningTree(VectorXd &rootSelection, MatrixXd &adjacency, vector<int> &maxSpanningTree) {
+double LatentCrfParser::GetMaxSpanningTree(VectorXlogd &rootSelection, MatrixXlogd &adjacency, vector<int> &maxSpanningTree) {
 
   // I will use an explicit ROOT vertix, of index adjacency.rows()
   unsigned n_vertices = adjacency.rows() + 1;
@@ -768,9 +753,9 @@ double LatentCrfParser::GetMaxSpanningTree(VectorXd &rootSelection, MatrixXd &ad
     for(unsigned columnId = 0; columnId < n_vertices; ++columnId) {
       weights[rowId][columnId] = 
         rowId < adjacency.rows() && columnId < adjacency.rows()?
-        adjacency(rowId, columnId) = -1.0 * MultinomialParams::nLog( adjacency(rowId, columnId) ):
+        MultinomialParams::nLog( adjacency(rowId, columnId).as_float() ):
         rowId == adjacency.rows() && columnId < adjacency.rows()? 
-        -1.0 * rootSelection(columnId) : 
+        MultinomialParams::nLog( rootSelection(columnId).as_float() ) : 
         MultinomialParams::NLOG_ZERO; 
     }
   }
@@ -815,9 +800,9 @@ double LatentCrfParser::GetMaxSpanningTree(VectorXd &rootSelection, MatrixXd &ad
 // the parent of a root word is -1
 vector<int> LatentCrfParser::GetViterbiParse(int sentId, bool conditionOnZ) {
   // build A_{y|x,z} or A_{y|x} (depending on the second parameter) matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
-  MatrixXd adjacency, laplacianHat, laplacianHatInverse;
-  VectorXd rootSelection;
-  double laplacianHatDeterminant = -1;
+  MatrixXlogd adjacency, laplacianHat, laplacianHatInverse;
+  VectorXlogd rootSelection;
+  LogValD laplacianHatDeterminant;
   vector<int> maxSpanTree;
 
   auto tokens = GetObservableDetailsSequence(sentId);

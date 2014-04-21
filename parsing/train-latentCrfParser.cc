@@ -653,8 +653,7 @@ int main(int argc, char **argv) {
   assert(model->lambda->IsSealed());
 
   // unsupervised training of the model
-  UnitTestMatrixTreeTheorem();
-  //model->Train();
+  model->Train();
   (*learningInfo.endOfKIterationsCallbackFunction)();
   return 0;
 
