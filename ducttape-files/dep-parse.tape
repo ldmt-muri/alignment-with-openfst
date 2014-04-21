@@ -16,7 +16,7 @@ global {
   precomputed_features=(PrecomputedFeatures: all=all none=none)
 
   # machine:
-  ducttape_output="/usr2/home/wammar/crf-auto-parser/test/"
+  ducttape_output="/usr2/home/wammar/crf-auto-parser/ptb/"
   alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst"
   cdec_dir="/usr0/home/wammar/cdec/"
 
@@ -24,10 +24,10 @@ global {
   init_lambda=""
 
   # general
-  cores=1   
+  cores=10   
 
   # dataset
-  in_conll="/usr0/home/wammar/alignment-with-openfst/parsing/data/ptb_train.400.conll"
+  in_conll="/usr1/home/wammar/treebanks/ptb/dmv/devw+trainw.conll"
   text="/usr0/home/wammar/alignment-with-openfst/parsing/data/english-sample"
   test_sents_count="0"
   output_prefix="ptb"
@@ -156,5 +156,5 @@ task CrfAutoencoderParse
 }
 
 plan Full {
-    reach CrfAutoencoderParse via (L2Strength: thousand) * (L1Strength: zero) * (DirichletAlpha: one_point_one) * (PrecomputedFeatures: none) * (OptimizeLambdasFirst: yes) * (EmItercount: two) * (LbfgsItercount: eight) 
+    reach CrfAutoencoderParse via (L2Strength: one) * (L1Strength: zero) * (DirichletAlpha: one_point_one) * (PrecomputedFeatures: none) * (OptimizeLambdasFirst: yes) * (EmItercount: two) * (LbfgsItercount: two) 
 }

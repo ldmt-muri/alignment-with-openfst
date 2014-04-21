@@ -493,7 +493,7 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
   }
 }
 
-// for dependnecy parsing
+// for dependenecy parsing
 void LogLinearParams::FireFeatures(const ObservationDetails &headDetails, 
                                    const ObservationDetails &childDetails,
                                    const vector<ObservationDetails> & sentDetails,
@@ -503,8 +503,8 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
   featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN;
   featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
   featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
-  AddParam(featureId);
-  activeFeatures[paramIndexes[featureId]] += 1.0;
+  //AddParam(featureId);
+  //activeFeatures[paramIndexes[featureId]] += 1.0;
 
   featureId.type = FeatureTemplate::HEAD_CHILD_POS;
   featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];

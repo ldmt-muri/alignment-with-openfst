@@ -93,8 +93,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   this->textFilename = textFilename;
   this->outputPrefix = outputPrefix;
   this->learningInfo = learningInfo;
-  cerr << "learningInfo.maxSequenceLength = " << learningInfo.maxSequenceLength << endl;
-  cerr << "this->learningInfo.maxSequenceLength = " << this->learningInfo.maxSequenceLength << endl;
   this->lambda->SetLearningInfo(learningInfo);
 
   // by default, we are operating in the training (not testing) mode
@@ -1251,7 +1249,6 @@ void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
 				     unnormalizedParamsAreInNLog,
 				     normalizedParamsAreInNLog,
 				     learningInfo.variationalInferenceOfMultinomials);
-  cerr << "dirichlet alpha = " << learningInfo.multinomialSymmetricDirichletAlpha << endl;
   nLogThetaGivenOneLabel = mleGivenOneLabel;
 }
 
@@ -1435,14 +1432,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
           double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
           
-          /*for(auto x = mleGivenOneLabel.params.begin(); 
-              x != mleGivenOneLabel.params.end();
-              ++x) {
-            for(auto y = x->second.begin(); y != x->second.end(); ++y) {
-              cerr << "mleGivenOneLabel[" << vocabEncoder.Decode(x->first) << "][" << vocabEncoder.Decode(y->first) << "] = " << y->second << endl; 
-            }
-            cerr << "mleMarginalsGivenOneLabel[" << vocabEncoder.Decode(x->first) << "] = " << mleMarginalsGivenOneLabel[x->first] << endl;
-            }*/
           unregularizedObjective += sentLoglikelihood;
           
           if(sentId % learningInfo.nSentsPerDot == 0) {
@@ -1464,9 +1453,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
         if(learningInfo.mpiWorld->rank() == 0) {
           if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2 || 
              learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::WeightedL2) {
-            cerr << " l2 reg. objective = " << regularizedObjective << endl;
+            cerr << " l2 reg. objective = " << regularizedObjective << " " << endl;
           } else { 
-            cerr << "unregularized objective = " << unregularizedObjective << endl;
+            cerr << " unregularized objective = " << unregularizedObjective << " " << endl;
           }
         }	
         
@@ -2100,7 +2089,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   //cerr << "nloglikelihood += " << nLogC << endl;
   // update mle for each z^*|y^* fired
   for(auto yIter = B.begin(); yIter != B.end(); yIter++) {
-  const pair<int64_t, int64_t> &y_ = yIter->first;
+    const pair<int64_t, int64_t> &y_ = yIter->first;
     for(auto zIter = yIter->second.begin(); zIter != yIter->second.end(); zIter++) {
       int64_t z_ = zIter->first;
       double nLogb = -log<double>(zIter->second);

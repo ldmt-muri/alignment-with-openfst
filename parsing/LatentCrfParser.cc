@@ -77,12 +77,10 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
   examplesCount = sents.size();
   
   // fix learningInfo.firstKExamplesToLabel
-  cerr << "firstKExamplesToLabel = " << learningInfo.firstKExamplesToLabel << endl;
-  if(learningInfo.firstKExamplesToLabel == 1) {
+  if(learningInfo.firstKExamplesToLabel <= 1) {
     learningInfo.firstKExamplesToLabel = examplesCount;
   }  
-  cerr << "firstKExamplesToLabel = " << learningInfo.firstKExamplesToLabel << endl;
-
+  
   if(learningInfo.mpiWorld->rank() == 0 && wordPairFeaturesFilename.size() > 0) {
     lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
   }
@@ -336,12 +334,8 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
       }
     }
   }
-  //cerr << "adjacency = " << endl;
-  //cerr << adjacency << endl << endl;
   // root selection scores r(y|x) in (Koo et al. 2007)
   rootScores.resize(tokens.size());
-  //cerr << "rootScores = " << endl;
-  //cerr << rootScores << endl << endl;
   int64_t reconstructedRoot = LatentCrfParser::ROOT_DETAILS.details[ObservationDetailsHeader::RECONSTRUCTED];
   for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
     double multinomialTerm = conditionOnZ? 
@@ -350,7 +344,6 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
     FastSparseVector<double> activeFeatures;
     lambda->FireFeatures(LatentCrfParser::ROOT_DETAILS, tokens[rootPosition], tokens, activeFeatures);
     rootScores(rootPosition) = LogValD(- multinomialTerm + lambda->DotProduct( activeFeatures ), false);
-    //MultinomialParams::nExp( multinomialTerm - lambda->DotProduct( activeFeatures ) );
   }
   // laplacian matrix L(y|x) in (Koo et al. 2007)
   laplacianHat = -1.0 * adjacency;
@@ -359,22 +352,12 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   }
   // modified laplacian matrix to allow for O(n^3) inference; \hat{L}(y|x) in (Koo et al. 2007)
   laplacianHat.row(0) = rootScores;
-  //cerr << "laplacianHat = " << endl;
-  //cerr << laplacianHat << endl << endl;
 
   // now, we divide all elements in laplacianHat by a constant to ensure numerical stability
   // while computing the determinant and inverse
-  //cerr << "adjacency is " << adjacency << endl << endl;
-  //cerr << "laplacianHat is " << laplacianHat << endl << endl;
-  //cerr << "laplacianHat is " << laplacianHat << endl;
-  //cerr << "laplacianHat.maxCoeff() = " << laplacianHat.maxCoeff() << " ";
-  //cerr << "laplacianHat.minCoeff() = " << laplacianHat.minCoeff() << endl;
   double scalingConstant = max(laplacianHat.maxCoeff().as_float(), fabs(laplacianHat.minCoeff().as_float()));
   assert(scalingConstant > 0.0);
-  //cerr << "scalingConstant = " << scalingConstant << endl;
   laplacianHat /= scalingConstant;
-  //cerr << "laplacianHat / scalingConstant = " << endl;
-  //cerr << laplacianHat << endl << endl;
 
   // now compute determinant
   laplacianHatDeterminant = laplacianHat.determinant();
@@ -385,8 +368,6 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   // then compute inverse
   laplacianHatInverse = laplacianHat.inverse();
   laplacianHatInverse /= scalingConstant;
-  //cerr << "laplacianHatInverse = " << endl;
-  //cerr << laplacianHatInverse << endl << endl;
 
   // now obtain the original unscaled laplacianHat
   laplacianHat *= scalingConstant;
@@ -425,8 +406,6 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   				     MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
   				     boost::unordered_map<int64_t, double> &mleMarginals) {
 
-  //cerr << "LatentCrfParser's impelmentation of LatentCrfModel::UpdateThetaMleForSent" << endl;
-  //std::cerr << "sentId = " << sentId << endl;
   assert(sentId < examplesCount);
 
   // prune long sequences
@@ -464,9 +443,11 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   for(unsigned rootPosition = 0; rootPosition < yGivenXZLaplacianHat.rows(); ++rootPosition) {
     // marginal probability of making this decision; \mu_{0,m} in (Koo et al. 2007)
     double marginal = (yGivenXZLaplacianHat(0,rootPosition) * yGivenXZLaplacianHatInverse(rootPosition,0)).as_float();
-    //if(marginal == 0.0) { cerr << "WARNING: marginal == 0.0 when rootPosition = " << rootPosition << endl; } 
-    mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]) * marginal;
-    mleMarginals[LatentCrfParser::ROOT_ID] += MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]) * marginal;
+    if(marginal > 1.0 || marginal < 0.0) {
+      cerr << "WARNING: marginal = " << marginal << endl;
+    }
+    mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
+    mleMarginals[LatentCrfParser::ROOT_ID] += marginal; // MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
   }
   for(unsigned headPosition = 0; headPosition < yGivenXZLaplacianHat.rows(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < yGivenXZLaplacianHat.cols(); ++childPosition) {
@@ -474,11 +455,11 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
         (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, childPosition)).as_float();
       marginal -= headPosition == 0? 0.0 :
         (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, headPosition)).as_float();
-      /*if(marginal == 0.0 && headPosition != childPosition) { 
-        cerr << "WARNING: marginal == 0.0, when headPosition = " << headPosition << ", childPosition = " << childPosition << endl; 
-        } */
-      mle[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
-      mleMarginals[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
+      if(marginal > 1.0 || marginal < 0.0) {
+        cerr << "WARNING: marginal = " << marginal << endl;
+      }
+      mle[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
+      mleMarginals[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
     }
   }
 
