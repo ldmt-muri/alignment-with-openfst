@@ -283,13 +283,14 @@ class VocabEncoder {
   
   void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data) {
     assert(data.size() == 0);    
+    cerr << "reading conll file " << conllFilename << endl;
     std::ifstream conllFile(conllFilename.c_str(), std::ios::in);
     std::string line;
 
     unsigned sentIndex = 0;
     unsigned tokenIndex = 0;
     // make room for the first sentence
-    data.resize(1);
+    data.resize(10000);
     while(getline(conllFile, line)) {
       std::vector<std::string> splits;
       StringUtils::SplitString(line, '\t', splits);
@@ -301,7 +302,9 @@ class VocabEncoder {
         sentIndex += 1;
         tokenIndex = 0;
         // make room for next sentence
-        data.resize(data.size()+1);
+        if(sentIndex + 1 > data.size()) {
+          data.resize(data.size()+10000);
+        }
       } else {
         // encode the splits
         vector<int64_t> encodedSplits;
@@ -316,11 +319,10 @@ class VocabEncoder {
         data[sentIndex].push_back(tokenDetails);
       }
     }
-    if(data[data.size()-1].size() == 0) {
-      data.resize(data.size()-1);
-    }
+    data.resize(sentIndex);
+    assert( data[data.size()-1].size() > 0 );
   }
-
+  
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int64_t> > &data) {
@@ -337,7 +339,7 @@ class VocabEncoder {
       
       // skip empty lines
       if(line.size() == 0) {
-	continue;
+        continue;
       }
       lineNumber++;
       
@@ -380,7 +382,7 @@ class VocabEncoder {
   int64_t Count() const {
     return intToToken->size();
   }
-
+  
   void* MapToSharedMemory(bool create, const string objectNickname) {
     if(string(objectNickname) == string("VocabEncoder::tokenToInt")) {
       if(create) {

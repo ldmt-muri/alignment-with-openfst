@@ -32,7 +32,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   case FeatureTemplate::LOG_ALIGNMENT_JUMP:
     os << "LOG_ALIGNMENT_JUMP";
     os << '|' << obj.biasedAlignmentJump.alignmentJump;
-    os << '|' << obj.biasedAlignmentJump.wordBias;
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.biasedAlignmentJump.wordBias);
     break;
   case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
     os << "ALIGNMENT_JUMP_IS_ZERO";
@@ -135,9 +135,7 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
   if(string(objectNickname) == string("paramWeights")) {
     ShmemDoubleAllocator sharedMemoryDoubleAllocator(learningInfo->sharedMemorySegment->get_segment_manager()); 
     if(create) {
-      cerr << "before constructing paramWeights" << endl;
       auto ptr = learningInfo->sharedMemorySegment->find_or_construct<ShmemVectorOfDouble> (objectNickname.c_str()) (sharedMemoryDoubleAllocator);
-      cerr << "after constructing paramWeights" << endl;
       return ptr;
     } else {
       return learningInfo->sharedMemorySegment->find<ShmemVectorOfDouble> (objectNickname.c_str()).first;
@@ -146,9 +144,7 @@ void* LogLinearParams::MapToSharedMemory(bool create, const string objectNicknam
   } else if (string(objectNickname) == string("paramIds")) {
     ShmemFeatureIdAllocator sharedMemoryFeatureIdAllocator(learningInfo->sharedMemorySegment->get_segment_manager());
     if(create) {
-      cerr << "before constructing paramIds" << endl;
       auto ptr = learningInfo->sharedMemorySegment->find_or_construct<ShmemVectorOfFeatureId> (objectNickname.c_str()) (sharedMemoryFeatureIdAllocator);
-      cerr << "after constructing paramIds" << endl;
       return ptr;
     } else {
       return learningInfo->sharedMemorySegment->find<ShmemVectorOfFeatureId> (objectNickname.c_str()).first;
@@ -421,7 +417,6 @@ int LogLinearParams::AddParams(const std::vector< FeatureId > &paramIds) {
   paramIndexes.reserve(paramIndexes.size() + paramIds.size());
   paramIdsTemp.reserve(paramIdsTemp.size() + paramIds.size());
   paramWeightsTemp.reserve(paramWeightsTemp.size() + paramIds.size());
-  cerr << "paramIdsTemp.capacity() = " << paramIdsTemp.capacity() << endl;
   int newParamsCount = 0;
   for(unsigned i = 0; i < paramIds.size(); ++i) {
     if(AddParam(paramIds[i])) {
@@ -493,99 +488,134 @@ void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
   }
 }
 
-// for dependenecy parsing
+// for dependency parsing
 void LogLinearParams::FireFeatures(const ObservationDetails &headDetails, 
                                    const ObservationDetails &childDetails,
                                    const vector<ObservationDetails> & sentDetails,
                                    FastSparseVector<double> &activeFeatures) {
   FeatureId featureId;
 
-  featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN;
-  featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
-  featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
-  //AddParam(featureId);
-  //activeFeatures[paramIndexes[featureId]] += 1.0;
-
-  featureId.type = FeatureTemplate::HEAD_CHILD_POS;
-  featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-  featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::CPOSTAG];
-  AddParam(featureId);
-  activeFeatures[paramIndexes[featureId]] += 1.0;
-  
-  featureId.type = FeatureTemplate::HEAD_POS;
-  featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-  AddParam(featureId);
-  activeFeatures[paramIndexes[featureId]] += 1.0;
-
-  featureId.type = FeatureTemplate::CHILD_POS;
-  featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-  AddParam(featureId);
-  activeFeatures[paramIndexes[featureId]] += 1.0;
-
   unsigned earlierIndex = min(headDetails.details[ObservationDetailsHeader::ID]-1, 
                               childDetails.details[ObservationDetailsHeader::ID]-1);
   unsigned laterIndex = max(headDetails.details[ObservationDetailsHeader::ID]-1, 
                             childDetails.details[ObservationDetailsHeader::ID]-1);
   
-  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
-  
-    // inbetween
-    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
-      FeatureTemplate::HXC_POS: FeatureTemplate::CXH_POS;
-    for(unsigned inbetweenIndex = 1 + earlierIndex; inbetweenIndex < laterIndex; ++inbetweenIndex) {
-      assert(inbetweenIndex >= 0 && inbetweenIndex < sentDetails.size());
-      assert(ObservationDetailsHeader::CPOSTAG < sentDetails[inbetweenIndex].details.size());
-      featureId.wordBias = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+
+  for(auto featTemplateIter = learningInfo->featureTemplates.begin();
+      featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
+    
+    switch(*featTemplateIter) {
+    case FeatureTemplate::HEAD_CHILD_TOKEN:
+      featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN;
+      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
+      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::HEAD_CHILD_POS:
+      featureId.type = FeatureTemplate::HEAD_CHILD_POS;
+      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::HEAD_POS:
+      featureId.type = FeatureTemplate::HEAD_POS;
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::CHILD_POS:
+      featureId.type = FeatureTemplate::CHILD_POS;
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+      // inbetween
+    case FeatureTemplate::CXH_POS:
+    case FeatureTemplate::HXC_POS:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
+      featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::HXC_POS: FeatureTemplate::CXH_POS;
+      if(featureId.type != *featTemplateIter) break;
+      for(unsigned inbetweenIndex = 1 + earlierIndex; inbetweenIndex < laterIndex; ++inbetweenIndex) {
+        assert(inbetweenIndex >= 0 && inbetweenIndex < sentDetails.size());
+        assert(ObservationDetailsHeader::CPOSTAG < sentDetails[inbetweenIndex].details.size());
+        featureId.wordBias = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      break;
+      
+      // outside to the left 
+    case FeatureTemplate::XHC_POS:
+    case FeatureTemplate::XCH_POS:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) {
+        break;
+      }
+      featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::XHC_POS: FeatureTemplate::XCH_POS;
+      if(featureId.type != *featTemplateIter) break;
+      featureId.wordBias = 
+          earlierIndex == 0?
+        -1:
+        sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+
+      // outside to the right 
+    case FeatureTemplate::CHX_POS:
+    case FeatureTemplate::HCX_POS:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
+      featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::HCX_POS: FeatureTemplate::CHX_POS;
+      if(featureId.type != *featTemplateIter) break;
+      featureId.wordBias = 
+        laterIndex == sentDetails.size() - 1?
+        -1:
+        sentDetails[laterIndex+1].details[ObservationDetailsHeader::CPOSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    // log alignment jump (two versions below, with and without conjoining the head pos tag)
+    case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) break; 
+      featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
+      featureId.biasedAlignmentJump.alignmentJump = 
+        headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        log(1 + 2.0 * (laterIndex - earlierIndex)):
+        -1 * log(1 + 2.0 * (laterIndex - earlierIndex));
+      
+      // biased version:
+      //featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      //AddParam(featureId);
+      //activeFeatures[paramIndexes[featureId]] += 1.0;
+      
+      // unbiased version:
+      featureId.biasedAlignmentJump.wordBias = -1;
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+      // alignment jump
+    case FeatureTemplate::ALIGNMENT_JUMP:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
+      featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
+      featureId.alignmentJump = headDetails.details[ObservationDetailsHeader::ID] - childDetails.details[ObservationDetailsHeader::ID];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    default:
+      cerr << "feature not implemented for dependency parsing: " << *featTemplateIter << endl;
+      assert(false);
     }
-    
-
-    // outside to the left 
-    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
-      FeatureTemplate::XHC_POS: FeatureTemplate::XCH_POS;
-    featureId.wordBias = 
-      earlierIndex == 0?
-      -1:
-      sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-    
-    // outside to the right 
-    featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
-      FeatureTemplate::HCX_POS: FeatureTemplate::CHX_POS;
-    featureId.wordBias = 
-      laterIndex == sentDetails.size() - 1?
-      -1:
-      sentDetails[laterIndex+1].details[ObservationDetailsHeader::CPOSTAG];
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-    
-  }
-
-  // log alignment jump (two versions below, with and without conjoining the head pos tag)
-  featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
-  featureId.biasedAlignmentJump.alignmentJump = 
-    headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
-    log(1 + 2.0 * (laterIndex - earlierIndex)):
-    -1 * log(1 + 2.0 * (laterIndex - earlierIndex));
-  // biased version:
-  featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-  AddParam(featureId);
-  activeFeatures[paramIndexes[featureId]] += 1.0;
-  // unbiased version:
-  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
-    featureId.biasedAlignmentJump.wordBias = -1;
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
-  }
-
-  // alignment jump
-  if(headDetails.details[ObservationDetailsHeader::ID] != 0) {
-    featureId.type = FeatureTemplate::ALIGNMENT_JUMP;
-    featureId.alignmentJump = headDetails.details[ObservationDetailsHeader::ID] - childDetails.details[ObservationDetailsHeader::ID];
-    AddParam(featureId);
-    activeFeatures[paramIndexes[featureId]] += 1.0;
   }
 }
 

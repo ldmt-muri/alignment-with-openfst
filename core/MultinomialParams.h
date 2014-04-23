@@ -262,7 +262,6 @@ namespace MultinomialParams {
     paramsFile.close();
     // renormalize
     NormalizeParams(params, 1.0, true, true, false);
-    cerr << "finished loading theta parameters. |unique_contexts| = " << params.params.size() << endl;
   }
   
   template <typename ContextType>

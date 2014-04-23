@@ -81,7 +81,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
                                           gaussianSampler(0.0, 10.0) {
   
   
-  AddEnglishClosedVocab();
+  //AddEnglishClosedVocab();
   
   // all processes will now read from the .vocab file master is writing. so, lets wait for the master before we continue.
   bool syncAllProcesses;
@@ -100,7 +100,6 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
 
   // what task is this core being used for? pos tagging? word alignment?
   this->task = task;
-
 }
 
 void LatentCrfModel::AddEnglishClosedVocab() {
@@ -933,7 +932,7 @@ double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient,
     l2term += learningInfo.optimizationMethod.subOptMethod->regularizationStrength * lambda_i * lambda_i;
     assert(!std::isnan(unregularizedGradient[i]) || !std::isinf(unregularizedGradient[i]));
   } 
-  cerr << "l2term = " << l2term << endl;
+  cerr << " l2term = " << l2term << endl;
   return l2RegularizedObjective;
 }
 
@@ -1211,7 +1210,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
     cerr << ",\tgnorm = " << gnorm;
     cerr << ",\tstep = " << step;
   }
-  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH /* && model.learningInfo.mpiWorld->rank() == 0*/) {
+  if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
     cerr << endl << endl;
   }
 
@@ -1475,7 +1474,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
       } // end of EM iterations
 
       // for debugging
-      (*learningInfo.endOfKIterationsCallbackFunction)();
+      //(*learningInfo.endOfKIterationsCallbackFunction)();
     
       // debug info
       if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {

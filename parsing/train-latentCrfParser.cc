@@ -174,43 +174,39 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   }
    
   if(vm.count(FEAT.c_str()) > 0) {
+
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
          featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
-      if(*featIter == "LABEL_BIGRAM") {
-        assert(false); // this feature does not make sense for word alignment
-        learningInfo.featureTemplates.push_back(FeatureTemplate::LABEL_BIGRAM);
-      } else if(*featIter == "SRC_BIGRAM") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_BIGRAM);
-      } else if(*featIter == "ALIGNMENT_JUMP") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
+      if(*featIter == "HEAD_CHILD_TOKEN") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_TOKEN);
+      } else if(*featIter == "HEAD_CHILD_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_POS);
+      } else if(*featIter == "HEAD_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_POS);
+      } else if(*featIter == "CHILD_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CHILD_POS);
+      } else if(*featIter == "CXH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CXH_POS);
+      } else if(*featIter == "HXC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HXC_POS);
+      } else if(*featIter == "XHC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::XHC_POS);
+      } else if(*featIter == "XCH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::XCH_POS);
+      } else if(*featIter == "CHX_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CHX_POS);
+      } else if(*featIter == "HCX_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HCX_POS);
       } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
-      } else if(*featIter == "ALIGNMENT_JUMP_IS_ZERO") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO);
-      } else if(*featIter == "SRC0_TGT0") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
-      } else if(*featIter == "PRECOMPUTED") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
-      } else if (*featIter == "DIAGONAL_DEVIATION") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::DIAGONAL_DEVIATION);
-      } else if (*featIter == "SRC_WORD_BIAS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::SRC_WORD_BIAS);
-      } else if(*featIter == "SYNC_START" ){
-        learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_START);
-      } else if(*featIter == "SYNC_END") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
-      } else if(*featIter == "OTHER_ALIGNERS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
-      } else if(*featIter == "NULL_ALIGNMENT") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
-      } else if(*featIter == "NULL_ALIGNMENT_LENGTH_RATIO") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO);
+      } else if(*featIter == "ALIGNMENT_JUMP") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
       } else {
         assert(false);
       }
     }
   }
-  
+    
   learningInfo.hiddenSequenceIsMarkovian = false;
   
   if(vm.count(OPTIMIZER.c_str())) {
@@ -233,7 +229,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
     cerr << FEAT << "=";
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
       cerr << *featIter << " ";
     }
     cerr << endl;
@@ -244,8 +240,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
     cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
     cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
-    //cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
-    //cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
     if(vm.count(OPTIMIZER.c_str())) {
       cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
     }
@@ -297,9 +291,10 @@ void endOfKIterationsCallbackFunction() {
   stringstream labelsFilename;
   labelsFilename << parser.outputPrefix << ".labels.iter" << parser.learningInfo.iterationsCount;
   parser.Label(labelsFilename.str());
-  cerr << "parses can be found at " << labelsFilename.str() << endl;
+  if(parser.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "parses can be found at " << labelsFilename.str() << endl;
+  }
 }
-
 
 void UnitTestMatrixTreeTheorem() {
   // write input file
@@ -332,7 +327,7 @@ void UnitTestMatrixTreeTheorem() {
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 6;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 20;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   learningInfo.thetaOptMethod = new OptMethod();
@@ -422,6 +417,7 @@ void UnitTestMatrixTreeTheorem() {
         correctParseId = parseId;
       }
     }
+    cerr << "cerrectParseId = " << correctParseId << endl;
     double probZGivenX = partitionGivenXZ / partitionGivenX;
     nllZGivenXEnumerated += MultinomialParams::nLog(probZGivenX);
     for(unsigned parseId = 0; parseId < parses[sentId].size(); ++parseId) {
@@ -596,7 +592,7 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
-  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 2;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 20;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
   // thetas

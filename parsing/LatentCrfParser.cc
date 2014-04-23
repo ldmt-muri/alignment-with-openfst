@@ -39,21 +39,17 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
 				   LearningInfo &learningInfo,
 				   const string &initialLambdaParamsFilename, 
 				   const string &initialThetaParamsFilename,
-				   const string &wordPairFeaturesFilename) : LatentCrfModel(textFilename,
-											    outputPrefix,
-											    learningInfo,
-											    LatentCrfParser::ROOT_POSITION,
-											    LatentCrfParser::Task::DEPENDENCY_PARSING) {
-
-  // unlike POS tagging, yDomain depends on the src sentence length. we will set it on a per-sentence basis.
-  this->yDomain.clear();
+				   const string &wordPairFeaturesFilename) : LatentCrfModel("",
+                                                                    outputPrefix,
+                                                                    learningInfo,
+                                                                    LatentCrfParser::ROOT_POSITION,
+                                                                    LatentCrfParser::Task::DEPENDENCY_PARSING) {
   
   // slaves wait for master
   if(learningInfo.mpiWorld->rank() != 0) {
     bool vocabEncoderIsReady;
     boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
-
   // encode the null token which is conventionally added to the beginning of the sentnece. 
   ROOT_STR = "__ROOT__";
   ROOT_ID = vocabEncoder.Encode(ROOT_STR);
@@ -92,19 +88,20 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
   }
 
   // initialize (and normalize) the log theta params to gaussians
+  // TODO-OPT: only the master process needs to init theta 
   if(learningInfo.initializeThetasWithGaussian || learningInfo.initializeThetasWithUniform) {
-    cerr << "calling InitTheta() " << endl;
     InitTheta();
   }
 
-  if(initialThetaParamsFilename.size() > 0) {
+  // TODO-OPT: only the master process should load the params file! this is a waste of time
+  if(initialThetaParamsFilename.size() > 0 ) {
     //assert(nLogThetaGivenOneLabel.params.size() == 0);
     if(learningInfo.mpiWorld->rank() == 0) {
       cerr << "initializing theta params from " << initialThetaParamsFilename << endl;
     }
     MultinomialParams::LoadParams(initialThetaParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
-    string reloadedParamsFilename = initialThetaParamsFilename + ".reloaded";
-    MultinomialParams::PersistParams(reloadedParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
+    //string reloadedParamsFilename = initialThetaParamsFilename + ".reloaded";
+    //MultinomialParams::PersistParams(reloadedParamsFilename, nLogThetaGivenOneLabel, vocabEncoder, true, true);
     assert(nLogThetaGivenOneLabel.params.size() > 0);
   } else {
     BroadcastTheta(0);
@@ -127,7 +124,6 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
   if(learningInfo.mpiWorld->rank() == 0) {
     vocabEncoder.PersistVocab(outputPrefix + string(".vocab"));
   }
-
 }
 
 void LatentCrfParser::InitTheta() {
@@ -167,23 +163,16 @@ void LatentCrfParser::InitTheta() {
   // then normalize them
   MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
 
-  stringstream thetaParamsFilename;
-  thetaParamsFilename << outputPrefix << ".init.theta";
-  PersistTheta(thetaParamsFilename.str());
+  //stringstream thetaParamsFilename;
+  //thetaParamsFilename << outputPrefix << ".init.theta";
+  //PersistTheta(thetaParamsFilename.str());
 
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done" << endl;
   }
 }
 
-void LatentCrfParser::PrepareExample(unsigned exampleId) {
-  yDomain.clear();
-  this->yDomain.insert(LatentCrfParser::ROOT_POSITION);
-  unsigned sentLength = testingMode? testSents[exampleId].size() : sents[exampleId].size();
-  // each position in the src sentence, including null, should have an entry in yDomain
-  for(unsigned i = LatentCrfParser::ROOT_POSITION + 1; i < LatentCrfParser::ROOT_POSITION + sentLength + 1; ++i) {
-    yDomain.insert(i);
-  }
+void LatentCrfParser::PrepareExample(unsigned exampleId) {  
 }
 
 vector<ObservationDetails>& LatentCrfParser::GetReconstructedObservableDetailsSequence(int exampleId) {
@@ -443,7 +432,7 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
   for(unsigned rootPosition = 0; rootPosition < yGivenXZLaplacianHat.rows(); ++rootPosition) {
     // marginal probability of making this decision; \mu_{0,m} in (Koo et al. 2007)
     double marginal = (yGivenXZLaplacianHat(0,rootPosition) * yGivenXZLaplacianHatInverse(rootPosition,0)).as_float();
-    if(marginal > 1.0 || marginal < 0.0) {
+    if(marginal > 1.01 || marginal < -0.01) {
       cerr << "WARNING: marginal = " << marginal << endl;
     }
     mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
@@ -455,7 +444,7 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
         (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, childPosition)).as_float();
       marginal -= headPosition == 0? 0.0 :
         (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, headPosition)).as_float();
-      if(marginal > 1.0 || marginal < 0.0) {
+      if(marginal > 1.01 || marginal < -0.01) {
         cerr << "WARNING: marginal = " << marginal << endl;
       }
       mle[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
