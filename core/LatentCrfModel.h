@@ -147,7 +147,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // train the model
   void Train();
 
-  void SupervisedTrain();
+  void SupervisedTrain(bool fitLambdas=true, bool fitThetas=true);
   virtual void SupervisedTrainTheta();
 
   void BlockCoordinateDescent();

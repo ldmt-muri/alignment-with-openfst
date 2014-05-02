@@ -2,20 +2,20 @@ CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
 LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
-OPT=-Wall -O3
+OPT=-Wall -O3 -g
 
 all: train-latentCrfParser
 # specific to the parsing model
 train-latentCrfParser: train-latentCrfParser.o
 	$(CC) train-latentCrfParser.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfParser.o LogLinearParams.o fdict.o -o parsing/train-latentCrfParser  $(LIBS)
   
-train-latentCrfParser.o: IbmModel1.o LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h FstUtils.o
+train-latentCrfParser.o: IbmModel1.o LatentCrfModel.o LatentCrfParser.o parsing/train-latentCrfParser.cc wammar-utils/StringUtils.h core/LearningInfo.h FstUtils.o 
 	$(CC) $(BEFORE) $(SINGLE) parsing/train-latentCrfParser.cc $(OPT) 
 
 IbmModel1.o: FstUtils.o alignment/IbmModel1.cc alignment/IbmModel1.h core/LearningInfo.h wammar-utils/StringUtils.h alignment/IAlignmentModel.h core/MultinomialParams.h core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) alignment/IbmModel1.cc $(OPT)
 
-LatentCrfParser.o: LatentCrfModel.o parsing/LatentCrfParser.h parsing/LatentCrfParser.cc
+LatentCrfParser.o: LatentCrfModel.o parsing/LatentCrfParser.h parsing/LatentCrfParser.cc cdec-utils/logval.h
 	$(CC) $(BEFORE) $(SINGLE) parsing/LatentCrfParser.cc $(OPT)
 
 # Share code

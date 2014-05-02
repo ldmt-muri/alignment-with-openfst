@@ -714,74 +714,88 @@ void LatentCrfModel::SupervisedTrainTheta() {
   assert(false);
 }
 
-void LatentCrfModel::SupervisedTrain() {
+void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
   
-  // use lbfgs to fit the lambda CRF parameters
-  // parallelizing the lbfgs callback function is complicated
-  double nll;
-  if(learningInfo.mpiWorld->rank() == 0) {
-    
-    // populate lambdasArray and lambasArrayLength
-    double* lambdasArray;
-    int lambdasArrayLength;
-    lambdasArray = lambda->GetParamWeightsArray();
-    lambdasArrayLength = lambda->GetParamsCount();
+  if(fitLambdas) {
 
     if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "will start LBFGS " <<  " at " << time(0) << endl;    
+      cerr << "started supervised training of lambda parameters.. " << endl;
     }
     
-    // only the master executes lbfgs
-    int sentId = 0;
-    lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
-    int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &nll, 
-                            LbfgsCallbackEvalYGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
-    
-    bool NEED_HELP = false;
-    mpi::broadcast<bool>(*learningInfo.mpiWorld, NEED_HELP, 0);
-    
+    // use lbfgs to fit the lambda CRF parameters
+    // parallelizing the lbfgs callback function is complicated
+    double nll;
     if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "done with LBFGS " <<  " at " << time(0) << endl;    
-    }
-    
-    // debug
-    if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " \
-           << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
-    }
-          
-  } else {
-    
-    // be loyal to your master
-    while(true) {
-      
-      // does the master need help computing the gradient? this line always "receives" rather than broacasts
-      bool masterNeedsHelp = false;
-      mpi::broadcast<bool>(*learningInfo.mpiWorld, masterNeedsHelp, 0);
-      if(!masterNeedsHelp) {
-        break;
+
+      // populate lambdasArray and lambasArrayLength
+      double* lambdasArray;
+      int lambdasArrayLength;
+      lambdasArray = lambda->GetParamWeightsArray();
+      lambdasArrayLength = lambda->GetParamsCount();
+
+      if(learningInfo.mpiWorld->rank() == 0) {
+        cerr << "will start LBFGS " <<  " at " << time(0) << endl;    
       }
-      
-      // process your share of examples
-      vector<double> gradientPiece(lambda->GetParamsCount(), 0.0), dummy;
-      int fromSentId = 0;
-      LatentCrfModel &model = LatentCrfModel::GetInstance();
-      int toSentId = (int)model.examplesCount;
-      double nllPiece = ComputeNllYGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
-            
-      // merge your gradient with other slaves
-      mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, dummy, 
-                                    AggregateVectors2(), 0);
-      
-      // aggregate the loglikelihood computation as well
-      double dummy2;
-      mpi::reduce<double>(*learningInfo.mpiWorld, nllPiece, dummy2, std::plus<double>(), 0);
-      
-    }
-  } // end if master => run lbfgs() else help master
+
+      // only the master executes lbfgs
+      int sentId = 0;
+      lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
+      int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &nll, 
+                              LbfgsCallbackEvalYGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
+
+      bool NEED_HELP = false;
+      mpi::broadcast<bool>(*learningInfo.mpiWorld, NEED_HELP, 0);
+
+      if(learningInfo.mpiWorld->rank() == 0) {
+        cerr << "done with LBFGS " <<  " at " << time(0) << endl;    
+      }
+
+      // debug
+      if(learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
+        cerr << "rank #" << learningInfo.mpiWorld->rank() << ": lbfgsStatusCode = " \
+             << LbfgsUtils::LbfgsStatusIntToString(lbfgsStatus) << " = " << lbfgsStatus << endl;
+      }
+
+    } else {
+
+      // be loyal to your master
+      while(true) {
+
+        // does the master need help computing the gradient? this line always "receives" rather than broacasts
+        bool masterNeedsHelp = false;
+        mpi::broadcast<bool>(*learningInfo.mpiWorld, masterNeedsHelp, 0);
+        if(!masterNeedsHelp) {
+          break;
+        }
+
+        // process your share of examples
+        vector<double> gradientPiece(lambda->GetParamsCount(), 0.0), dummy;
+        int fromSentId = 0;
+        LatentCrfModel &model = LatentCrfModel::GetInstance();
+        int toSentId = (int)model.examplesCount;
+        double nllPiece = ComputeNllYGivenXAndLambdaGradient(gradientPiece, fromSentId, toSentId);
+
+        // merge your gradient with other slaves
+        mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, dummy, 
+                                      AggregateVectors2(), 0);
+
+        // aggregate the loglikelihood computation as well
+        double dummy2;
+        mpi::reduce<double>(*learningInfo.mpiWorld, nllPiece, dummy2, std::plus<double>(), 0);
+
+      }
+    } // end if master => run lbfgs() else help master
+  } 
   
-  // optimize theta (i.e. multinomial) parameters to maximize the likeilhood
-  SupervisedTrainTheta();
+  if(fitThetas) {
+
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "started supervised training of lambda parameters..." << endl;
+    }
+
+    // optimize theta (i.e. multinomial) parameters to maximize the likeilhood
+    SupervisedTrainTheta();
+  }
 }
 
 void LatentCrfModel::Train() {
@@ -1083,27 +1097,27 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
     if(!ignoreThetaTerms) {
       
       if(learningInfo.useEarlyStopping && sentId % 10 == 0) {
-	*devSetNll += nLogC;
+        *devSetNll += nLogC;
       } else {
-	objective += nLogC;
-	
-	// add D/C to the gradient
-	for(FastSparseVector<LogVal<double> >::iterator dIter = DSparseVector.begin(); 
-	    dIter != DSparseVector.end(); ++dIter) {
-	  double nLogd = dIter->second.s_? dIter->second.v_ : -dIter->second.v_; // multiply the inner logD representation by -1.
-	  double dOverC = MultinomialParams::nExp(nLogd - nLogC);
-	  if(std::isnan(dOverC) || std::isinf(dOverC)) {
-	    if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-	      cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ". my mistake. will halt!" << endl;
-	    }
-	    assert(false);
-	  }
-	  if(derivativeWRTLambda.size() <= dIter->first) {
-	    cerr << "problematic feature index is " << dIter->first << " cuz derivativeWRTLambda.size() = " << derivativeWRTLambda.size() << endl;
-	  }
-	  assert(derivativeWRTLambda.size() > dIter->first);
-	  derivativeWRTLambda[dIter->first] -= dOverC;
-	}
+        objective += nLogC;
+        
+        // add D/C to the gradient
+        for(FastSparseVector<LogVal<double> >::iterator dIter = DSparseVector.begin(); 
+            dIter != DSparseVector.end(); ++dIter) {
+          double nLogd = dIter->second.s_? dIter->second.v_ : -dIter->second.v_; // multiply the inner logD representation by -1.
+          double dOverC = MultinomialParams::nExp(nLogd - nLogC);
+          if(std::isnan(dOverC) || std::isinf(dOverC)) {
+            if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+              cerr << "ERROR: dOverC = " << dOverC << ", nLogd = " << nLogd << ". my mistake. will halt!" << endl;
+            }
+            assert(false);
+          }
+          if(derivativeWRTLambda.size() <= dIter->first) {
+            cerr << "problematic feature index is " << dIter->first << " cuz derivativeWRTLambda.size() = " << derivativeWRTLambda.size() << endl;
+          }
+          assert(derivativeWRTLambda.size() > dIter->first);
+          derivativeWRTLambda[dIter->first] -= dOverC;
+        }
       }
     }
 
@@ -1476,11 +1490,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // for debugging
       //(*learningInfo.endOfKIterationsCallbackFunction)();
     
-      // debug info
-      if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
-        PersistTheta(GetThetaFilename(learningInfo.iterationsCount));
-      }
-
       // end of if(thetaOptMethod->algorithm == EM)
     } else if (learningInfo.thetaOptMethod->algorithm == GRADIENT_DESCENT) {
       assert(learningInfo.mpiWorld->size() == 1); // this method is only supported for single-threaded runs
@@ -1521,7 +1530,18 @@ void LatentCrfModel::BlockCoordinateDescent() {
       // other optimization methods of theta are not implemented
       assert(false);
     }
-    
+
+    // debug info
+    if( (learningInfo.iterationsCount % learningInfo.persistParamsAfterNIteration == 0) && (learningInfo.mpiWorld->rank() == 0) ) {
+      PersistTheta(GetThetaFilename(learningInfo.iterationsCount));
+    }
+    // label the first K examples from the training set (i.e. the test set)
+    //if(learningInfo.iterationsCount % learningInfo.invokeCallbackFunctionEveryKIterations == 0 && \
+    //   learningInfo.endOfKIterationsCallbackFunction != 0) {
+    //  // call the call back function
+    //  (*learningInfo.endOfKIterationsCallbackFunction)();
+    //}
+
     // update the lambdas
     this->optimizingLambda = true;
     // debug info

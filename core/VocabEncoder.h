@@ -283,7 +283,6 @@ class VocabEncoder {
   
   void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data) {
     assert(data.size() == 0);    
-    cerr << "reading conll file " << conllFilename << endl;
     std::ifstream conllFile(conllFilename.c_str(), std::ios::in);
     std::string line;
 

@@ -209,7 +209,7 @@ namespace MultinomialParams {
     string line;
     while( getline(paramsFile, line) ) {
       if(line.size() == 0) {
-	continue;
+        continue;
       }
       std::vector<string> splits;
       StringUtils::SplitString(line, ' ', splits);
@@ -258,10 +258,17 @@ namespace MultinomialParams {
         continue;
       }
       params[context][event] = nlogP;
+      if(params[context].find(-event) != params[context].end()) {
+        // also add the negative event 
+        params[context][-event] = nlogP;
+      }
     }
     paramsFile.close();
     // renormalize
     NormalizeParams(params, 1.0, true, true, false);
+    
+    // persist the parameters we just loaded
+    //PersistParams(paramsFilename + ".reloaded", params, vocabEncoder, true, true);
   }
   
   template <typename ContextType>

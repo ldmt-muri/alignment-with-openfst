@@ -12,7 +12,8 @@ enum FeatureTemplate {
   DIAGONAL_DEVIATION, SYNC_START, SYNC_END, OTHER_ALIGNERS, NULL_ALIGNMENT, NULL_ALIGNMENT_LENGTH_RATIO, 
   EMISSION, SRC_WORD_BIAS, BOUNDARY_LABELS, 
   // dependency parsing
-  HEAD_CHILD_TOKEN, HEAD_CHILD_POS, 
+  HC_TOKEN, CH_TOKEN, HC_POS, CH_POS, 
+  HEAD_CHILD_TOKEN_SET, HEAD_CHILD_POS_SET, 
   HEAD_POS, 
   CHILD_POS, 
   // in the middle (head before child)
@@ -24,7 +25,12 @@ enum FeatureTemplate {
   XCH_POS,
   // outside to the right
   HCX_POS,
-  CHX_POS
+  CHX_POS,
+  // inside but adjacent to child or head
+  HXxC_POS,
+  CXxH_POS,
+  HxXC_POS,
+  CxXH_POS
 };
 
 namespace Distribution {
@@ -69,7 +75,7 @@ struct ObservationDetails {
 // observation details headers
 namespace ObservationDetailsHeader {
   enum ObservationDetailsHeader {
-    ID=0, FORM=1, LEMMA=2, CPOSTAG=3, RECONSTRUCTED=4, POSTAG=4, FEATS=5, HEAD=6, DEPREL=7, PHEAD=8, PDEPREL=9
+    ID=0, FORM=1, RECONSTRUCTED=1, LEMMA=2, CPOSTAG=3, POSTAG=4, FEATS=5, HEAD=6, DEPREL=7, PHEAD=8, PDEPREL=9
   };
 }
 

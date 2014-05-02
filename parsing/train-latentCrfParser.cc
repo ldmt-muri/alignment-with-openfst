@@ -93,8 +93,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
     REVERSE = "reverse",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
-    MAX_SEQUENCE_LENGTH = "max-sequence-length"
-    //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename"
+    MAX_SEQUENCE_LENGTH = "max-sequence-length",
+    //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
+    SUPERVISED = "supervised"
     ;
 
   // Declare the supported options.
@@ -115,6 +116,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MAX_SEQUENCE_LENGTH.c_str(), po::value<unsigned>(&learningInfo.maxSequenceLength)->default_value( 200 ), "(unsigned) max length of a sentence used for training. A value of zero indicates no limit.")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(bool) initialize with supervised training (for stacking models or debugging purposes), then update the parameters with unsupervised objective.")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(2), "(int) quit LBFGS optimization after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
@@ -177,10 +179,18 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
          featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
-      if(*featIter == "HEAD_CHILD_TOKEN") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_TOKEN);
-      } else if(*featIter == "HEAD_CHILD_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_POS);
+      if(*featIter == "HC_TOKEN") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_TOKEN);
+      } else if(*featIter == "HC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_POS);
+      } else if(*featIter == "CH_TOKEN") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_TOKEN);
+      } else if(*featIter == "CH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_POS);
+      } else if(*featIter == "HEAD_CHILD_TOKEN_SET") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_TOKEN_SET);
+      } else if(*featIter == "HEAD_CHILD_POS_SET") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_POS_SET);
       } else if(*featIter == "HEAD_POS") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_POS);
       } else if(*featIter == "CHILD_POS") {
@@ -189,6 +199,14 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
         learningInfo.featureTemplates.push_back(FeatureTemplate::CXH_POS);
       } else if(*featIter == "HXC_POS") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::HXC_POS);
+      } else if(*featIter == "CXxH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CXxH_POS);
+      } else if(*featIter == "HXxC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HXxC_POS);
+      } else if(*featIter == "CxXH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CxXH_POS);
+      } else if(*featIter == "HxXC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HxXC_POS);
       } else if(*featIter == "XHC_POS") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::XHC_POS);
       } else if(*featIter == "XCH_POS") {
@@ -239,6 +257,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
     cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
+    cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
     cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
     if(vm.count(OPTIMIZER.c_str())) {
       cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
@@ -646,17 +665,29 @@ int main(int argc, char **argv) {
   
   assert(model->lambda->IsSealed());
 
+  // fix learningInfo.test_size
+  LatentCrfParser &parser = *( (LatentCrfParser*) model );
+  if(parser.learningInfo.firstKExamplesToLabel <= 0) {
+    parser.learningInfo.firstKExamplesToLabel = parser.examplesCount;
+  }
+  
+  // initialize the model with 
+  if(learningInfo.supervisedTraining) {
+    model->SupervisedTrain(true, true);
+    string supervisedTrainedModelPredictions = outputFilenamePrefix + string(".supervised.labels");
+    parser.Label(supervisedTrainedModelPredictions);
+  }
+
   // unsupervised training of the model
-  model->Train();
-  //(*learningInfo.endOfKIterationsCallbackFunction)();
+  parser.Train();
   
   // print best params
   if(world.rank() == 0) {
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
-    model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
+    parser.lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
+    parser.lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
+    parser.PersistTheta(outputFilenamePrefix + string(".final.theta"));
   }
-
+  
   // we don't need the slaves anymore
   if(world.rank() > 0) {
     //return 0;
@@ -665,13 +696,7 @@ int main(int argc, char **argv) {
   // run viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
 
-  // fix learningInfo.test_size
-  LatentCrfParser &parser = *( (LatentCrfParser*) model );
-  if(parser.learningInfo.firstKExamplesToLabel <= 0) {
-    parser.learningInfo.firstKExamplesToLabel = parser.examplesCount;
-  }
-  
-  ((LatentCrfParser*)model)->Label(labelsFilename);
+  parser.Label(labelsFilename);
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "parses can be found at " << labelsFilename << endl;
   }

@@ -16,6 +16,13 @@
 template <class T>
 class LogVal {
  public:
+
+  std::ostream& operator<<(std::ostream& os) {
+    if (s_) os<<"(-)";
+    os<<v_;
+    return os;
+  }
+
   void print(std::ostream &o) const {
     if (s_) o<<"(-)";
     o<<v_;

@@ -42,12 +42,27 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << "SRC0_TGT0";
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
-  case FeatureTemplate::HEAD_CHILD_TOKEN:
-    os << "HEAD_CHILD_TOKEN";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
-    break;
-  case FeatureTemplate::HEAD_CHILD_POS:
-    os << "HEAD_CHILD_POS";
+  case FeatureTemplate::HC_TOKEN:
+  case FeatureTemplate::HC_POS:
+  case FeatureTemplate::CH_TOKEN:
+  case FeatureTemplate::CH_POS:
+  case FeatureTemplate::HEAD_CHILD_TOKEN_SET:
+  case FeatureTemplate::HEAD_CHILD_POS_SET:
+    if(obj.type == FeatureTemplate::HC_TOKEN) {
+      os << "HC_TOKEN"; 
+    } else if(obj.type == FeatureTemplate::CH_TOKEN) {
+      os << "CH_TOKEN"; 
+    } else if(obj.type == FeatureTemplate::HC_POS) {
+      os << "HC_POS"; 
+    } else if(obj.type == FeatureTemplate::CH_POS) {
+      os << "CH_POS"; 
+    } else if(obj.type == FeatureTemplate::HEAD_CHILD_TOKEN_SET) {
+      os << "HEAD_CHILD_TOKEN_SET"; 
+    } else if(obj.type == FeatureTemplate::HEAD_CHILD_POS_SET) {
+      os << "HEAD_CHILD_POS_SET";
+    } else{
+      assert(false);
+    }
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
   case FeatureTemplate::PRECOMPUTED:
@@ -72,27 +87,63 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::HCX_POS:
     os << "HCX_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::CHX_POS:
     os << "CHX_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::XHC_POS:
     os << "XHC_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::XCH_POS:
     os << "XCH_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::HXC_POS:
     os << "HXC_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::CXH_POS:
     os << "CXH_POS";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordBias);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
+    break;
+  case FeatureTemplate::CXxH_POS:
+    os << "CXxC_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
+    break;
+  case FeatureTemplate::HXxC_POS:
+    os << "HXxC_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
+    break;
+  case FeatureTemplate::HxXC_POS:
+    os << "HxXC_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
+    break;
+  case FeatureTemplate::CxXH_POS:
+    os << "CxXH_POS";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::SYNC_START:
     os << "SYNC_START";
@@ -505,32 +556,60 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
       featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
     
     switch(*featTemplateIter) {
-    case FeatureTemplate::HEAD_CHILD_TOKEN:
-      featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN;
+    case FeatureTemplate::HC_TOKEN:
+    case FeatureTemplate::CH_TOKEN:
+      featureId.type = 
+        headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::CH_TOKEN: FeatureTemplate::HC_TOKEN;
+      if(*featTemplateIter != featureId.type) break;
       featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
       featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
-    case FeatureTemplate::HEAD_CHILD_POS:
-      featureId.type = FeatureTemplate::HEAD_CHILD_POS;
-      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+    case FeatureTemplate::HEAD_CHILD_TOKEN_SET:
+      featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN_SET;
+      featureId.wordPair.srcWord = min(headDetails.details[ObservationDetailsHeader::FORM],
+                                       childDetails.details[ObservationDetailsHeader::FORM]);
+      featureId.wordPair.tgtWord = max(headDetails.details[ObservationDetailsHeader::FORM],
+                                       childDetails.details[ObservationDetailsHeader::FORM]);
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::HC_POS:
+    case FeatureTemplate::CH_POS:
+      featureId.type = 
+        headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::CH_POS: FeatureTemplate::HC_POS;
+      if(*featTemplateIter != featureId.type) break;
+      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::POSTAG];
+      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::POSTAG];
+      AddParam(featureId);
+      activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::HEAD_CHILD_POS_SET:
+      featureId.type = FeatureTemplate::HEAD_CHILD_POS_SET;
+      featureId.wordPair.srcWord = min(headDetails.details[ObservationDetailsHeader::POSTAG],
+                                       childDetails.details[ObservationDetailsHeader::POSTAG]);
+      featureId.wordPair.tgtWord = max(headDetails.details[ObservationDetailsHeader::POSTAG],
+                                       childDetails.details[ObservationDetailsHeader::POSTAG]);
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::HEAD_POS:
       featureId.type = FeatureTemplate::HEAD_POS;
-      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::CHILD_POS:
       featureId.type = FeatureTemplate::CHILD_POS;
-      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
@@ -541,46 +620,138 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
       if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
       featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::HXC_POS: FeatureTemplate::CXH_POS;
-      if(featureId.type != *featTemplateIter) break;
+      if(featureId.type != *featTemplateIter) 
+        break;
+      if(abs(headDetails.details[ObservationDetailsHeader::ID]-childDetails.details[ObservationDetailsHeader::ID]) > 3) 
+        break;
       for(unsigned inbetweenIndex = 1 + earlierIndex; inbetweenIndex < laterIndex; ++inbetweenIndex) {
         assert(inbetweenIndex >= 0 && inbetweenIndex < sentDetails.size());
-        assert(ObservationDetailsHeader::CPOSTAG < sentDetails[inbetweenIndex].details.size());
-        featureId.wordBias = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::POSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::FORM];
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
       
-      // outside to the left 
+      // adjacent to the left anchor
     case FeatureTemplate::XHC_POS:
     case FeatureTemplate::XCH_POS:
-      if(headDetails.details[ObservationDetailsHeader::ID] == 0) {
-        break;
-      }
+    case FeatureTemplate::CXxH_POS:
+    case FeatureTemplate::HXxC_POS:
+      if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
+      
+      // adjacent from outside
       featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::XHC_POS: FeatureTemplate::XCH_POS;
-      if(featureId.type != *featTemplateIter) break;
-      featureId.wordBias = 
-          earlierIndex == 0?
-        -1:
-        sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
-      AddParam(featureId);
-      activeFeatures[paramIndexes[featureId]] += 1.0;
+      if(featureId.type == *featTemplateIter) {
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::POSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::FORM];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+
+      // adjacent from the inside
+      featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::HXxC_POS: FeatureTemplate::CXxH_POS;
+      if(featureId.type == *featTemplateIter) {
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::POSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::FORM];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+
       break;
 
-      // outside to the right 
+      // adjacent to the right anchor
     case FeatureTemplate::CHX_POS:
     case FeatureTemplate::HCX_POS:
+    case FeatureTemplate::CxXH_POS:
+    case FeatureTemplate::HxXC_POS:
       if(headDetails.details[ObservationDetailsHeader::ID] == 0) break;
+      // adjacent from the outside
       featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::HCX_POS: FeatureTemplate::CHX_POS;
-      if(featureId.type != *featTemplateIter) break;
-      featureId.wordBias = 
-        laterIndex == sentDetails.size() - 1?
-        -1:
-        sentDetails[laterIndex+1].details[ObservationDetailsHeader::CPOSTAG];
-      AddParam(featureId);
-      activeFeatures[paramIndexes[featureId]] += 1.0;
+      if(featureId.type == *featTemplateIter) {
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::POSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::FORM];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
+      
+      // adjacent from the inside
+      featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        FeatureTemplate::HxXC_POS: FeatureTemplate::CxXH_POS;
+      if(featureId.type == *featTemplateIter) {
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+        featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::CPOSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
+        featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::POSTAG];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+
+        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::FORM];
+        AddParam(featureId);
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+      }
       break;
       
     // log alignment jump (two versions below, with and without conjoining the head pos tag)
@@ -588,19 +759,23 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
       if(headDetails.details[ObservationDetailsHeader::ID] == 0) break; 
       featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
       featureId.biasedAlignmentJump.alignmentJump = 
-        headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
+        headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
         log(1 + 2.0 * (laterIndex - earlierIndex)):
         -1 * log(1 + 2.0 * (laterIndex - earlierIndex));
-      
-      // biased version:
-      //featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-      //AddParam(featureId);
-      //activeFeatures[paramIndexes[featureId]] += 1.0;
       
       // unbiased version:
       featureId.biasedAlignmentJump.wordBias = -1;
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
+
+      // 1 = left child, -1 = right child, no word bias:
+      // biased version:
+      //featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
+      //featureId.biasedAlignmentJump.alignmentJump = 
+      //  headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
+      //  1: -1;
+      //AddParam(featureId);
+      //activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
       // alignment jump
