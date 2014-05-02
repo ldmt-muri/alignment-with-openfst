@@ -29,10 +29,10 @@ string GetOutputPrefix(int argc, char **argv) {
       return string(argv[i+1]);
     }
   }
-  return "FAIL";
+  return "";
 }
 
-void ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, unsigned int &labelsCount) {
+bool ParseParameters(int argc, char **argv, string &textFilename, string &outputFilenamePrefix, string &goldLabelsFilename, LearningInfo &learningInfo, string &wordPairFeaturesFilename, string &initialLambdaParamsFilename, string &initialThetaParamsFilename, unsigned int &labelsCount) {
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
@@ -65,10 +65,6 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     GOLD_LABELS_FILENAME = "gold-labels-filename",
     TAG_DICT_FILENAME = "tag-dict-filename",
     LABELS_COUNT = "labels-count";
-  
-  
-
-  
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -109,27 +105,23 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
 
-  if (vm.count(HELP.c_str())) {
+  if (vm.count(TRAIN_DATA.c_str()) == 0 || vm.count("help")) {
+    if(vm.count(TRAIN_DATA.c_str()) == 0) {
+      cerr << TRAIN_DATA << " option is mandatory" << endl;
+    }
+    if(vm.count(GOLD_LABELS_FILENAME.c_str()) == 0) {
+      cerr << GOLD_LABELS_FILENAME << " option is mandatory" << endl;
+    }
+    cerr << "Usage [OPTIONS] --" << TRAIN_DATA << " text --" << GOLD_LABELS_FILENAME << " labels \n";
     cerr << desc << endl;
-    assert(false);
+    return false;
   }
 
-  if(vm.count(GOLD_LABELS_FILENAME.c_str())) {
-    learningInfo.goldFilename = vm[GOLD_LABELS_FILENAME.c_str()].as<string>();
-  } else {
-    assert(false);
-  }
+  learningInfo.goldFilename = goldLabelsFilename;
 
   if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
     learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
       vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
-  }
-  
-
-  if (vm.count(TRAIN_DATA.c_str()) == 0) {
-    cerr << TRAIN_DATA << " option is mandatory" << endl;
-    cerr << desc << endl;
-    assert(false);
   }
   
   if (vm.count(FEAT.c_str()) == 0) {
@@ -278,7 +270,8 @@ void ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << desc << endl;
     assert(false);
   }
-
+  
+  return true;
 }
 
 // returns the rank of the process which have found the best HMM parameters
@@ -516,7 +509,9 @@ int main(int argc, char **argv) {
 
   // parse command line arguments
   string textFilename, outputFilenamePrefix, goldLabelsFilename, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename;
-  ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename, NUMBER_OF_LABELS);
+  if(!ParseParameters(argc, argv, textFilename, outputFilenamePrefix, goldLabelsFilename, learningInfo, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename, NUMBER_OF_LABELS)) {
+    return 0;
+  }
 
   // initialize the model
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
@@ -536,13 +531,13 @@ int main(int argc, char **argv) {
   }
 
   // use gold labels to do supervised training
-  if(learningInfo.supervisedTraining) {
-    model->SupervisedTrain(goldLabelsFilename);
-    if(learningInfo.mpiWorld->rank() == 0) {
-      model->PersistTheta(outputFilenamePrefix + ".supervised.theta");
-      model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
-    }
-  }
+  //if(learningInfo.supervisedTraining) {
+  //  model->SupervisedTrain(goldLabelsFilename);
+  //  if(learningInfo.mpiWorld->rank() == 0) {
+  //    model->PersistTheta(outputFilenamePrefix + ".supervised.theta");
+  //    model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
+  //  }
+  //}
 
   // unsupervised training of the model
   if(world.rank() == 0) {

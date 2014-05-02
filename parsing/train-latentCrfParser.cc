@@ -59,244 +59,9 @@ string GetOutputPrefix(int argc, char **argv) {
       return string(argv[i+1]);
     }
   }
-  assert(false);
+  return "";
 }
 
-
-bool ParseParameters(int argc, char **argv, string &textFilename, 
-		     string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
-		     string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
-                     LearningInfo &learningInfo) {
-  
-  string HELP = "help",
-    TRAIN_DATA = "train-data", 
-    INIT_LAMBDA = "init-lambda",
-    INIT_THETA = "init-theta", 
-    WORDPAIR_FEATS = "wordpair-feats",
-    OUTPUT_PREFIX = "output-prefix", 
-    TEST_SIZE = "test-size",
-    FEAT = "feat",
-    WEIGHTED_L2_STRENGTH = "weighted-l2-strength",
-    L2_STRENGTH = "l2-strength",
-    L1_STRENGTH = "l1-strength",
-    MAX_ITER_COUNT = "max-iter-count",
-    MIN_RELATIVE_DIFF = "min-relative-diff",
-    MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
-    //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
-    MAX_EM_ITER_COUNT = "max-em-iter-count",
-    MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
-    OPTIMIZER = "optimizer",
-    MINIBATCH_SIZE = "minibatch-size",
-    //LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
-    DIRICHLET_ALPHA = "dirichlet-alpha",
-    VARIATIONAL_INFERENCE = "variational-inference",
-    TEST_WITH_CRF_ONLY = "test-with-crf-only",
-    REVERSE = "reverse",
-    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
-    MAX_SEQUENCE_LENGTH = "max-sequence-length",
-    //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
-    SUPERVISED = "supervised"
-    ;
-
-  // Declare the supported options.
-  po::options_description desc("train-latentCrfParser options");
-  desc.add_options()
-    (HELP.c_str(), "produce help message")
-    (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
-    (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
-    (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
-    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
-    (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
-     // deen=150 // czen=515 // fren=447;
-    (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel)->default_value(0.0), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
-    (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
-    (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
-    (L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l2 regularizer")
-    (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
-    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
-    (MAX_SEQUENCE_LENGTH.c_str(), po::value<unsigned>(&learningInfo.maxSequenceLength)->default_value( 200 ), "(unsigned) max length of a sentence used for training. A value of zero indicates no limit.")
-    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
-    (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(bool) initialize with supervised training (for stacking models or debugging purposes), then update the parameters with unsupervised objective.")
-    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(2), "(int) quit LBFGS optimization after this many iterations")
-    //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
-    (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
-    //(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
-    //(CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
-    (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
-    (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
-    //(LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
-    //(MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
-    (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
-    (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
-    (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
-    (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
-    (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(true), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
-    //(OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
-    //(TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
-    ;
-
-  po::variables_map vm;
-  po::store(po::parse_command_line(argc, argv, desc), vm);
-  po::notify(vm);
-
-  if (vm.count(HELP.c_str())) {
-    cerr << desc << endl;
-    return false;
-  }
-
-  if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
-    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
-      vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
-  }
-  
-
-  if (vm.count(TRAIN_DATA.c_str()) == 0) {
-    cerr << TRAIN_DATA << " option is mandatory" << endl;
-    cerr << desc << endl;
-    return false;
-  }
-  
-  if (vm.count(FEAT.c_str()) == 0) {
-    cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
-    learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
-  }
-
-  if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
-    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L2_STRENGTH.c_str()].as<float>();
-    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
-  } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
-    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L1_STRENGTH.c_str()].as<float>();
-    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
-  } else if (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) {
-    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>();
-    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::WeightedL2;
-  } else {
-    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.0;
-    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
-  }
-   
-  if(vm.count(FEAT.c_str()) > 0) {
-
-    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
-      if(*featIter == "HC_TOKEN") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_TOKEN);
-      } else if(*featIter == "HC_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_POS);
-      } else if(*featIter == "CH_TOKEN") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_TOKEN);
-      } else if(*featIter == "CH_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_POS);
-      } else if(*featIter == "HEAD_CHILD_TOKEN_SET") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_TOKEN_SET);
-      } else if(*featIter == "HEAD_CHILD_POS_SET") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_POS_SET);
-      } else if(*featIter == "HEAD_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_POS);
-      } else if(*featIter == "CHILD_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CHILD_POS);
-      } else if(*featIter == "CXH_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CXH_POS);
-      } else if(*featIter == "HXC_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HXC_POS);
-      } else if(*featIter == "CXxH_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CXxH_POS);
-      } else if(*featIter == "HXxC_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HXxC_POS);
-      } else if(*featIter == "CxXH_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CxXH_POS);
-      } else if(*featIter == "HxXC_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HxXC_POS);
-      } else if(*featIter == "XHC_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::XHC_POS);
-      } else if(*featIter == "XCH_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::XCH_POS);
-      } else if(*featIter == "CHX_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::CHX_POS);
-      } else if(*featIter == "HCX_POS") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::HCX_POS);
-      } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
-      } else if(*featIter == "ALIGNMENT_JUMP") {
-        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
-      } else {
-        assert(false);
-      }
-    }
-  }
-    
-  learningInfo.hiddenSequenceIsMarkovian = false;
-  
-  if(vm.count(OPTIMIZER.c_str())) {
-    if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
-      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
-    } else {
-      cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
-      return false;
-    }
-  }
-  
-  // logging
-  if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "program options are as follows:" << endl;
-    cerr << TRAIN_DATA << "=" << textFilename << endl;
-    cerr << INIT_LAMBDA << "=" << initialLambdaParamsFilename << endl;
-    cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
-    cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
-    cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
-    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
-    cerr << FEAT << "=";
-    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
-      cerr << *featIter << " ";
-    }
-    cerr << endl;
-    cerr << L2_STRENGTH << "=" << vm[L2_STRENGTH.c_str()].as<float>() << endl;
-    cerr << WEIGHTED_L2_STRENGTH << "=" << vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() << endl;
-    cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
-    cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
-    cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
-    cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
-    cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
-    cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
-    if(vm.count(OPTIMIZER.c_str())) {
-      cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
-    }
-    cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
-    //cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
-    //cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
-    cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
-    cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
-    cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
-    cerr << REVERSE << "=" << learningInfo.reverse << endl;
-    cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
-    //cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
-    for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
-	filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
-      cerr << *filename << " ";
-    }
-    cerr << endl << "=====================" << endl;
-  }
-    
-  // validation
-  if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || \
-     vm[L1_STRENGTH.c_str()].as<float>() < 0.0 || \
-     vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() < 0.0) {
-    cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << WEIGHTED_L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 
-      " negative values" << endl;
-    cerr << desc << endl;
-    return false;
-  } else if((vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0) || \
-            (vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) || \
-            (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0)) {
-    cerr << "you can't only set " << L2_STRENGTH << " OR " << L1_STRENGTH  << " OR " << WEIGHTED_L2_STRENGTH  << 
-      ". sorry :-/" << endl;
-    cerr << desc << endl;
-    return false;
-  }
-  
-  return true;
-}
 void endOfKIterationsCallbackFunction() {
   // get hold of the model
   LatentCrfModel *model = LatentCrfParser::GetInstance();
@@ -492,6 +257,252 @@ void UnitTestMatrixTreeTheorem() {
   }
 }
 
+bool ParseParameters(int argc, char **argv, string &textFilename, 
+		     string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
+		     string &wordPairFeaturesFilename, string &outputFilenamePrefix, 
+                     LearningInfo &learningInfo) {
+  
+  string HELP = "help",
+    TRAIN_DATA = "train-data", 
+    INIT_LAMBDA = "init-lambda",
+    INIT_THETA = "init-theta", 
+    WORDPAIR_FEATS = "wordpair-feats",
+    OUTPUT_PREFIX = "output-prefix", 
+    TEST_SIZE = "test-size",
+    FEAT = "feat",
+    WEIGHTED_L2_STRENGTH = "weighted-l2-strength",
+    L2_STRENGTH = "l2-strength",
+    L1_STRENGTH = "l1-strength",
+    MAX_ITER_COUNT = "max-iter-count",
+    MIN_RELATIVE_DIFF = "min-relative-diff",
+    MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
+    //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
+    MAX_EM_ITER_COUNT = "max-em-iter-count",
+    MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
+    OPTIMIZER = "optimizer",
+    MINIBATCH_SIZE = "minibatch-size",
+    //LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
+    DIRICHLET_ALPHA = "dirichlet-alpha",
+    VARIATIONAL_INFERENCE = "variational-inference",
+    TEST_WITH_CRF_ONLY = "test-with-crf-only",
+    REVERSE = "reverse",
+    OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
+    MAX_SEQUENCE_LENGTH = "max-sequence-length",
+    //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
+    SUPERVISED = "supervised",
+    UNIT_TEST = "unit-test"
+    ;
+
+  // Declare the supported options.
+  po::options_description desc("train-latentCrfParser options");
+  desc.add_options()
+    (HELP.c_str(), "produce help message")
+    (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
+    (UNIT_TEST.c_str(), po::value<bool>(), "(bool) run unit tests")
+    (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
+    (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
+    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
+    (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
+     // deen=150 // czen=515 // fren=447;
+    (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel)->default_value(0.0), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
+    (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
+    (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
+    (L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l2 regularizer")
+    (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
+    (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
+    (MAX_SEQUENCE_LENGTH.c_str(), po::value<unsigned>(&learningInfo.maxSequenceLength)->default_value( 200 ), "(unsigned) max length of a sentence used for training. A value of zero indicates no limit.")
+    (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
+    (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(bool) initialize with supervised training (for stacking models or debugging purposes), then update the parameters with unsupervised objective.")
+    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(2), "(int) quit LBFGS optimization after this many iterations")
+    //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
+    (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
+    //(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
+    //(CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
+    (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
+    (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
+    //(LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
+    //(MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
+    (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
+    (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
+    (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
+    (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
+    (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(true), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
+    //(OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
+    //(TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
+    ;
+
+  po::variables_map vm;
+  po::store(po::parse_command_line(argc, argv, desc), vm);
+  po::notify(vm);
+
+  if (vm.count(TRAIN_DATA.c_str()) == 0 || vm.count("help")) {
+    if(vm.count(TRAIN_DATA.c_str()) == 0) {
+      cerr << TRAIN_DATA << " option is mandatory" << endl;
+    }
+    cerr << "Usage [OPTIONS] --" << TRAIN_DATA << " corpus.fr-en\n";
+    cerr << desc << endl;
+    return false;
+  }
+
+  if(vm.count(UNIT_TEST.c_str())) {
+    UnitTestMatrixTreeTheorem();
+    return false;
+  }
+
+  if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
+    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
+      vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
+  }
+  
+
+  if (vm.count(TRAIN_DATA.c_str()) == 0) {
+    cerr << TRAIN_DATA << " option is mandatory" << endl;
+    cerr << desc << endl;
+    return false;
+  }
+  
+  if (vm.count(FEAT.c_str()) == 0) {
+    cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
+    learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
+  }
+
+  if(vm[L2_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L2_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
+  } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L1_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
+  } else if (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::WeightedL2;
+  } else {
+    learningInfo.optimizationMethod.subOptMethod->regularizationStrength = 0.0;
+    learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::NONE;
+  }
+   
+  if(vm.count(FEAT.c_str()) > 0) {
+
+    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+      if(*featIter == "HC_TOKEN") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_TOKEN);
+      } else if(*featIter == "HC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HC_POS);
+      } else if(*featIter == "CH_TOKEN") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_TOKEN);
+      } else if(*featIter == "CH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CH_POS);
+      } else if(*featIter == "HEAD_CHILD_TOKEN_SET") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_TOKEN_SET);
+      } else if(*featIter == "HEAD_CHILD_POS_SET") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_CHILD_POS_SET);
+      } else if(*featIter == "HEAD_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HEAD_POS);
+      } else if(*featIter == "CHILD_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CHILD_POS);
+      } else if(*featIter == "CXH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CXH_POS);
+      } else if(*featIter == "HXC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HXC_POS);
+      } else if(*featIter == "CXxH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CXxH_POS);
+      } else if(*featIter == "HXxC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HXxC_POS);
+      } else if(*featIter == "CxXH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CxXH_POS);
+      } else if(*featIter == "HxXC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HxXC_POS);
+      } else if(*featIter == "XHC_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::XHC_POS);
+      } else if(*featIter == "XCH_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::XCH_POS);
+      } else if(*featIter == "CHX_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::CHX_POS);
+      } else if(*featIter == "HCX_POS") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::HCX_POS);
+      } else if(*featIter == "LOG_ALIGNMENT_JUMP") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
+      } else if(*featIter == "ALIGNMENT_JUMP") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
+      } else {
+        assert(false);
+      }
+    }
+  }
+    
+  learningInfo.hiddenSequenceIsMarkovian = false;
+  
+  if(vm.count(OPTIMIZER.c_str())) {
+    if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
+    } else {
+      cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
+      return false;
+    }
+  }
+  
+  // logging
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "program options are as follows:" << endl;
+    cerr << TRAIN_DATA << "=" << textFilename << endl;
+    cerr << INIT_LAMBDA << "=" << initialLambdaParamsFilename << endl;
+    cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
+    cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
+    cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
+    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
+    cerr << FEAT << "=";
+    for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+      cerr << *featIter << " ";
+    }
+    cerr << endl;
+    cerr << L2_STRENGTH << "=" << vm[L2_STRENGTH.c_str()].as<float>() << endl;
+    cerr << WEIGHTED_L2_STRENGTH << "=" << vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() << endl;
+    cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
+    cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
+    cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
+    cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
+    cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
+    cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
+    if(vm.count(OPTIMIZER.c_str())) {
+      cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
+    }
+    cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
+    //cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
+    //cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
+    cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
+    cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
+    cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
+    cerr << REVERSE << "=" << learningInfo.reverse << endl;
+    cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
+    //cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
+    for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
+	filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
+      cerr << *filename << " ";
+    }
+    cerr << endl << "=====================" << endl;
+  }
+    
+  // validation
+  if(vm[L2_STRENGTH.c_str()].as<float>() < 0.0 || \
+     vm[L1_STRENGTH.c_str()].as<float>() < 0.0 || \
+     vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() < 0.0) {
+    cerr << "you can't give " << L2_STRENGTH.c_str() << " nor " << WEIGHTED_L2_STRENGTH.c_str() << " nor " << L1_STRENGTH.c_str() << 
+      " negative values" << endl;
+    cerr << desc << endl;
+    return false;
+  } else if((vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0) || \
+            (vm[L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) || \
+            (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0 && vm[L1_STRENGTH.c_str()].as<float>() > 0.0)) {
+    cerr << "you can't only set " << L2_STRENGTH << " OR " << L1_STRENGTH  << " OR " << WEIGHTED_L2_STRENGTH  << 
+      ". sorry :-/" << endl;
+    cerr << desc << endl;
+    return false;
+  }
+  
+  return true;
+}
+
 // returns the rank of the process which have found the best HMM parameters
 void IbmModel1Initialize(boost::mpi::communicator world, 
                          string parallelTextFilename, 
@@ -574,11 +585,6 @@ void register_my_handler() {
 
 int main(int argc, char **argv) {  
 
-  if(argc == 1) {
-    UnitTestMatrixTreeTheorem();
-    return 0;
-  }
-
   // register interrupt handlers
   register_my_handler();
   
@@ -639,7 +645,7 @@ int main(int argc, char **argv) {
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
                       learningInfo)){
-    assert(false);
+    return 0;
   }
   
   // initialize the model

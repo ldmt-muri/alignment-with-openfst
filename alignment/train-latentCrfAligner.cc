@@ -49,7 +49,6 @@ void my_handler(int s) {
   exit(0);
 }
 
-
 string GetOutputPrefix(int argc, char **argv) {
   string OUTPUT_PREFIX_OPTION("--output-prefix");
   for(int i = 0; i < argc; i++) {
@@ -59,9 +58,8 @@ string GetOutputPrefix(int argc, char **argv) {
       return string(argv[i+1]);
     }
   }
-  assert(false);
+  return "";
 }
-
 
 bool ParseParameters(int argc, char **argv, string &textFilename, 
   string &initialLambdaParamsFilename, string &initialThetaParamsFilename, 
@@ -101,8 +99,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
-    (HELP.c_str(), "produce help message")
-    (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
+    (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model. Every line should consist of <space delimited tokens in source sentence> ||| <space delimited tokens in target sentence>")
     (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
     (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
@@ -131,13 +128,17 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
-    ;
+    ("help,h", "Print this help message and exit");
 
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, desc), vm);
   po::notify(vm);
-
-  if (vm.count(HELP.c_str())) {
+  
+  if (vm.count(TRAIN_DATA.c_str()) == 0 || vm.count("help")) {
+    if(vm.count(TRAIN_DATA.c_str()) == 0) {
+      cerr << TRAIN_DATA << " option is mandatory" << endl;
+    }
+    cerr << "Usage [OPTIONS] --" << TRAIN_DATA << " corpus.fr-en\n";
     cerr << desc << endl;
     return false;
   }
@@ -145,13 +146,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
     learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
       vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
-  }
-  
-
-  if (vm.count(TRAIN_DATA.c_str()) == 0) {
-    cerr << TRAIN_DATA << " option is mandatory" << endl;
-    cerr << desc << endl;
-    return false;
   }
   
   if (vm.count(FEAT.c_str()) == 0) {
@@ -443,7 +437,7 @@ int main(int argc, char **argv) {
   if(!ParseParameters(argc, argv, textFilename, initialLambdaParamsFilename, 
                       initialThetaParamsFilename, wordPairFeaturesFilename, outputFilenamePrefix, 
                       learningInfo, ibmModel1MaxIterCount)){
-    assert(false);
+    return 0;
   }
   
   // initialize the model
