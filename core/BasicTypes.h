@@ -4,7 +4,7 @@
 enum FeatureTemplate { 
   // general
   PRECOMPUTED, 
-  ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP,
+  ALIGNMENT_JUMP, LOG_ALIGNMENT_JUMP, 
   // pos 
   LABEL_BIGRAM, 
   // alignment
@@ -13,6 +13,7 @@ enum FeatureTemplate {
   EMISSION, SRC_WORD_BIAS, BOUNDARY_LABELS, 
   // dependency parsing
   HC_TOKEN, CH_TOKEN, HC_POS, CH_POS, 
+  POS_PAIR_DISTANCE,
   HEAD_CHILD_TOKEN_SET, HEAD_CHILD_POS_SET, 
   HEAD_POS, 
   CHILD_POS, 
@@ -30,7 +31,8 @@ enum FeatureTemplate {
   HXxC_POS,
   CXxH_POS,
   HxXC_POS,
-  CxXH_POS
+  CxXH_POS,
+  NONE
 };
 
 namespace Distribution {
@@ -74,8 +76,9 @@ struct ObservationDetails {
 
 // observation details headers
 namespace ObservationDetailsHeader {
+
   enum ObservationDetailsHeader {
-    ID=0, FORM=1, RECONSTRUCTED=1, LEMMA=2, CPOSTAG=3, POSTAG=4, FEATS=5, HEAD=6, DEPREL=7, PHEAD=8, PDEPREL=9
+    ID=0, FORM=1, LEMMA=2, CPOSTAG=3, POSTAG=4, FEATS=5, HEAD=6, DEPREL=7, PHEAD=8, PDEPREL=9
   };
 }
 

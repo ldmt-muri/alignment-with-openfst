@@ -1,0 +1,20 @@
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/wammar/crf-auto-pos/english-final"
+
+    # general
+    cores=10
+
+    # data
+    data_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok"
+    gold_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos"
+    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+
+    test_size=0
+    labels_count=12
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+}
+

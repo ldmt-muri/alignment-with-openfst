@@ -15,15 +15,15 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::EMISSION:
     os << "EMISSION";
-    os << '|' << obj.emission.displacement << "|" << obj.emission.label << "->" << FeatureId::vocabEncoder->Decode(obj.emission.word);
+    os << '|' << obj.emission.displacement << "|" << obj.emission.label << "|" << FeatureId::vocabEncoder->Decode(obj.emission.word);
     break;
   case FeatureTemplate::LABEL_BIGRAM:
     os << "LABEL_BIGRAM";
-    os << '|' << obj.bigram.previous << "->" << obj.bigram.current;
+    os << '|' << obj.bigram.previous << "|" << obj.bigram.current;
     break;
   case FeatureTemplate::SRC_BIGRAM:
     os << "SRC_BIGRAM";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.bigram.previous) << "->" << FeatureId::vocabEncoder->Decode(obj.bigram.current);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.bigram.previous) << "|" << FeatureId::vocabEncoder->Decode(obj.bigram.current);
     break;
   case FeatureTemplate::ALIGNMENT_JUMP:
     os << "ALIGNMENT_JUMP";
@@ -40,7 +40,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     break;
   case FeatureTemplate::SRC0_TGT0:
     os << "SRC0_TGT0";
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "|" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
   case FeatureTemplate::HC_TOKEN:
   case FeatureTemplate::HC_POS:
@@ -63,7 +63,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     } else{
       assert(false);
     }
-    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "->" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordPair.srcWord) << "|" << FeatureId::vocabEncoder->Decode(obj.wordPair.tgtWord);
     break;
   case FeatureTemplate::PRECOMPUTED:
     os << "PRECOMPUTED";
@@ -115,6 +115,12 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
+  case FeatureTemplate::POS_PAIR_DISTANCE:
+    os << "POS_PAIR_DISTANCE";
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
+    os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
+    break;
   case FeatureTemplate::CXH_POS:
     os << "CXH_POS";
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
@@ -122,7 +128,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
     break;
   case FeatureTemplate::CXxH_POS:
-    os << "CXxC_POS";
+    os << "CXxH_POS";
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word1);
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word2);
     os << '|' << FeatureId::vocabEncoder->Decode(obj.wordTriple.word3);
@@ -166,6 +172,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   }
   return os;
 }
+
 
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
                                  double gaussianStdDev) :
@@ -301,6 +308,42 @@ void LogLinearParams::Seal() {
     paramIdsPtr = (ShmemVectorOfFeatureId *)MapToSharedMemory(false, "paramIds");
   }
   assert(paramIdsPtr != 0 && paramWeightsPtr != 0);
+
+  // now every core reads the mean of the gaussian prior for features specified in learningInfo.featureGaussianMeanFilename, and keep a map with FeatureId keys and double values (i.e. the mean)
+  if(learningInfo->featureGaussianMeanFilename.size() > 0) {
+    std::ifstream featureGaussianMeanFile(learningInfo->featureGaussianMeanFilename.c_str(), std::ios::in);
+    std::string line;
+    // for each line
+    while(getline(featureGaussianMeanFile, line)) {
+      // skip empty lines
+      line = StringUtils::Trim(line);
+      if(line.size() == 0) {
+        continue;
+      } else if(line[0] == '#') {
+        continue;
+      }
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      if(learningInfo->mpiWorld->rank() == 0 && splits.size() != 2) {
+        cerr << "WARNING: malformatted line in " << learningInfo->featureGaussianMeanFilename << endl;
+        cerr << "         offending line is: ///" << line << "///" << endl;
+        cerr << "         will skip this line." << endl;
+      }
+      double gaussianMean;
+      stringstream gaussianMeanString(splits[1]);
+      gaussianMeanString >> gaussianMean;
+      FeatureId featureId;
+      stringstream featureIdString(splits[0]);
+      featureIdString >> featureId;
+      // now add this one to the map
+      featureGaussianMeans[featureId] = gaussianMean;
+    }
+    featureGaussianMeanFile.close();
+    if(learningInfo->mpiWorld->rank() == 0) {
+      cerr << featureGaussianMeans.size() << " CRF features have the mean of their Gaussian prior specified" << endl;
+    }
+  }
+  
   sealed = true;
 }
 
@@ -550,8 +593,29 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
                               childDetails.details[ObservationDetailsHeader::ID]-1);
   unsigned laterIndex = max(headDetails.details[ObservationDetailsHeader::ID]-1, 
                             childDetails.details[ObservationDetailsHeader::ID]-1);
+  int64_t headSurfaceForm = 
+    FeatureId::vocabEncoder->GetFrequencyCount(headDetails.details[ObservationDetailsHeader::FORM]) < learningInfo->minTokenFrequency?
+    FeatureId::vocabEncoder->UnkInt(): headDetails.details[ObservationDetailsHeader::FORM];
+  int64_t childSurfaceForm = 
+    FeatureId::vocabEncoder->GetFrequencyCount(childDetails.details[ObservationDetailsHeader::FORM]) < learningInfo->minTokenFrequency?
+    FeatureId::vocabEncoder->UnkInt(): childDetails.details[ObservationDetailsHeader::FORM];
   
+  int binnedDistance = (laterIndex - earlierIndex <= 4)? laterIndex - earlierIndex:
+    (laterIndex - earlierIndex <= 6)? 6:
+    (laterIndex - earlierIndex <= 10)? 10: 100;
+  if(headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]) {
+        binnedDistance *= -1;
+  }      
+  
+  int64_t aggregate;
 
+  std::pair<int64_t, int64_t> headChildPair(headSurfaceForm, childSurfaceForm);
+  auto precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, headChildPair);
+  if(!precomputedFeatures) {
+    std::pair<int64_t, int64_t> childHeadPair(childSurfaceForm, headSurfaceForm);
+    precomputedFeatures = MapWordPairFeaturesToSharedMemory(false, childHeadPair);
+  }
+  
   for(auto featTemplateIter = learningInfo->featureTemplates.begin();
       featTemplateIter != learningInfo->featureTemplates.end(); ++featTemplateIter) {
     
@@ -562,18 +626,18 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::CH_TOKEN: FeatureTemplate::HC_TOKEN;
       if(*featTemplateIter != featureId.type) break;
-      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::FORM];
-      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::FORM];  
+      featureId.wordPair.srcWord = headSurfaceForm;
+      featureId.wordPair.tgtWord = childSurfaceForm;  
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::HEAD_CHILD_TOKEN_SET:
       featureId.type = FeatureTemplate::HEAD_CHILD_TOKEN_SET;
-      featureId.wordPair.srcWord = min(headDetails.details[ObservationDetailsHeader::FORM],
-                                       childDetails.details[ObservationDetailsHeader::FORM]);
-      featureId.wordPair.tgtWord = max(headDetails.details[ObservationDetailsHeader::FORM],
-                                       childDetails.details[ObservationDetailsHeader::FORM]);
+      featureId.wordPair.srcWord = min(headSurfaceForm,
+                                       childSurfaceForm);
+      featureId.wordPair.tgtWord = max(headSurfaceForm,
+                                       childSurfaceForm);
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
@@ -584,32 +648,38 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::CH_POS: FeatureTemplate::HC_POS;
       if(*featTemplateIter != featureId.type) break;
-      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::POSTAG];
-      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::POSTAG];
+      featureId.wordPair.srcWord = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordPair.tgtWord = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+      //      for(unsigned i = earlierIndex + 1; i < laterIndex; ++i) {
+      //  if(sentDetails[i].details[ObservationDetailsHeader::CPOSTAG] == childDetails.details[ObservationDetailsHeader::CPOSTAG]) {
+          // only fire this feature when none of the words inbetween parent-child have a similar POS to child
+      //    break;
+      //  }
+      //}
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::HEAD_CHILD_POS_SET:
       featureId.type = FeatureTemplate::HEAD_CHILD_POS_SET;
-      featureId.wordPair.srcWord = min(headDetails.details[ObservationDetailsHeader::POSTAG],
-                                       childDetails.details[ObservationDetailsHeader::POSTAG]);
-      featureId.wordPair.tgtWord = max(headDetails.details[ObservationDetailsHeader::POSTAG],
-                                       childDetails.details[ObservationDetailsHeader::POSTAG]);
+      featureId.wordPair.srcWord = min(headDetails.details[ObservationDetailsHeader::CPOSTAG],
+                                       childDetails.details[ObservationDetailsHeader::CPOSTAG]);
+      featureId.wordPair.tgtWord = max(headDetails.details[ObservationDetailsHeader::CPOSTAG],
+                                       childDetails.details[ObservationDetailsHeader::CPOSTAG]);
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::HEAD_POS:
       featureId.type = FeatureTemplate::HEAD_POS;
-      featureId.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
       
     case FeatureTemplate::CHILD_POS:
       featureId.type = FeatureTemplate::CHILD_POS;
-      featureId.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
+      featureId.wordBias = headDetails.details[ObservationDetailsHeader::CPOSTAG];
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
       break;
@@ -624,23 +694,19 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         break;
       if(abs(headDetails.details[ObservationDetailsHeader::ID]-childDetails.details[ObservationDetailsHeader::ID]) > 3) 
         break;
+      featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+      aggregate = 1;
       for(unsigned inbetweenIndex = 1 + earlierIndex; inbetweenIndex < laterIndex; ++inbetweenIndex) {
         assert(inbetweenIndex >= 0 && inbetweenIndex < sentDetails.size());
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
         featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
+        aggregate += (inbetweenIndex - earlierIndex) * sentDetails[inbetweenIndex].details[ObservationDetailsHeader::CPOSTAG];
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::POSTAG];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word3 = sentDetails[inbetweenIndex].details[ObservationDetailsHeader::FORM];
+      }
+      // only fire the hashed aggregate value of inbetween POS tags when the span length is 1, 2, 3, or 4
+      if(laterIndex - earlierIndex < 6 && laterIndex - earlierIndex > 1) {
+        featureId.wordTriple.word3 = aggregate;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
       }
@@ -661,21 +727,9 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
         featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::CPOSTAG];
         AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::POSTAG];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word3 = earlierIndex == 0? -1: sentDetails[earlierIndex-1].details[ObservationDetailsHeader::FORM];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
+        activeFeatures[paramIndexes[featureId]] += 1.0;  
       }
-
+      
       // adjacent from the inside
       featureId.type = headDetails.details[ObservationDetailsHeader::ID] < childDetails.details[ObservationDetailsHeader::ID]?
         FeatureTemplate::HXxC_POS: FeatureTemplate::CXxH_POS;
@@ -685,20 +739,7 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::CPOSTAG];
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::POSTAG];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word3 = earlierIndex + 1 == laterIndex? -1: sentDetails[earlierIndex+1].details[ObservationDetailsHeader::FORM];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
       }
-
       break;
 
       // adjacent to the right anchor
@@ -717,17 +758,11 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
 
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::POSTAG];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::FORM];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
+        //featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        //featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        //featureId.wordTriple.word3 = laterIndex == sentDetails.size() - 1? -1: sentDetails[laterIndex+1].details[ObservationDetailsHeader::FORM];
+        //AddParam(featureId);
+        //activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       
       // adjacent from the inside
@@ -740,37 +775,35 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
 
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::POSTAG];
-        featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::POSTAG];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-
-        featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
-        featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::FORM];
-        AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
+        //featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::FORM];
+        //featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::FORM];
+        //featureId.wordTriple.word3 = laterIndex - 1 == earlierIndex? -1: sentDetails[laterIndex-1].details[ObservationDetailsHeader::FORM];
+        //AddParam(featureId);
+        //activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
       
-    // log alignment jump (two versions below, with and without conjoining the head pos tag)
+    case FeatureTemplate::POS_PAIR_DISTANCE:
+      featureId.type = FeatureTemplate::POS_PAIR_DISTANCE;
+      featureId.wordTriple.word1 = headDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordTriple.word2 = childDetails.details[ObservationDetailsHeader::CPOSTAG];
+      featureId.wordTriple.word3 = binnedDistance;
+      break;
+
+      // log alignment jump (two versions below, with and without conjoining the head pos tag)
     case FeatureTemplate::LOG_ALIGNMENT_JUMP:
       if(headDetails.details[ObservationDetailsHeader::ID] == 0) break; 
       featureId.type = FeatureTemplate::LOG_ALIGNMENT_JUMP;
-      featureId.biasedAlignmentJump.alignmentJump = 
-        headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
-        log(1 + 2.0 * (laterIndex - earlierIndex)):
-        -1 * log(1 + 2.0 * (laterIndex - earlierIndex));
+      featureId.biasedAlignmentJump.alignmentJump = binnedDistance;
       
       // unbiased version:
-      featureId.biasedAlignmentJump.wordBias = -1;
+      featureId.biasedAlignmentJump.wordBias = FeatureId::vocabEncoder->UnkInt();
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
 
-      // 1 = left child, -1 = right child, no word bias:
       // biased version:
-      //featureId.biasedAlignmentJump.wordBias = headDetails.details[ObservationDetailsHeader::POSTAG];
+      // obsolete. now we use POS_PAIR_DISTANCE instead
+      //featureId.biasedAlignmentJump.wordBias = 40000 * headDetails.details[ObservationDetailsHeader::CPOSTAG] + childDetails.details[ObservationDetailsHeader::CPOSTAG];
       //featureId.biasedAlignmentJump.alignmentJump = 
       //  headDetails.details[ObservationDetailsHeader::ID] > childDetails.details[ObservationDetailsHeader::ID]?
       //  1: -1;
@@ -785,6 +818,23 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
       featureId.alignmentJump = headDetails.details[ObservationDetailsHeader::ID] - childDetails.details[ObservationDetailsHeader::ID];
       AddParam(featureId);
       activeFeatures[paramIndexes[featureId]] += 1.0;
+      break;
+      
+    case FeatureTemplate::PRECOMPUTED:
+      //assert(precomputedFeaturesWithTwoInputsPtr->size() > 0);
+      if(precomputedFeatures) {
+        for(auto precomputedIter = precomputedFeatures->begin();
+            precomputedIter != precomputedFeatures->end();
+            precomputedIter++) {
+          try {
+            AddParam(precomputedIter->first);
+          } catch (LogLinearParamsException &ex) {
+            cerr << "LogLinearParamsException " << ex.what() << " -- thrown at LogLinearParams::FireFeatures()" << endl;
+            throw;
+          }
+          activeFeatures[paramIndexes[precomputedIter->first]] += precomputedIter->second;
+        }
+      }
       break;
       
     default:
@@ -983,10 +1033,12 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, unsigned i, 
 				   FastSparseVector<double> &activeFeatures) {
+
+  //  cerr << "FireFeatures(yI = " << yI << ", yIM1 = " << yIM1 << ", |x| = " << x.size() << ", i = " << i << ", |activeFeatures| = " << activeFeatures.size() << endl;
   
   const int64_t &xI = x[i];
-  const int64_t &xIM1 = i-1 >= 0? x[i-1] : -1;
-  const int64_t &xIM2 = i-2 >= 0? x[i-2] : -1;
+  const int64_t &xIM1 = i >= 1? x[i-1] : -1;
+  const int64_t &xIM2 = i >= 2? x[i-2] : -1;
   const int64_t &xIP1 = i+1 < x.size()? x[i+1] : -1;
   const int64_t &xIP2 = i+2 < x.size()? x[i+2] : -1; 
 
@@ -1094,7 +1146,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
       break;
 
       case FeatureTemplate::OTHER_ALIGNERS:
-      for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
+        for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
         assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
         if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
           continue;
@@ -1130,7 +1182,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
     assert(posFactorIdToFeatures.count(factorId) == 0);
     posFactorIdToFeatures[factorId] = activeFeatures;
     if(posFactorIdToFeatures.size() % 1000000 == 0) {
-      cerr << "|factorIds| is now " << posFactorIdToFeatures.size() << endl;
+      cerr << learningInfo->mpiWorld->rank() << ": |factorIds| is now " << posFactorIdToFeatures.size() << endl;
     } 
     // logging
     //factorId.Print();
@@ -1274,10 +1326,14 @@ double LogLinearParams::ComputeL2Norm() {
   assert(sealed);
   double l2 = 0; 
   for(unsigned i = 0; i < paramWeightsPtr->size(); i++) { 
-    l2 += (*paramWeightsPtr)[i] * (*paramWeightsPtr)[i]; 
+    double distance = 
+      featureGaussianMeans.find( (*paramIdsPtr)[i] ) == featureGaussianMeans.end()?
+      (*paramWeightsPtr)[i] : 
+      (*paramWeightsPtr)[i] - featureGaussianMeans[ (*paramIdsPtr)[i] ];
+    l2 += distance * distance;
   } 
   return l2/2; 
-} 
+}
 
 // checks whether the "otherParams" have the same parameters and values as this object 
 // disclaimer: pretty expensive, and also requires that the parameters have the same order in the underlying vectors 

@@ -248,7 +248,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			       boost::unordered_map< int64_t , double> &mleMarginals);
     
   // adds l2 reguarlization term (for lambdas) to both the objective and the gradient
-  double AddL2Term(const std::vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective);
+  double AddL2Term(const std::vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective, double &gradientL2Norm);
 
   // adds l2 reguarlization term (for lambdas) to the objective
   double AddL2Term(double unregularizedObjective);

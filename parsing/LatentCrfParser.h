@@ -155,7 +155,7 @@ class LatentCrfParser : public LatentCrfModel {
 
   double GetMaxSpanningTree(Eigen::VectorXlogd &rootSelection, Eigen::MatrixXlogd &adjacency, vector<int> &maxSpanningTree);
   
-  vector<int> GetViterbiParse(int sentId, bool conditionOnZ);
+  vector<int> GetViterbiParse(int sentId, bool conditionOnZ, double &treeLogProb);
 
   void FireFeatures(const unsigned sentId,
                     FastSparseVector<double> &h) override;

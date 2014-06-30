@@ -52,6 +52,8 @@ for line in brown_file:
     features[u'number'] = 1
   elif word.isalpha():
     features[u'word'] = 1
+    if word.lower() != word:
+      features[u'lower_'+word.lower()] = 1
   elif word.isalnum():
     features[u'alphanumeric'] = 1
   else:

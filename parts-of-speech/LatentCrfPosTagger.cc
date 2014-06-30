@@ -252,8 +252,12 @@ void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
 }
 
 void LatentCrfPosTagger::Label(const string &labelsFilename) {
+  cerr << learningInfo.mpiWorld->rank() << ": inside LatentCrfPosTagger::Label(const string &labelsFilename)" << endl;
   // run viterbi (and write the classes to file)
   ofstream labelsFile(labelsFilename.c_str());
+  if(learningInfo.firstKExamplesToLabel == 0) {
+    learningInfo.firstKExamplesToLabel = examplesCount;
+  }
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
     lambda->learningInfo->currentSentId = exampleId;

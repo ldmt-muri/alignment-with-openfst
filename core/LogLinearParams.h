@@ -60,6 +60,139 @@ public:
     struct { unsigned alignerId; bool compatible; } otherAligner;
     struct { int position; int label; } boundaryLabel;
   };
+
+  friend inline std::istream& operator>>(std::istream& is, FeatureId& obj)
+  {
+    string featureIdString;
+    is >> featureIdString;
+    vector<string> splits;
+    StringUtils::SplitString(featureIdString, '|', splits);
+    string &temp = splits[0];
+    stringstream tempSS;
+    obj.type = 
+      temp == "BOUNDARY_LABELS"? FeatureTemplate::BOUNDARY_LABELS:
+      temp == "EMISSION"? FeatureTemplate::EMISSION:
+      temp == "LABEL_BIGRAM"? FeatureTemplate::LABEL_BIGRAM:
+      temp == "SRC_BIGRAM"? FeatureTemplate::SRC_BIGRAM:
+      temp == "ALIGNMENT_JUMP"? FeatureTemplate::ALIGNMENT_JUMP:
+      temp == "LOG_ALIGNMENT_JUMP"? FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      temp == "HEAD_POS"? FeatureTemplate::HEAD_POS:
+      temp == "ALIGNMENT_JUMP_IS_ZERO"? FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      temp == "SRC0_TGT0"? FeatureTemplate::SRC0_TGT0:
+      temp == "HC_TOKEN"? FeatureTemplate::HC_TOKEN:
+      temp == "CH_TOKEN"? FeatureTemplate::CH_TOKEN:
+      temp == "HC_POS"? FeatureTemplate::HC_POS:
+      temp == "CH_POS"? FeatureTemplate::CH_POS:
+      temp == "HEAD_CHILD_TOKEN_SET"? FeatureTemplate::HEAD_CHILD_TOKEN_SET:
+      temp == "HEAD_CHILD_POS_SET"? FeatureTemplate::HEAD_CHILD_POS_SET:
+      temp == "PRECOMPUTED"? FeatureTemplate::PRECOMPUTED:
+      temp == "DIAGONAL_DEVIATION"? FeatureTemplate::DIAGONAL_DEVIATION:
+      temp == "SRC_WORD_BIAS"? FeatureTemplate::SRC_WORD_BIAS:
+      temp == "CHILD_POS"? FeatureTemplate::CHILD_POS:
+      temp == "POS_PAIR_DISTANCE"? FeatureTemplate::POS_PAIR_DISTANCE:
+      temp == "HCX_POS"? FeatureTemplate::HCX_POS:
+      temp == "HXC_POS"? FeatureTemplate::HXC_POS:
+      temp == "XHC_POS"? FeatureTemplate::XHC_POS:
+      temp == "CHX_POS"? FeatureTemplate::CHX_POS:
+      temp == "CXH_POS"? FeatureTemplate::CXH_POS:
+      temp == "XCH_POS"? FeatureTemplate::XCH_POS:
+      temp == "HxXC_POS"? FeatureTemplate::HxXC_POS:
+      temp == "HXxC_POS"? FeatureTemplate::HXxC_POS:
+      temp == "CxXH_POS"? FeatureTemplate::CxXH_POS:
+      temp == "CXxH_POS"? FeatureTemplate::CXxH_POS:
+      temp == "SYNC_START"? FeatureTemplate::SYNC_START:
+      temp == "SYNC_END"? FeatureTemplate::SYNC_END:
+      temp == "OTHER_ALIGNERS"? FeatureTemplate::OTHER_ALIGNERS:
+      temp == "NULL_ALIGNMENT"? FeatureTemplate::NULL_ALIGNMENT:
+      temp == "NULL_ALIGNMENT_LENGTH_RATIO"? FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
+      FeatureTemplate::NONE;
+
+    if(obj.type == FeatureTemplate::NONE) {
+      cerr << "ERROR: malformatted feature id. ///" << temp << "/// is not a valid FeatureTemplate name" << endl;
+    }
+    
+    switch(obj.type) {
+    case FeatureTemplate::BOUNDARY_LABELS:
+      tempSS.str(splits[1]);
+      tempSS >> obj.boundaryLabel.position;
+      tempSS.str(splits[2]); tempSS  >> obj.boundaryLabel.label;
+      break;
+    case FeatureTemplate::EMISSION:
+      tempSS.str(splits[1]); tempSS >> obj.emission.displacement; 
+      tempSS.str(splits[2]); tempSS >> obj.emission.label;
+      obj.emission.word = FeatureId::vocabEncoder->Encode(splits[3]);
+      break;
+    case FeatureTemplate::LABEL_BIGRAM:
+      tempSS.str(splits[1]); tempSS >> obj.bigram.previous;
+      tempSS.str(splits[2]); tempSS >> obj.bigram.current;
+      break;
+    case FeatureTemplate::SRC_BIGRAM:
+      obj.bigram.previous = FeatureId::vocabEncoder->Encode(splits[1]);
+      obj.bigram.current = FeatureId::vocabEncoder->Encode(splits[2]);
+      break;
+    case FeatureTemplate::ALIGNMENT_JUMP:
+      tempSS.str(splits[1]); tempSS>> obj.alignmentJump;
+      break;
+    case FeatureTemplate::LOG_ALIGNMENT_JUMP:
+      tempSS.str(splits[1]); tempSS>> obj.biasedAlignmentJump.alignmentJump;
+      obj.biasedAlignmentJump.wordBias = FeatureId::vocabEncoder->Encode(splits[2]);
+      break;
+    case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+      tempSS.str(splits[1]); tempSS>> obj.alignmentJump;
+      break;
+    case FeatureTemplate::SRC0_TGT0:
+      obj.wordPair.srcWord = FeatureId::vocabEncoder->Encode(splits[1]);
+      obj.wordPair.tgtWord = FeatureId::vocabEncoder->Encode(splits[2]);
+      break;
+    case FeatureTemplate::HC_TOKEN:
+    case FeatureTemplate::HC_POS:
+    case FeatureTemplate::CH_TOKEN:
+    case FeatureTemplate::CH_POS:
+    case FeatureTemplate::HEAD_CHILD_TOKEN_SET:
+    case FeatureTemplate::HEAD_CHILD_POS_SET:
+      obj.wordPair.srcWord = FeatureId::vocabEncoder->Encode(splits[1]);
+      obj.wordPair.tgtWord = FeatureId::vocabEncoder->Encode(splits[2]);
+      break;
+    case FeatureTemplate::PRECOMPUTED:
+      obj.precomputed = FeatureId::vocabEncoder->Encode(splits[1]);
+      break;
+    case FeatureTemplate::DIAGONAL_DEVIATION:
+      tempSS.str(splits[1]); tempSS>> obj.wordBias;
+      break;
+    case FeatureTemplate::SRC_WORD_BIAS:
+    case FeatureTemplate::HEAD_POS:
+    case FeatureTemplate::CHILD_POS:
+      obj.wordBias = FeatureId::vocabEncoder->Encode(splits[1]);
+      break;
+    case FeatureTemplate::HCX_POS:
+    case FeatureTemplate::CHX_POS:
+    case FeatureTemplate::XHC_POS:
+    case FeatureTemplate::XCH_POS:
+    case FeatureTemplate::HXC_POS:
+    case FeatureTemplate::CXH_POS:
+    case FeatureTemplate::CXxH_POS:
+    case FeatureTemplate::HXxC_POS:
+    case FeatureTemplate::HxXC_POS:
+    case FeatureTemplate::CxXH_POS:
+    case FeatureTemplate::POS_PAIR_DISTANCE:
+      obj.wordTriple.word1 = FeatureId::vocabEncoder->Encode(splits[1]);
+      obj.wordTriple.word2 = FeatureId::vocabEncoder->Encode(splits[2]);
+      obj.wordTriple.word3 = FeatureId::vocabEncoder->Encode(splits[3]);
+      break;
+    case FeatureTemplate::OTHER_ALIGNERS:
+      tempSS.str(splits[1]); tempSS >> obj.otherAligner.alignerId; // otherAligner.alignerId
+      tempSS.str(splits[2]); tempSS >> obj.otherAligner.compatible; //otherAligner.compatible;
+      break;
+    case FeatureTemplate::SYNC_START:
+    case FeatureTemplate::SYNC_END:
+    case FeatureTemplate::NULL_ALIGNMENT:
+    case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
+      break;
+    default:
+      assert(false);
+    }
+    return is;
+  }
   
   template<class Archive>
   void serialize(Archive & ar, const unsigned int version) {
@@ -121,6 +254,7 @@ public:
     case CXxH_POS:
     case HxXC_POS:
     case CxXH_POS:
+    case POS_PAIR_DISTANCE:
       ar & wordTriple.word1;
       ar & wordTriple.word2;
       ar & wordTriple.word3;
@@ -185,6 +319,7 @@ public:
     case CXxH_POS:
     case HxXC_POS:
     case CxXH_POS:
+    case POS_PAIR_DISTANCE:
       return wordTriple.word1 < rhs.wordTriple.word1 ||
         (wordTriple.word1 == rhs.wordTriple.word1 && wordTriple.word2 < rhs.wordTriple.word2) ||
         (wordTriple.word1 == rhs.wordTriple.word1 && wordTriple.word2 == rhs.wordTriple.word2 && wordTriple.word3 < rhs.wordTriple.word3);
@@ -257,6 +392,7 @@ public:
     case FeatureTemplate::CXxH_POS:
     case FeatureTemplate::HxXC_POS:
     case FeatureTemplate::CxXH_POS:
+    case FeatureTemplate::POS_PAIR_DISTANCE:
       return wordTriple.word1 != rhs.wordTriple.word1 || 
         wordTriple.word2 != rhs.wordTriple.word2 || 
         wordTriple.word3 != rhs.wordTriple.word3;
@@ -334,6 +470,7 @@ public:
       case CXxH_POS:
       case HxXC_POS:
       case CxXH_POS:
+      case POS_PAIR_DISTANCE:
           boost::hash_combine(seed, x.wordTriple.word1);
           boost::hash_combine(seed, x.wordTriple.word2);
           boost::hash_combine(seed, x.wordTriple.word3);
@@ -407,6 +544,7 @@ public:
       case CXxH_POS:
       case HxXC_POS:
       case CxXH_POS:
+      case POS_PAIR_DISTANCE:
         return left.wordTriple.word1 == right.wordTriple.word1 &&
           left.wordTriple.word2 == right.wordTriple.word2 &&
           left.wordTriple.word3 == right.wordTriple.word3;
@@ -462,8 +600,6 @@ typedef vector<double, ShmemDoubleAllocator> ShmemVectorOfDouble;
 typedef vector<FeatureId, ShmemFeatureIdAllocator> ShmemVectorOfFeatureId;
 
 std::ostream& operator<<(std::ostream& os, const FeatureId& obj);
-std::istream& operator>>(std::istream& is, FeatureId& obj);
-
 
 class LogLinearParams {
 
@@ -630,6 +766,8 @@ class LogLinearParams {
  
   boost::unordered_map< PosFactorId, FastSparseVector<double>, PosFactorId::PosFactorHash, PosFactorId::PosFactorEqual > posFactorIdToFeatures;
  
+  unordered_map_featureId_double featureGaussianMeans;
+  
  private:
   bool sealed;
   

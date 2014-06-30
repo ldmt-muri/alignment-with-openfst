@@ -23,6 +23,8 @@ class LearningInfo {
  LearningInfo(boost::mpi::communicator *mpiWorld, string outputFilenamePrefix) : 
   mpiWorld(mpiWorld), 
   outputFilenamePrefix(outputFilenamePrefix) {
+    minTokenFrequency = 100;
+    featureGaussianMeanFilename = "";
     SetSharedMemorySegment(mpiWorld->rank() == 0);
     useMaxIterationsCount = false;
     useMinLikelihoodDiff = false;
@@ -45,16 +47,19 @@ class LearningInfo {
     persistFinalParams = true;
     retryLbfgsOnRoundingErrors = true;
     supervisedTraining = false;
+    babySteps = false;
+    inductive = false;
     unspecified = 0;
     unspecified2 = 0;
-    firstKExamplesToLabel = 1;
+    firstKExamplesToLabel = 0;
     invokeCallbackFunctionEveryKIterations = 10;
     endOfKIterationsCallbackFunction = 0;
     nSentsPerDot = 1;
     emIterationsCount = 1;
     thetaOptMethod = 0;
+    initializeThetasWithKleinManning = true;
     initializeThetasWithModel1 = false;
-    initializeThetasWithGaussian = true;
+    initializeThetasWithGaussian = false;
     initializeThetasWithUniform = false;
     initializeLambdasWithZero = true;
     initializeLambdasWithOne = false;
@@ -66,11 +71,16 @@ class LearningInfo {
     multinomialSymmetricDirichletAlpha = 1.0;
     variationalInferenceOfMultinomials = false;
     testWithCrfOnly = false;
+    oneBasedConllFieldIdReconstructed = 2;
+    oneBasedConllFieldIdConditioned = 2;
     optimizeLambdasFirst = false;
     firePrecomputedFeaturesForXIM2 = firePrecomputedFeaturesForXIM1 = firePrecomputedFeaturesForXIP1 = firePrecomputedFeaturesForXIP2 = false;
     firePrecomputedFeaturesForXI = true;
     tagDictFilename="";
     preventSelfAlignments=false;
+    // this is specific for dependnecy parsing
+    generateChildAndDirection=false;
+    generateChildConditionalOnDirection = false;
   }
   
   bool IsModelConverged() {
@@ -93,7 +103,7 @@ class LearningInfo {
     }
     assert(minIterationsCount >= 3);
     assert(logLikelihood.size() >= 1);
-    if(iterationsCount < minIterationsCount) {
+    if(iterationsCount < (unsigned) minIterationsCount) {
       cerr << "min iterations count not met ==> NOT CONVERGED" << endl;
       return false;
     }
@@ -211,7 +221,7 @@ class LearningInfo {
   }
   
   // you can't converge before this many iterations no matter what
-  unsigned minIterationsCount;
+  int minIterationsCount;
 
   // criteria 1
   bool useMaxIterationsCount;
@@ -301,6 +311,10 @@ class LearningInfo {
   bool retryLbfgsOnRoundingErrors;
 
   bool supervisedTraining;
+  
+  bool babySteps;
+
+  bool inductive;
 
   int unspecified, unspecified2;
 
@@ -318,6 +332,7 @@ class LearningInfo {
 
   OptMethod *thetaOptMethod;
   
+  bool initializeThetasWithKleinManning;
   bool initializeThetasWithModel1;
   bool initializeThetasWithGaussian;
   bool initializeThetasWithUniform;
@@ -343,10 +358,15 @@ class LearningInfo {
   
   bool testWithCrfOnly;
 
+  int oneBasedConllFieldIdReconstructed;
+  int oneBasedConllFieldIdConditioned;
+  
   bool optimizeLambdasFirst;
 
   // train models for the reverse corpus direction
   bool reverse;
+
+  string featureGaussianMeanFilename;
 
   // shared memory segment to efficiently share objects across processes
   boost::interprocess::managed_shared_memory *sharedMemorySegment;
@@ -366,6 +386,12 @@ class LearningInfo {
   string tagDictFilename;
 
   bool preventSelfAlignments;
+
+  bool generateChildAndDirection, generateChildConditionalOnDirection;
+  
+  // tokens which appear in the corpus less frequently than this number will be replaced with 
+  // "unk" in feature extraction
+  int minTokenFrequency;
 
 };
 

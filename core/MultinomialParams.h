@@ -171,13 +171,21 @@ namespace MultinomialParams {
       for (MultinomialParam::const_iterator tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
         // write context
         if(decodeContext) {
-          paramsFile << vocabEncoder.Decode(srcIter->first) << " ";
+          if(srcIter->first >= 0) {
+            paramsFile << vocabEncoder.Decode(srcIter->first) << " ";
+          } else {
+            paramsFile << "-" << vocabEncoder.Decode(-srcIter->first) << " ";
+          }
         } else {
           paramsFile << srcIter->first << " ";
         }
         // write event
         if(decodeEvent) {
-          paramsFile << vocabEncoder.Decode(tgtIter->first) << " ";
+          if(tgtIter->first >= 0) {
+            paramsFile << vocabEncoder.Decode(tgtIter->first) << " ";
+          } else {
+            paramsFile << "-" << vocabEncoder.Decode(-tgtIter->first) << " ";
+          } 
         } else {
           paramsFile << tgtIter->first << " ";
         }
@@ -201,7 +209,8 @@ namespace MultinomialParams {
     // set all parameters to zeros
     for ( auto & context : params.params) {
       for (auto & decision : context.second) {
-        decision.second = NLOG_ZERO;
+        //decision.second = NLOG_ZERO;
+        decision.second = 0.001;
       }
     }
     
@@ -257,15 +266,16 @@ namespace MultinomialParams {
       if(params.params.find(context) == params.params.end() || params[context].find(event) == params[context].end()) {
         continue;
       }
-      params[context][event] = nlogP;
+      params[context][event] += MultinomialParams::nExp(nlogP);
       if(params[context].find(-event) != params[context].end()) {
         // also add the negative event 
-        params[context][-event] = nlogP;
+        params[context][-event] += MultinomialParams::nExp(nlogP);
+        assert(MultinomialParams::nExp(nlogP) >= 0.0);
       }
     }
     paramsFile.close();
     // renormalize
-    NormalizeParams(params, 1.0, true, true, false);
+    NormalizeParams(params, 1.0, false, true, false);
     
     // persist the parameters we just loaded
     //PersistParams(paramsFilename + ".reloaded", params, vocabEncoder, true, true);

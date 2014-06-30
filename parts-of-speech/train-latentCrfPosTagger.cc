@@ -335,25 +335,16 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
         string finalParamsPrefix = outputFilenamePrefix + ".final";
         hmmModel.PersistParams(finalParamsPrefix);
       }
-      
+
       // viterbi
       string labelsFilename = outputFilenamePrefix + ".labels";
-      hmmModel.Label(textFilename, labelsFilename);
+      cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
+      bool parallelize=false;
+      hmmModel.Label(textFilename, labelsFilename, parallelize);
       cerr << "automatic labels can be found at " << labelsFilename << endl;
-      
-      // compare to gold standard
-      if(goldLabelsFilename != "") {
-        cerr << "======================================" << endl;
-        cerr << "HMM model vs. gold standard tagging..." << endl;
-        double vi = hmmModel.ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
-        cerr << "done. \nvariation of information = " << vi << endl;
-        double manyToOne = hmmModel.ComputeManyToOne(labelsFilename, goldLabelsFilename);
-        cerr << "many-to-one = " << manyToOne << endl;
-      }
+
     }
-  }
-  
-  if(bestRank == latentCrfPosTagger.learningInfo.mpiWorld->rank()) {
+
     // first, initialize the latentCrfPosTagger's theta parameters to zeros
     for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
         contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
@@ -398,6 +389,8 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
       }
     }
   }
+  bool dummySync;
+  mpi::broadcast<bool>(world, dummySync, bestRank);
   return bestRank;
 }
 
@@ -410,17 +403,11 @@ void endOfKIterationsCallbackFunction() {
   stringstream labelsFilenameSs;
   labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount;
   string labelsFilename = labelsFilenameSs.str();
-  //string textFilename =  tagger.textFilename;
-  tagger.Label(labelsFilename);
-
-  // compare to gold standard
-  if(tagger.learningInfo.goldFilename != "" && tagger.learningInfo.mpiWorld->rank() == 0) {
+  //tagger.Label(labelsFilename);
+  if(tagger.learningInfo.mpiWorld->rank() == 0) {
+    bool parallelize=false;
+    tagger.Label(tagger.dataFilename, labelsFilename, false);
     cerr << "automatic labels can be found at " << labelsFilename << endl;
-    cerr << "comparing to gold standard tagging..." << endl;
-    double vi = tagger.ComputeVariationOfInformation(labelsFilename, tagger.learningInfo.goldFilename);
-    cerr << "done. \nvariation of information = " << vi << endl;
-    double manyToOne = tagger.ComputeManyToOne(labelsFilename, tagger.learningInfo.goldFilename);
-    cerr << "many-to-one = " << manyToOne << endl ;
   }
 }
 
@@ -515,6 +502,7 @@ int main(int argc, char **argv) {
 
   // initialize the model
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
+  LatentCrfPosTagger &tagger = * ( (LatentCrfPosTagger*) model );
   
   if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0) {
     // hmm initialization
@@ -555,29 +543,10 @@ int main(int argc, char **argv) {
     model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
   }
 
-  // we don't need the slaves anymore
-  if(world.rank() > 0) {
-    return 0;
-  }
-    
   // viterbi
   string labelsFilename = outputFilenamePrefix + ".labels";
-  model->Label(textFilename, labelsFilename);
+  //model->Label(textFilename, labelsFilename);
+  tagger.Label(labelsFilename);
   cerr << "automatic labels can be found at " << labelsFilename << endl;
 
-  // compare to gold standard
-  if(goldLabelsFilename != "") {
-    cerr << "comparing to gold standard tagging..." << endl;
-    double vi = model->ComputeVariationOfInformation(labelsFilename, goldLabelsFilename);
-    cerr << "done. \nvariation of information = " << vi << endl;
-    double manyToOne = model->ComputeManyToOne(labelsFilename, goldLabelsFilename);
-    cerr << "many-to-one = " << manyToOne << endl ;
-  }
-
-  // compute some statistics on a test set
-  //cerr << "analyze the data using the trained model..." << endl;
-  //string analysisFilename = outputFilenamePrefix + ".analysis";
-  //model->Analyze(textFilename, analysisFilename);
-  //cerr << "analysis can be found at " << analysisFilename << endl;
-  
 }

@@ -2,13 +2,12 @@ CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
 LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
-OPT=-O2
-
+OPT=-O3 -g
 all: train-latentCrfPosTagger
 
 # specifiic to the pos tagging task
 train-latentCrfPosTagger: train-latentCrfPosTagger.o
-	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o  $(LIBS) -o train-latentCrfPosTagger
+	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o  $(LIBS) -o parts-of-speech/train-latentCrfPosTagger
 
 train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o parts-of-speech/train-latentCrfPosTagger.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h core/BasicTypes.h wammar-utils/FstUtils.h
 	$(CC) $(BEFORE) $(SINGLE) parts-of-speech/train-latentCrfPosTagger.cc $(OPT)

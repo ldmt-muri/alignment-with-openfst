@@ -262,6 +262,7 @@ void HmmModel2::Train(){
 }
 
 void HmmModel2::Label(vector<int64_t> &tokens, vector<int> &labels) {
+  //cerr << "inside HmmModel2::Label(vector<int64_t> &tokens, vector<int> &labels)" << endl;
   VectorFst<FstUtils::LogArc> fst;
   BuildThetaGammaFst(tokens, fst);
 

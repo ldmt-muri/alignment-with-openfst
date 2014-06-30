@@ -121,8 +121,9 @@ void UnitTestMatrixTreeTheorem() {
   learningInfo.endOfKIterationsCallbackFunction = endOfKIterationsCallbackFunction;
   learningInfo.nSentsPerDot = 250;
   learningInfo.initializeThetasWithGaussian = false;
-  learningInfo.initializeThetasWithUniform = true;
+  learningInfo.initializeThetasWithUniform = false;
   learningInfo.initializeThetasWithModel1 = false;
+  learningInfo.initializeThetasWithKleinManning = true;
   learningInfo.initializeLambdasWithGaussian = false;
   learningInfo.initializeLambdasWithZero = true;
   learningInfo.initializeLambdasWithOne = false;
@@ -181,13 +182,20 @@ void UnitTestMatrixTreeTheorem() {
                                     sents[sentId],
                                     activeFeatures);
         double arcScoreGivenX = model->lambda->DotProduct(activeFeatures);
-        int headReconstructed = headIndex == -1?
-          latentCrfParser.ROOT_DETAILS.details[ObservationDetailsHeader::RECONSTRUCTED]:
-          sents[sentId][headIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
-        int childReconstructed = sents[sentId][childIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
+        int headConditioned = headIndex == -1?
+          latentCrfParser.ROOT_DETAILS.details[learningInfo.oneBasedConllFieldIdConditioned-1]:
+          sents[sentId][headIndex].details[learningInfo.oneBasedConllFieldIdConditioned-1];
+        int childReconstructed = sents[sentId][childIndex].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+        if(headIndex != -1 && headIndex < childIndex) {
+          if(learningInfo.generateChildAndDirection) {
+            childReconstructed *= -1;
+          } else if(learningInfo.generateChildConditionalOnDirection) {
+            headConditioned *= -1;
+          }
+        }
         double arcScoreGivenXZ = 
           arcScoreGivenX - 
-          model->nLogThetaGivenOneLabel[headReconstructed][childReconstructed];
+          model->nLogThetaGivenOneLabel[headConditioned][childReconstructed];
         parseScoreGivenXZ += arcScoreGivenXZ;
         parseScoreGivenX += arcScoreGivenX;
       }
@@ -215,13 +223,20 @@ void UnitTestMatrixTreeTheorem() {
                                     sents[sentId],
                                     activeFeatures);
         double arcScoreGivenX = model->lambda->DotProduct(activeFeatures);
-        int headReconstructed = headIndex == -1?
-          latentCrfParser.ROOT_DETAILS.details[ObservationDetailsHeader::RECONSTRUCTED]:
-          sents[sentId][headIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
-        int childReconstructed = sents[sentId][childIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
+        int headConditioned = headIndex == -1?
+          latentCrfParser.ROOT_DETAILS.details[learningInfo.oneBasedConllFieldIdConditioned-1]:
+          sents[sentId][headIndex].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+        int childReconstructed = sents[sentId][childIndex].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+        if(headIndex != -1 && headIndex < childIndex) {
+          if(learningInfo.generateChildAndDirection) {
+            childReconstructed *= -1;
+          } else if(learningInfo.generateChildConditionalOnDirection) {
+            headConditioned *= -1;
+          }
+        }
         double arcScoreGivenXZ = 
           arcScoreGivenX - 
-          model->nLogThetaGivenOneLabel[headReconstructed][childReconstructed];
+          model->nLogThetaGivenOneLabel[headConditioned][childReconstructed];
         parseScoreGivenXZ += arcScoreGivenXZ;
         parseScoreGivenX += arcScoreGivenX;
       }
@@ -274,6 +289,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     L2_STRENGTH = "l2-strength",
     L1_STRENGTH = "l1-strength",
     MAX_ITER_COUNT = "max-iter-count",
+    MIN_ITER_COUNT = "min-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
     //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
@@ -285,23 +301,33 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     DIRICHLET_ALPHA = "dirichlet-alpha",
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
-    REVERSE = "reverse",
+    GENERATE_CHILD_AND_DIRECTION = "generate-child-and-direction",
+    GENERATE_CHILD_CONDITIONAL_ON_DIRECTION = "generate-child-conditional-on-direction",
+    FEATURE_GAUSSIAN_MEAN = "feature-gaussian-mean",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     MAX_SEQUENCE_LENGTH = "max-sequence-length",
     //TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     SUPERVISED = "supervised",
-    UNIT_TEST = "unit-test"
+    UNIT_TEST = "unit-test",
+    BABY_STEPS = "baby-steps",
+    ONE_BASED_CONLL_FIELD_ID_RECONSTRUCTED = "one-based-conll-field-id-reconstructed",
+    ONE_BASED_CONLL_FIELD_ID_CONDITIONED = "one-based-conll-field-id-conditioned",
+    INDUCTIVE = "inductive"
     ;
-
+  
   // Declare the supported options.
   po::options_description desc("train-latentCrfParser options");
   desc.add_options()
     (HELP.c_str(), "produce help message")
     (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model")
     (UNIT_TEST.c_str(), po::value<bool>(), "(bool) run unit tests")
+    (BABY_STEPS.c_str(), po::value<bool>(&learningInfo.babySteps)->default_value(false), "(bool) implement baby steps")
+    (ONE_BASED_CONLL_FIELD_ID_RECONSTRUCTED.c_str(), po::value<int>(&learningInfo.oneBasedConllFieldIdReconstructed)->default_value(2), "(int) the one based index of the conll field used for reconstruction in the CRF autoencoder model")
+    (ONE_BASED_CONLL_FIELD_ID_CONDITIONED.c_str(), po::value<int>(&learningInfo.oneBasedConllFieldIdConditioned)->default_value(2), "(int) the one based index of the conll field used for reconstruction in the CRF autoencoder model")
+    (INDUCTIVE.c_str(), po::value<bool>(&learningInfo.inductive)->default_value(false), "(bool) inductive unsupervised learning (i.e. don't use the unlabeled test set to optimize parameters)")
     (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
-    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
+    (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) precomputed features defined for word pairs")
     (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
      // deen=150 // czen=515 // fren=447;
     (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel)->default_value(0.0), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
@@ -309,6 +335,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (WEIGHTED_L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of a weighted l2 regularizer")
     (L2_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
+    (MIN_ITER_COUNT.c_str(), po::value<int>(&learningInfo.minIterationsCount)->default_value( 5 ), "(unsigned) min number of coordinate descent iterations after which the model is assumed to have converged")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value( 50 ), "(unsigned) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MAX_SEQUENCE_LENGTH.c_str(), po::value<unsigned>(&learningInfo.maxSequenceLength)->default_value( 200 ), "(unsigned) max length of a sentence used for training. A value of zero indicates no limit.")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
@@ -319,13 +346,15 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     //(NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     //(CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
     (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
+    (FEATURE_GAUSSIAN_MEAN.c_str(), po::value<string>(&learningInfo.featureGaussianMeanFilename), "(string) filename to specify the mean of the gaussian prior on CRF features. One feature per line with the following format: <feature-string><space><mean>. Empty lines and lines starting with # are skipped.")
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
     //(LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
     //(MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
     (DIRICHLET_ALPHA.c_str(), po::value<double>(&learningInfo.multinomialSymmetricDirichletAlpha)->default_value(1.01), "(double) (defaults to 1.01) alpha of the symmetric dirichlet prior of the multinomial parameters.")
     (VARIATIONAL_INFERENCE.c_str(), po::value<bool>(&learningInfo.variationalInferenceOfMultinomials)->default_value(false), "(bool) (defaults to false) use variational inference approximation of the dirichlet prior of multinomial parameters.")
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
-    (REVERSE.c_str(), po::value<bool>(&learningInfo.reverse)->default_value(false), "(flag) (defaults to false) train models for the reverse direction.")
+    (GENERATE_CHILD_AND_DIRECTION.c_str(), po::value<bool>(&learningInfo.generateChildAndDirection)->default_value(false), "(flag) (defaults to false) the reconstruction model generates both the child and the relative position (right or left).")
+    (GENERATE_CHILD_CONDITIONAL_ON_DIRECTION.c_str(), po::value<bool>(&learningInfo.generateChildConditionalOnDirection)->default_value(false), "(flag) (defaults to false) the reconstruction model generates the child conditional on the relative position (right or left), in addition to the head.")
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(true), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     //(OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     //(TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
@@ -371,6 +400,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L2;
   } else if (vm[L1_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[L1_STRENGTH.c_str()].as<float>();
+    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1Strength = vm[L1_STRENGTH.c_str()].as<float>();
     learningInfo.optimizationMethod.subOptMethod->regularizer = Regularizer::L1;
   } else if (vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() > 0.0) {
     learningInfo.optimizationMethod.subOptMethod->regularizationStrength = vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>();
@@ -424,6 +454,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
         learningInfo.featureTemplates.push_back(FeatureTemplate::LOG_ALIGNMENT_JUMP);
       } else if(*featIter == "ALIGNMENT_JUMP") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::ALIGNMENT_JUMP);
+      } else if(*featIter == "POS_PAIR_DISTANCE") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::POS_PAIR_DISTANCE);
+      } else if(*featIter == "PRECOMPUTED") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::PRECOMPUTED);
       } else {
         assert(false);
       }
@@ -445,6 +479,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "program options are as follows:" << endl;
     cerr << TRAIN_DATA << "=" << textFilename << endl;
+    cerr << BABY_STEPS << "=" << learningInfo.babySteps << endl;
+    cerr << ONE_BASED_CONLL_FIELD_ID_RECONSTRUCTED << "=" << learningInfo.oneBasedConllFieldIdReconstructed << endl;
+    cerr << ONE_BASED_CONLL_FIELD_ID_CONDITIONED << "=" << learningInfo.oneBasedConllFieldIdConditioned << endl;
+    cerr << INDUCTIVE << "=" << learningInfo.inductive << endl;
     cerr << INIT_LAMBDA << "=" << initialLambdaParamsFilename << endl;
     cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
     cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
@@ -460,6 +498,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << WEIGHTED_L2_STRENGTH << "=" << vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() << endl;
     cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
     cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
+    cerr << MIN_ITER_COUNT << "=" << learningInfo.minIterationsCount << endl;
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
     cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
     cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
@@ -473,7 +512,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
     cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
     cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
-    cerr << REVERSE << "=" << learningInfo.reverse << endl;
+    cerr << GENERATE_CHILD_AND_DIRECTION << "=" << learningInfo.generateChildAndDirection << endl;
+    cerr << GENERATE_CHILD_CONDITIONAL_ON_DIRECTION << "=" << learningInfo.generateChildConditionalOnDirection << endl;
+    cerr << FEATURE_GAUSSIAN_MEAN << "=" << learningInfo.featureGaussianMeanFilename << endl;
     cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
     //cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
@@ -633,8 +674,9 @@ int main(int argc, char **argv) {
   learningInfo.nSentsPerDot = 250;
 
   learningInfo.initializeThetasWithGaussian = false;
-  learningInfo.initializeThetasWithUniform = true;
+  learningInfo.initializeThetasWithUniform = false;
   learningInfo.initializeThetasWithModel1 = false;
+  learningInfo.initializeThetasWithKleinManning = true;
 
   learningInfo.initializeLambdasWithGaussian = false;
   learningInfo.initializeLambdasWithZero = true;

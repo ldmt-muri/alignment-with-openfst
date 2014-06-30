@@ -68,7 +68,7 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
   
   // read and encode data
   sents.clear();
-  vocabEncoder.ReadConll(textFilename, sents);
+  vocabEncoder.ReadConll(textFilename, sents, 1);
   assert(sents.size() > 0);
   examplesCount = sents.size();
   
@@ -89,7 +89,9 @@ LatentCrfParser::LatentCrfParser(const string &textFilename,
 
   // initialize (and normalize) the log theta params to gaussians
   // TODO-OPT: only the master process needs to init theta 
-  if(learningInfo.initializeThetasWithGaussian || learningInfo.initializeThetasWithUniform) {
+  if(learningInfo.initializeThetasWithGaussian || 
+     learningInfo.initializeThetasWithUniform || 
+     learningInfo.initializeThetasWithKleinManning) {
     InitTheta();
   }
 
@@ -131,13 +133,19 @@ void LatentCrfParser::InitTheta() {
   // some initializers have not been implemented yet
   assert(learningInfo.initializeThetasWithUniform || 
          learningInfo.initializeThetasWithGaussian || 
-         learningInfo.initializeThetasWithModel1);
+         learningInfo.initializeThetasWithModel1 ||
+         learningInfo.initializeThetasWithKleinManning);
   assert(!learningInfo.initializeThetasWithModel1);
   
   if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing thetas...";
+    if(learningInfo.initializeThetasWithUniform) cerr << "with uniform" << endl;
+    else if(learningInfo.initializeThetasWithGaussian) cerr << "with gaussian" << endl; 
+    else if(learningInfo.initializeThetasWithModel1) cerr << "with model1" << endl;
+    else if(learningInfo.initializeThetasWithKleinManning) cerr << "with klein&manning" << endl;
+    else cerr << "EXACTLY ONE OF THETA INITIALIZERS MUST BE SELECTED. THIS SHOULD NEVER HAPPEN!" << endl;
   }
-
+  
   assert(sents.size() > 0);
 
   // first initialize nlogthetas 
@@ -145,27 +153,71 @@ void LatentCrfParser::InitTheta() {
   for(unsigned sentId = 0; sentId < sents.size(); ++sentId) {
     vector<ObservationDetails> &sent = sents[sentId];
     vector<ObservationDetails> &reconstructedSent = sents[sentId];
+    
+    // klein and manning constant 
+    vector<double> kleinManningConstant;
     for(unsigned i = 0; i < sent.size(); ++i) {
-      nLogThetaGivenOneLabel.params[ROOT_ID][sent[i].details[ObservationDetailsHeader::RECONSTRUCTED]] = 
-        learningInfo.initializeThetasWithGaussian?
-        abs(gaussianSampler.Draw()) : 1.0;
-      auto parentToken = sent[i];
-      for(unsigned j = 0; j < reconstructedSent.size(); ++j) {
-        if(i == j) { continue; }
-        auto childToken = reconstructedSent[j];
-        int64_t decision = i > j?
-          childToken.details[ObservationDetailsHeader::RECONSTRUCTED]:
-          -childToken.details[ObservationDetailsHeader::RECONSTRUCTED];
-        nLogThetaGivenOneLabel.params[parentToken.details[ObservationDetailsHeader::RECONSTRUCTED]][decision] = 
+      kleinManningConstant.push_back(0.0);
+      for(unsigned j = 0; j < sent.size(); ++j) {
+        if(i == j) continue;
+        // klein and manning initialization
+        kleinManningConstant[i] += 1.0 / abs(i-j);
+        //kleinManningConstant[i] += abs(i-j);
+      }
+      // klein and manning initialization
+      kleinManningConstant[i] /= (1-1.0/sent.size());
+      //kleinManningConstant[i] = (1-1.0/sent.size()) / kleinManningConstant[i];
+    }
+    for(int i = 0; i < (signed)sent.size(); ++i) {
+      // first, initialize root selection theta parameters
+      int64_t childReconstructed = sent[i].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+      if(learningInfo.initializeThetasWithKleinManning) { 
+        if(nLogThetaGivenOneLabel.params.find(ROOT_ID) == nLogThetaGivenOneLabel.params.end() ||
+           nLogThetaGivenOneLabel[ROOT_ID].find(childReconstructed) == nLogThetaGivenOneLabel[ROOT_ID].end()) {
+          nLogThetaGivenOneLabel[ROOT_ID][childReconstructed] = 0.0;
+        }
+        nLogThetaGivenOneLabel[ROOT_ID][childReconstructed] += 1.0 / sent.size();
+      } else {
+        nLogThetaGivenOneLabel.params[ROOT_ID][childReconstructed] = 
           learningInfo.initializeThetasWithGaussian?
-          abs(gaussianSampler.Draw()):1.0;
+          abs(gaussianSampler.Draw()) : 1.0;
+      }
+      // now, initialize internal attachments
+      auto parentToken = sent[i];
+      for(int j = 0; j < (signed)reconstructedSent.size(); ++j) {
+        if(i == j) { continue; }
+        int64_t parentConditioned = parentToken.details[learningInfo.oneBasedConllFieldIdConditioned-1];
+        auto childToken = reconstructedSent[j];
+        int64_t decision = childToken.details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+        if(i < j && learningInfo.generateChildConditionalOnDirection) {
+          parentConditioned *= -1;
+        } else if(i < j && learningInfo.generateChildAndDirection) {
+          decision *= -1;
+        }
+        
+        if(learningInfo.initializeThetasWithKleinManning) {
+          if(nLogThetaGivenOneLabel.params.find(parentConditioned) == nLogThetaGivenOneLabel.params.end() || 
+             nLogThetaGivenOneLabel.params[parentConditioned].find(decision) == nLogThetaGivenOneLabel.params[parentConditioned].end()) {
+            nLogThetaGivenOneLabel.params[parentConditioned][decision] = 0.0;
+          }
+          double increment = 1.0 / abs(i-j); // / kleinManningConstant[j];
+          nLogThetaGivenOneLabel.params[parentConditioned][decision] += increment;
+        } else {
+          nLogThetaGivenOneLabel.params[parentConditioned][decision] = 
+            learningInfo.initializeThetasWithGaussian? abs(gaussianSampler.Draw()):
+            1.0;
+        }
       }
     }
   }
   
   // then normalize them
-  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel);
-
+  if(learningInfo.initializeThetasWithKleinManning) {
+    MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel, 1.0, false, true, false);
+  } else {
+    MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel, 1.0, true, true, false);
+  }
+  
   //stringstream thetaParamsFilename;
   //thetaParamsFilename << outputPrefix << ".init.theta";
   //PersistTheta(thetaParamsFilename.str());
@@ -231,7 +283,8 @@ void LatentCrfParser::Label(vector<ObservationDetails> &tokens, vector<int> &lab
   SetTestExample(tokens);
 
   // do the actual labeling
-  labels = GetViterbiParse(0, true);
+  double treeLogProb;
+  labels = GetViterbiParse(0, !learningInfo.testWithCrfOnly, treeLogProb);
 
   // set down ;)
   testingMode = false;
@@ -240,20 +293,26 @@ void LatentCrfParser::Label(vector<ObservationDetails> &tokens, vector<int> &lab
 }
 
 void LatentCrfParser::Label(const string &labelsFilename) {
-  ofstream labelsFile(labelsFilename.c_str());
+  ofstream labelsFile;
+  if(learningInfo.mpiWorld->rank() == 0) {
+    labelsFile.open(labelsFilename.c_str());
+  }
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
+  double llOneBest = 0.0;
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
     lambda->learningInfo->currentSentId = exampleId;
     if(exampleId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
-      if(learningInfo.mpiWorld->rank() == 0){
+      if(learningInfo.mpiWorld->rank() == 0) {
         string labelSequence;
-        learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
+        mpi::broadcast<string>(*learningInfo.mpiWorld, labelSequence, exampleId % learningInfo.mpiWorld->size());
         labelsFile << labelSequence;
       }
       continue;
     }
-
-    std::vector<int> labels = GetViterbiParse(exampleId, true);
+    
+    double treeLogProb;
+    std::vector<int> labels = GetViterbiParse(exampleId, !learningInfo.testWithCrfOnly, treeLogProb);
+    llOneBest += treeLogProb;
     auto tokens = GetObservableDetailsSequence(exampleId);
     assert(labels.size() == tokens.size());
     
@@ -261,29 +320,43 @@ void LatentCrfParser::Label(const string &labelsFilename) {
     for(unsigned i = 0; i < labels.size(); ++i) {
       // conll token index is one based 
       int parent = labels[i] + 1;
-      ss << tokens[i].details[ObservationDetailsHeader::ID] << "\t" \
-         << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::FORM]) << "\t" \
-         << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::LEMMA]) << "\t" \
-         << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::CPOSTAG]) << "\t" \
-         << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::POSTAG]) << "\t" \
-         << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::FEATS]) << "\t" \
-         << parent << "\t"                               \
-         << "_" << "\t" \
-         << "_" << "\t" \
-         << "_" << endl;
+      ss << tokens[i].details[ObservationDetailsHeader::ID] << "\t";
+      ss << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::FORM]) << "\t";
+      ss << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::LEMMA]) << "\t";
+      ss << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::CPOSTAG]) << "\t";
+      ss << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::POSTAG]) << "\t";
+      ss << vocabEncoder.Decode(tokens[i].details[ObservationDetailsHeader::FEATS]) << "\t";
+      ss << parent << "\t";
+      ss << "_" << "\t";
+      ss << "_" << "\t";                        \
+      ss << "_" << endl;
     }
     ss << endl;
     if(learningInfo.mpiWorld->rank() == 0){
       labelsFile << ss.str();
     } else {
-      //cerr << "rank" << learningInfo.mpiWorld->rank() << " will send exampleId " << exampleId << " to master" << endl; 
-      learningInfo.mpiWorld->send(0, 0, ss.str());
-      //cerr << "rank" << learningInfo.mpiWorld->rank() << " sending done." << endl;
+      string labelSequence(ss.str());
+      mpi::broadcast<string>(*learningInfo.mpiWorld, labelSequence, exampleId % learningInfo.mpiWorld->size());
     }
   }
-  labelsFile.close();
+  if(learningInfo.mpiWorld->rank() == 0) {
+    labelsFile.close();
+  }
+  // all slaves need to consume the broadcasted strings
+  for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
+    lambda->learningInfo->currentSentId = exampleId;
+    if(exampleId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank() && 
+       exampleId % learningInfo.mpiWorld->size() != 0 && 
+       learningInfo.mpiWorld->rank() != 0) {
+      string dummy;
+      mpi::broadcast<string>(*learningInfo.mpiWorld, dummy, exampleId % learningInfo.mpiWorld->size());
+    }
+  }
+  double llOneBestTotal = 0.0;
+  mpi::reduce<double>(*learningInfo.mpiWorld, llOneBest, llOneBestTotal, std::plus<double>(), 0);
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "labels can be found at " << labelsFilename << endl;
+    cerr << "log likelihood of the one best parses = " << llOneBest << endl;
   }
 }
 
@@ -319,10 +392,15 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   adjacency.resize(tokens.size(), tokens.size());
   for(unsigned headPosition = 0; headPosition < tokens.size(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < tokens.size(); ++childPosition) {
-      double nlogTheta = 
-        headPosition > childPosition?
-        nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]:
-        nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][-reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]];
+      int64_t decision = reconstructedTokens[childPosition].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+      if(headPosition < childPosition && learningInfo.generateChildAndDirection) {
+        decision *= -1;
+      }
+      int64_t headConditioned = reconstructedTokens[headPosition].details[learningInfo.oneBasedConllFieldIdConditioned-1];
+      if(headPosition < childPosition && learningInfo.generateChildConditionalOnDirection) {
+        headConditioned *= -1;
+      }
+      double nlogTheta = nLogThetaGivenOneLabel[headConditioned][decision];
       double multinomialTerm = conditionOnZ? nlogTheta : 0.0;
       FastSparseVector<double> activeFeatures;
       if(headPosition != childPosition) {
@@ -348,10 +426,11 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
   }
   // root selection scores r(y|x) in (Koo et al. 2007)
   rootScores.resize(tokens.size());
-  int64_t reconstructedRoot = LatentCrfParser::ROOT_DETAILS.details[ObservationDetailsHeader::RECONSTRUCTED];
+  int64_t conditionedRoot = LatentCrfParser::ROOT_DETAILS.details[learningInfo.oneBasedConllFieldIdConditioned-1];
   for(unsigned rootPosition = 0; rootPosition < tokens.size(); ++rootPosition) {
+    int64_t decision = reconstructedTokens[rootPosition].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
     double multinomialTerm = conditionOnZ? 
-      nLogThetaGivenOneLabel[reconstructedRoot][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]: 
+      nLogThetaGivenOneLabel[conditionedRoot][decision]: 
       0.0;
     FastSparseVector<double> activeFeatures;
     lambda->FireFeatures(LatentCrfParser::ROOT_DETAILS, tokens[rootPosition], tokens, activeFeatures);
@@ -400,6 +479,7 @@ void LatentCrfParser::BuildMatrices(const unsigned sentId,
 
   // now obtain the original unscaled laplacianHat
   laplacianHat *= scalingConstant;
+
 }
 
 void LatentCrfParser::SupervisedTrainTheta() {
@@ -413,23 +493,32 @@ void LatentCrfParser::SupervisedTrainTheta() {
   
   for(unsigned sentId = 0; sentId < examplesCount; ++sentId) {
     auto tokens = GetObservableDetailsSequence(sentId);
-    for(unsigned childIndex = 0; childIndex < tokens.size(); ++childIndex) {
+    for(int childIndex = 0; childIndex < (int) tokens.size(); ++childIndex) {
       int zeroBasedHeadIndex = (int) tokens[childIndex].details[ObservationDetailsHeader::HEAD] - 1;
-      int64_t childThetaKey = 
-        zeroBasedHeadIndex < 0 || (unsigned) zeroBasedHeadIndex > childIndex?
-        tokens[childIndex].details[ObservationDetailsHeader::RECONSTRUCTED]:
-        -tokens[childIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
+      int64_t childThetaKey = tokens[childIndex].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+      if(zeroBasedHeadIndex != -1 && 
+         zeroBasedHeadIndex < childIndex && 
+         learningInfo.generateChildAndDirection) {
+        childThetaKey *= -1;
+      }
       int64_t headThetaKey = 
         zeroBasedHeadIndex < 0?
         LatentCrfParser::ROOT_ID:
-        tokens[zeroBasedHeadIndex].details[ObservationDetailsHeader::RECONSTRUCTED];
+        tokens[zeroBasedHeadIndex].details[learningInfo.oneBasedConllFieldIdConditioned-1];
+      if(zeroBasedHeadIndex != -1 &&
+         zeroBasedHeadIndex < childIndex &&
+         learningInfo.generateChildConditionalOnDirection) {
+        headThetaKey *= -1;
+      }
       assert( nLogThetaGivenOneLabel.params.find(headThetaKey) != nLogThetaGivenOneLabel.params.end());
       assert( nLogThetaGivenOneLabel.params[headThetaKey].find(childThetaKey) != nLogThetaGivenOneLabel.params[headThetaKey].end());
       nLogThetaGivenOneLabel.params[headThetaKey][childThetaKey]++;
     }
   }
   
-  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel, 1.0, false, true, false);
+  bool unnormalizedParamsAreInNLog = false;
+  bool normalizedParamsAreInNLog = true;
+  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel, learningInfo.multinomialSymmetricDirichletAlpha, unnormalizedParamsAreInNLog, normalizedParamsAreInNLog, learningInfo.variationalInferenceOfMultinomials);
   
 }
 
@@ -501,11 +590,13 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
       }
       assert(false);
     }
-    mle[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
-    mleMarginals[LatentCrfParser::ROOT_ID] += marginal; // MultinomialParams::nExp(nLogThetaGivenOneLabel[LatentCrfParser::ROOT_ID][reconstructedTokens[rootPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
+    int64_t decision = reconstructedTokens[rootPosition].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+    mle[LatentCrfParser::ROOT_ID][decision] += marginal;
+    mleMarginals[LatentCrfParser::ROOT_ID] += marginal;
   }
   for(unsigned headPosition = 0; headPosition < yGivenXZLaplacianHat.rows(); ++headPosition) {
     for(unsigned childPosition = 0; childPosition < yGivenXZLaplacianHat.cols(); ++childPosition) {
+      if(headPosition == childPosition) { continue; }
       double marginal = childPosition == 0? 0.0 :
         (yGivenXZAdjacency(headPosition, childPosition) * yGivenXZLaplacianHatInverse(childPosition, childPosition)).as_float();
       marginal -= headPosition == 0? 0.0 :
@@ -513,11 +604,17 @@ double LatentCrfParser::UpdateThetaMleForSent(const unsigned sentId,
       if(marginal > 1.01 || marginal < -0.01) {
         cerr << "WARNING: marginal = " << marginal << endl;
       }
-      int64_t decision = headPosition > childPosition?
-        reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]:
-        -reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED];
-      mle[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][decision] += marginal; // * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][decision]);
-      mleMarginals[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]] += marginal; // * MultinomialParams::nExp(nLogThetaGivenOneLabel[reconstructedTokens[headPosition].details[ObservationDetailsHeader::RECONSTRUCTED]][reconstructedTokens[childPosition].details[ObservationDetailsHeader::RECONSTRUCTED]]);
+    
+      int64_t decision = reconstructedTokens[childPosition].details[learningInfo.oneBasedConllFieldIdReconstructed-1];
+      if(headPosition < childPosition && learningInfo.generateChildAndDirection) {
+        decision *= -1;
+      }
+      int64_t parentConditioned = reconstructedTokens[headPosition].details[learningInfo.oneBasedConllFieldIdConditioned-1];
+      if(headPosition < childPosition && learningInfo.generateChildConditionalOnDirection) {
+        parentConditioned *= -1;
+      }
+      mle[parentConditioned][decision] += marginal;
+      mleMarginals[parentConditioned] += marginal;      
     }
   }
 
@@ -596,10 +693,16 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
     //cerr << "sent " << sentId << ": nLogC - nLogZ = nLog(" << C << ") - nLog(" << Z << ") = " << nLogC << " - " << nLogZ << " = " << nLogC - nLogZ << endl;
     
     auto tokens = GetObservableDetailsSequence(sentId);
+    
+    // debug
+    stringstream marginalGivenXSS, marginalGivenXZSS;
+    
     // for (h,m) in \cal{T}_{np}^s:
     //   for k in f(x,h,m):
     //     dll/d\lambda_k += f_k(x,h,m) * [marginal(h,m;y|z,x)-marginal(h,m;y|x)]
     for(unsigned headPosition = 0; headPosition < tokens.size(); ++headPosition) {
+      marginalGivenXZSS << headPosition << "\t";
+      marginalGivenXSS << headPosition << "\t";
       for(unsigned childPosition = 0; childPosition < tokens.size(); ++childPosition) {
         FastSparseVector<double> activeFeatures;
         if(headPosition != childPosition) {
@@ -618,11 +721,35 @@ double LatentCrfParser::ComputeNllZGivenXAndLambdaGradient(
           (yGivenXAdjacency(headPosition, childPosition) * 
            yGivenXLaplacianHatInverse(childPosition, headPosition)).as_float();
         
+        marginalGivenXZSS << std::setprecision(1) << marginalGivenXZ << "\t";
+        
+        marginalGivenXSS << std::setprecision(1) << marginalGivenX << "\t";
+        
         double marginalDiff = marginalGivenX - marginalGivenXZ;
         for(auto featIter = activeFeatures.begin(); featIter != activeFeatures.end(); ++featIter) {
           derivativeWRTLambda[featIter->first] += featIter->second * marginalDiff;
         }
       }
+      marginalGivenXZSS << headPosition << "\n";
+      marginalGivenXSS << headPosition << "\n";
+    }
+    
+    // debug
+    stringstream headerSS;
+    headerSS <<  "sentId = " << sentId << "; tokens = ";
+    for(unsigned i = 0; i < tokens.size(); ++i) {
+      headerSS << i << "=" << vocabEncoder.Decode(tokens[i].details[learningInfo.oneBasedConllFieldIdReconstructed-1]) << " ";
+    }
+    headerSS << endl;
+    for(unsigned i = 0; i < tokens.size(); ++i) {
+      headerSS << "\t" << i;
+    }
+    headerSS << endl;
+    
+    if(sentId == 13 || sentId == 1715) { 
+      cerr << headerSS.str() << endl << "p(attachment|X,Z) = " << endl << marginalGivenXZSS.str() << endl;
+      cerr << headerSS.str() << endl << "p(attachment|X) = "   << endl << marginalGivenXSS.str() << endl;
+      cerr << "------------------------------------" << endl;
     }
     
     // don't forget to also update the gradients of root selection features
@@ -833,7 +960,7 @@ double LatentCrfParser::GetMaxSpanningTree(VectorXlogd &rootSelection, MatrixXlo
 
 // element i in the returned vector is the zero-based index of the ith token in the sentence.
 // the parent of a root word is -1
-vector<int> LatentCrfParser::GetViterbiParse(int sentId, bool conditionOnZ) {
+vector<int> LatentCrfParser::GetViterbiParse(int sentId, bool conditionOnZ, double &treeLogProb) {
   // build A_{y|x,z} or A_{y|x} (depending on the second parameter) matrix and use matrix tree theoerem to compute Z(x), \sum_{y: (h,m) \in y} p(y|x)
   MatrixXlogd adjacency, laplacianHat, laplacianHatInverse;
   VectorXlogd rootSelection;
@@ -843,18 +970,24 @@ vector<int> LatentCrfParser::GetViterbiParse(int sentId, bool conditionOnZ) {
   auto tokens = GetObservableDetailsSequence(sentId);
   if(tokens.size() > learningInfo.maxSequenceLength) {
     maxSpanTree.resize(tokens.size(), -1);
+    treeLogProb = 0.0;
+    cerr << "WARNING: skipping Viterbi parsing of sentId=" << sentId << ", length = " << tokens.size() << " > learningInfo.maxSequenceLength = " << learningInfo.maxSequenceLength << endl; 
     return maxSpanTree;
   }
 
   BuildMatrices(sentId, rootSelection, adjacency, laplacianHat, 
                 laplacianHatInverse, laplacianHatDeterminant, conditionOnZ);
   
-  // we currently select the max spanning tree without taking into consideration the root selection weight
   if(adjacency.rows() == 1) {
-    maxSpanTree.push_back(-1); // the single word in the sentence must be root
+    maxSpanTree.push_back(-1); // the single word in a sentence of length 1 must be root
     return maxSpanTree;
   }
-  GetMaxSpanningTree(rootSelection, adjacency, maxSpanTree);
+  double treeScoreExponent = GetMaxSpanningTree(rootSelection, adjacency, maxSpanTree);
+  LogValD treeScoreLogValD = LogValD(treeScoreExponent, false);
+  double treeProb = (treeScoreLogValD / laplacianHatDeterminant).as_float();
+  if(treeProb > 1.0) { treeProb = 1.0; }
+  else if(treeProb <= 0.0) { treeProb = 0.000001; }
+  treeLogProb = log(treeProb);
   
   return maxSpanTree;
 }

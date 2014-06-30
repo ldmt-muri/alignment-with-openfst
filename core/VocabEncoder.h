@@ -47,6 +47,12 @@ typedef const boost::interprocess::allocator<IntToTokenPair, boost::interprocess
 typedef boost::interprocess::map<int64_t, char_string, std::less<int64_t>, ShmemIntToTokenPairAllocator> 
   ShmemIntToTokenMap;
 
+typedef std::pair<const int64_t, int64_t> IntToIntPair;
+typedef const boost::interprocess::allocator<IntToIntPair, boost::interprocess::managed_shared_memory::segment_manager> 
+  ShmemIntToIntPairAllocator;
+typedef boost::interprocess::map<int64_t, int64_t, std::less<int64_t>, ShmemIntToIntPairAllocator> 
+  ShmemIntToIntMap;
+
 typedef boost::interprocess::allocator<char_string, boost::interprocess::managed_shared_memory::segment_manager> 
   ShmemStringAllocator;
 typedef vector<char_string, ShmemStringAllocator> 
@@ -59,20 +65,23 @@ class VocabEncoder {
   const LearningInfo &learningInfo;
   const int64_t firstId;
   const std::string UNK;
-
+  
   // set for master and slaves
   void_allocator *alloc_inst;
   ShmemTokenToIntMap *tokenToInt;
   ShmemIntToTokenMap *intToToken;
+  ShmemIntToIntMap *encodingToCount;
   
   // only set for master
   std::set<int64_t> closedVocab;
   char_string *UNK_char_string;
 
+  bool countFrequencies;
+  
  public:
 
   void Init() {
-
+    
     alloc_inst = new void_allocator(learningInfo.sharedMemorySegment->get_segment_manager());
     
     // create/find managed shared memory objects
@@ -81,7 +90,9 @@ class VocabEncoder {
       // create
       intToToken = (ShmemIntToTokenMap *) MapToSharedMemory(true, "VocabEncoder::intToToken");
       tokenToInt = (ShmemTokenToIntMap *) MapToSharedMemory(true, "VocabEncoder::tokenToInt");
+      encodingToCount = (ShmemIntToIntMap *) MapToSharedMemory(true, "VocabEncoder::encodingToCount");
       UNK_char_string = (char_string *) MapToSharedMemory(true, "VocabEncoder::UNK_char_string");
+      UNK_char_string->assign(UNK.c_str());
       
       // encode unk 
       tokenToInt->insert(TokenToIntPair(*UNK_char_string, firstId + intToToken->size()));
@@ -100,27 +111,45 @@ class VocabEncoder {
       // then find
       intToToken = (ShmemIntToTokenMap *) MapToSharedMemory(false, "VocabEncoder::intToToken");
       tokenToInt = (ShmemTokenToIntMap *) MapToSharedMemory(false, "VocabEncoder::tokenToInt");
+      encodingToCount = (ShmemIntToIntMap *) MapToSharedMemory(false, "VocabEncoder::encodingToCount");
       UNK_char_string = (char_string *) MapToSharedMemory(false, "VocabEncoder::UNK_char_string");
 
     }
     
   }
   
-  VocabEncoder(const LearningInfo &learningInfo, unsigned firstId = 2): learningInfo(learningInfo), firstId(firstId), UNK("_unk_")     {
+ VocabEncoder(const LearningInfo &learningInfo, unsigned firstId = 2): learningInfo(learningInfo), firstId(firstId), UNK("_unk_") {
     Init();
   }
 
- VocabEncoder(const std::string& textFilename, const LearningInfo &learningInfo, unsigned firstId = 2) : learningInfo(learningInfo), firstId(firstId), UNK("_unk_") {
+ VocabEncoder(const std::string& textFilename, const LearningInfo &learningInfo, unsigned firstId = 2, unsigned minFreq = 1) : learningInfo(learningInfo), firstId(firstId), UNK("_unk_") {
 
+    assert(minFreq >= 1);
+    
+    countFrequencies = true;
     Init();
-
+    
     if(learningInfo.mpiWorld->rank() == 0) {
-
-      cerr<< learningInfo.mpiWorld->rank() << ": reading the vocabencoder init file now...";
-
+      
+      cerr << learningInfo.mpiWorld->rank() << ": reading the vocabencoder init file " << textFilename <<  " now...";
+      cerr << "minFreq = " << minFreq << endl;
       // create token-int correspondnence
       std::ifstream textFile(textFilename.c_str(), std::ios::in);
       std::string line;
+      boost::unordered_map<string, int64_t> typeFrequency;
+      while(getline(textFile, line)) {
+        if(line.size() == 0) { continue; }
+        std::vector<string> splits;
+        StringUtils::SplitString(line, ' ', splits);
+        for(std::vector<string>::const_iterator tokenIter = splits.begin(); 
+            tokenIter != splits.end();
+            tokenIter++) {
+          if(typeFrequency.find(*tokenIter) == typeFrequency.end()) { typeFrequency[*tokenIter] = 0; }
+          typeFrequency[*tokenIter] += 1;
+        }
+      }
+      textFile.close();
+      textFile.open(textFilename.c_str(), std::ios::in);
       while(getline(textFile, line)) {
         if(line.size() == 0) {
           continue;
@@ -130,18 +159,25 @@ class VocabEncoder {
         for(std::vector<string>::const_iterator tokenIter = splits.begin(); 
             tokenIter != splits.end();
             tokenIter++) {
-          Encode(*tokenIter);
-          
+          int temp = Encode(*tokenIter);
+          cerr << "typeFreq[" << *tokenIter << "] = " << typeFrequency[*tokenIter] << ", encoding = " << temp; 
+          // if this string is not frequent enough, modify its encoding to UNK
+          if(typeFrequency[*tokenIter] < minFreq) {
+            char_string token_char_string(tokenIter->c_str(), *alloc_inst);
+            tokenToInt->find(token_char_string)->second = UnkInt();
+            cerr << " => " << tokenToInt->find(token_char_string)->second;
+          }
+          cerr << endl;
         }
       }
-
       cerr << "done reading." << endl;
     }
-
+    
     bool dummy;
     boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, dummy, 0);
+    countFrequencies = false;
   }
-
+  
   bool IsClosedVocab(int64_t wordId) const {
     return (closedVocab.find(wordId) != closedVocab.end());
   }
@@ -170,6 +206,10 @@ class VocabEncoder {
     }    
   }
 
+  inline int64_t GetFrequencyCount(const int64_t encoding) {
+    return encodingToCount->find(encoding)->second;
+  }
+
   int64_t Encode(const string& token) {
 
     try {
@@ -183,9 +223,16 @@ class VocabEncoder {
         auto nextId = firstId + intToToken->size();
         tokenToInt->insert(TokenToIntPair(token_char_string, nextId));
         intToToken->insert(IntToTokenPair(nextId, token_char_string));
+        if(countFrequencies) {
+          encodingToCount->insert(IntToIntPair(nextId, 1));
+        }
         return nextId;
       } else {
-        return tokenToInt->find(token_char_string)->second;
+        auto encoding = tokenToInt->find(token_char_string)->second;
+        if(learningInfo.mpiWorld->rank() == 0 && countFrequencies) {
+          encodingToCount->find(encoding)->second++;
+        }
+        return encoding;
       }
 
     } catch(std::exception const&  ex) {
@@ -281,15 +328,36 @@ class VocabEncoder {
     }
   }
   
-  void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data) {
+  void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data, unsigned minFreq = 1) {
+
+    assert(minFreq >= 1);
     assert(data.size() == 0);    
     std::ifstream conllFile(conllFilename.c_str(), std::ios::in);
     std::string line;
+
+    // every time a field is encoded, a frequency counter is incremented
+    countFrequencies = true;
 
     unsigned sentIndex = 0;
     unsigned tokenIndex = 0;
     // make room for the first sentence
     data.resize(10000);
+    boost::unordered_map<string, int64_t> typeFrequency;
+    // this pass only computes the frequency of each wordtype
+    while(getline(conllFile, line)) {
+      std::vector<std::string> splits;
+      StringUtils::SplitString(line, '\t', splits);
+      if(splits.size() == 0) { continue; }
+      for(unsigned i = 0; i < splits.size(); ++i) {
+        if(typeFrequency.find(splits[i]) == typeFrequency.end()) {
+          typeFrequency[splits[i]] = 0;
+        }
+        typeFrequency[splits[i]] += 1;        
+      }
+    }
+    conllFile.close();
+    conllFile.open(conllFilename.c_str(), std::ios::in);
+    // this pass is the real encoding work
     while(getline(conllFile, line)) {
       std::vector<std::string> splits;
       StringUtils::SplitString(line, '\t', splits);
@@ -308,6 +376,16 @@ class VocabEncoder {
         // encode the splits
         vector<int64_t> encodedSplits;
         Encode(splits, encodedSplits);
+        
+        for(unsigned i = 0; i < splits.size(); ++i) {
+          // if this string is not frequent enough, modify its encoding to UNK
+          if(typeFrequency[splits[i]] < minFreq) {
+            char_string token_char_string(splits[i].c_str(), *alloc_inst);
+            tokenToInt->find(token_char_string)->second = UnkInt();
+            encodedSplits[i] = UnkInt();
+          }
+        }
+        
         // replace the integral fields with their actual value instead of their vocab id
         encodedSplits[ObservationDetailsHeader::ID] = (int64_t)stoi(splits[ObservationDetailsHeader::ID]);
         encodedSplits[ObservationDetailsHeader::HEAD] = (int64_t)stoi(splits[ObservationDetailsHeader::HEAD]);
@@ -320,6 +398,7 @@ class VocabEncoder {
     }
     data.resize(sentIndex);
     assert( data[data.size()-1].size() > 0 );
+    countFrequencies = false;
   }
   
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
@@ -391,6 +470,17 @@ class VocabEncoder {
         return temp;
       } else {
         auto temp = learningInfo.sharedMemorySegment->find<ShmemTokenToIntMap> (objectNickname.c_str()).first;
+        assert(temp);
+        return temp;
+      }
+    } else if (string(objectNickname) == string("VocabEncoder::encodingToCount")) {
+      if(create) {
+        ShmemIntToIntPairAllocator allocator(learningInfo.sharedMemorySegment->get_segment_manager()); 
+        auto temp = learningInfo.sharedMemorySegment->construct<ShmemIntToIntMap> (objectNickname.c_str()) (std::less<int64_t>(), allocator);
+        assert(temp);
+        return temp;
+      } else {
+        auto temp = learningInfo.sharedMemorySegment->find<ShmemIntToIntMap> (objectNickname.c_str()).first;
         assert(temp);
         return temp;
       }
