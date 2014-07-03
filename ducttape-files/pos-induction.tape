@@ -105,8 +105,8 @@ task GenerateWordpairFeats
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
-  #python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
-  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -e $embeddings_file -s $data_file
+  python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
+  #python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -e $embeddings_file -s $data_file
 } 
 
 task BuildLatentCrfPosTagger

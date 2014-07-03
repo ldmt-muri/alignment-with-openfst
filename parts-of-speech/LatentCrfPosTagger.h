@@ -51,6 +51,8 @@ class LatentCrfPosTagger : public LatentCrfModel {
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
 
   void Label(const string &labelsFilename);
+  
+  void Label(string &inputFilename, string &outputFilename, bool parallelize) override;
 
   double ComputeNllYGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) override;
 

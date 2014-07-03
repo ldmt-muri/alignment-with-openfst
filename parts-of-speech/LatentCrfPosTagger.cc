@@ -134,7 +134,6 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
     boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
 
-
   // read and encode tgt words and their classes (e.g. brown clusters)
   if(learningInfo.mpiWorld->rank() == 0) {
     EncodeTgtWordClasses();
@@ -384,6 +383,22 @@ void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
   }
 }
 
+void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
+  cerr << "inside LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename, bool parallelize=true) " << endl;
+  std::vector<std::vector<std::string> > tokens;
+  StringUtils::ReadTokens(inputFilename, tokens);
+  vector<vector<int> > labels;
+  Label(tokens, labels, parallelize);
+  if(!parallelize ||
+     parallelize && learningInfo.mpiWorld->rank() == 0) {
+    if(labelIntToString.size() > 0) {
+      StringUtils::WriteTokens(outputFilename, labels, labelIntToString);
+    } else {
+      StringUtils::WriteTokens(outputFilename, labels);
+    }
+  }
+}
+
 void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   assert(labels.size() == 0); 
   assert(tokens.size() > 0);
@@ -437,8 +452,14 @@ void LatentCrfPosTagger::Label(const string &labelsFilename) {
     Label(tokens, labels);
 
     stringstream ss;
-    for(unsigned i = 0; i < labels.size(); ++i) {
-      ss << labels[i] << " ";
+    if(labelIntToString.size()>0) {
+      for(unsigned i = 0; i < labels.size(); ++i) {
+        ss << labelIntToString[labels[i]] << " ";
+      }
+    } else {
+      for(unsigned i = 0; i < labels.size(); ++i){
+        ss << labels[i] << " ";
+      }
     }
     ss << endl;
     if(learningInfo.mpiWorld->rank() == 0){

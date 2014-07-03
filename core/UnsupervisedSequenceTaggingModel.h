@@ -66,7 +66,7 @@ class UnsupervisedSequenceTaggingModel {
     }
   }
 
-  void Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
+  virtual void Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
     cerr << "inside UnsupervisedSequenceTaggingModel::Label(string &inputFilename, string &outputFilename) " << endl;
     std::vector<std::vector<std::string> > tokens;
     StringUtils::ReadTokens(inputFilename, tokens);
