@@ -1983,39 +1983,6 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
   outputFile.close();
 }
 
-double LatentCrfModel::ComputeVariationOfInformation(string &aLabelsFilename, string &bLabelsFilename) {
-  vector<string> clusteringA, clusteringB;
-  vector<vector<string> > clusteringAByLine, clusteringBByLine;
-  StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
-  StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
-  assert(clusteringAByLine.size() == clusteringBByLine.size());
-  for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
-    assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-    for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
-      clusteringA.push_back(clusteringAByLine[i][j]);
-      clusteringB.push_back(clusteringBByLine[i][j]);			    
-    }
-  }
-  return ClustersComparer::ComputeVariationOfInformation(clusteringA, clusteringB);
-}
-
-double LatentCrfModel::ComputeManyToOne(string &aLabelsFilename, string &bLabelsFilename) {
-  vector<string> clusteringA, clusteringB;
-  vector<vector<string> > clusteringAByLine, clusteringBByLine;
-  StringUtils::ReadTokens(aLabelsFilename, clusteringAByLine);
-  StringUtils::ReadTokens(bLabelsFilename, clusteringBByLine);
-  //assert(clusteringAByLine.size() == clusteringBByLine.size());
-  for(unsigned i = 0; i < clusteringAByLine.size(); i++) {
-    assert(clusteringAByLine[i].size() == clusteringBByLine[i].size());
-    for(unsigned j = 0; j < clusteringAByLine[i].size(); j++) {
-      clusteringA.push_back(clusteringAByLine[i][j]);
-      clusteringB.push_back(clusteringBByLine[i][j]);			    
-    }
-  }
-  return ClustersComparer::ComputeManyToOne(clusteringA, clusteringB);
-}
-
-
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::InitLambda() {
   if(learningInfo.mpiWorld->rank() == 0) {

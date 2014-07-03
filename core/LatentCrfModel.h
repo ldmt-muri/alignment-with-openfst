@@ -155,10 +155,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // analyze
   void Analyze(std::string &inputFilename, std::string &outputFilename);
 
-  // evaluate
-  double ComputeVariationOfInformation(std::string &labelsFilename, std::string &goldLabelsFilename);
-  double ComputeManyToOne(std::string &aLabelsFilename, std::string &bLabelsFilename);
-
   void PersistTheta(std::string thetaParamsFilename);
 
   // LABEL new examples

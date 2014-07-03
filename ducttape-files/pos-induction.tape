@@ -10,6 +10,8 @@ global {
   alignment_with_openfst_dir="/home/wammar/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
+  tag_dict_file=""
+
   # autoencoder hyperparams
   l2_strength=(L2Strength: zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1 point_three=0.3 one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_o_one=1.01 one=1.0 o_ninety_nine=0.99 o_nine=0.9 o_five=0.5 o_three=0.3 o_one=0.1 o_o_three=0.03 o_o_one=0.01 o_o_o_one=0.001 o_o_o_o_one=0.0001 )
@@ -29,10 +31,25 @@ global {
 
 #import ../submitters.tape
 
+task PreprocessData
+    :: labeled_train_text=@
+    :: labeled_test_text=@
+    :: unlabeled_train_text=@
+    :: labeled_train_labels=@
+    :: labeled_test_labels=@
+    > autoencoder_text
+    > autoencoder_labels
+    > autoencoder_test_size
+{
+  cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
+  cp $labeled_train_labels $autoencoder_labels
+  cat $labeled_train_text $labeled_test_text | wc -l > $autoencoder_test_size
+}
+
 task FeaturizedHmmPosInduction
     :: wammar_utils_dir=@
-    :: data_file=@
-    :: gold_file=@
+    < data_file=$autoencoder_text@PreprocessData
+    < gold_file=$autoencoder_labels@PreprocessData
     :: featurized_hmm_pos_inducer_dir=@
     :: l2_strength=@
     > base_conf
@@ -41,6 +58,7 @@ task FeaturizedHmmPosInduction
     > ll
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared 
 {
+  echo "WARNING: THIS NEEDS TO BE FIXED LATER. combine-token-label-in-mrg-file.py needs to create random labels for the mrg file when the gold labels are not provided."
   python $wammar_utils_dir/combine-token-label-in-mrg-file.py $data_file $gold_file $mrg_file
   echo "treeBank	$mrg_file" > $base_conf
   echo "numSentences	10000000" >> $base_conf
@@ -78,7 +96,8 @@ task FeaturizedHmmPosInduction
 }
 
 task GenerateWordpairFeats 
-    :: data_file=@ 
+    < data_file=$autoencoder_text@PreprocessData 
+    :: embeddings_file=@
     :: brown_clusters_dir=@
     :: alignment_with_openfst_dir=@
     > wordpair_feats_file 
@@ -86,7 +105,8 @@ task GenerateWordpairFeats
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
-  python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
+  #python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
+  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -e $embeddings_file -s $data_file
 } 
 
 task BuildLatentCrfPosTagger
@@ -102,14 +122,15 @@ task BuildLatentCrfPosTagger
 }
 
 task AutoencoderPosInduction
-    :: test_size=@
+    :: supervised=@
+    < autoencoder_test_size=$autoencoder_test_size@PreprocessData
     :: labels_count=@
     :: reconstruct_brown_clusters=@
     :: wammar_utils_dir=@
     :: alignment_with_openfst_dir=@
     :: procs=$cores
-    :: data_file=@
-    :: gold_file=@
+    < data_file=$autoencoder_text@PreprocessData
+    < gold_file=$autoencoder_labels@PreprocessData
     :: l2_strength=@
     #:: l1_strength=@
     :: dirichlet_alpha=@
@@ -124,6 +145,7 @@ task AutoencoderPosInduction
     :: fire_precomputed_features_for_xip1=@
     #:: fire_precomputed_features_for_xip2=@
     :: tag_dict_file=@
+    :: labeled_test_text=@
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
@@ -139,6 +161,8 @@ task AutoencoderPosInduction
   if [[ $tag_dict_file ]]; then
   python $alignment_with_openfst_dir/parts-of-speech/augment_tag_dict_with_case.py -i $tag_dict_file -o tag_dict_file.cased -t $data_file
   fi 
+
+  test_size=$(cat $autoencoder_test_size)
 
   command="mpirun -np $procs $executable 
   --output-prefix $prefix
@@ -158,6 +182,10 @@ task AutoencoderPosInduction
   #  --init-lambda /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.zero+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.lambda
   # hide  --feat BOUNDARY_LABELS 
 
+  if [[ $supervised ]]; then
+    command="$command --supervised true"
+  fi
+ 
   #if [[ $fire_precomputed_features_for_xim2 ]]; then
   #  command="$command --feat PRECOMPUTED_XIM2"
   #fi
@@ -217,10 +245,15 @@ task AutoencoderPosInduction
   echo "executing $command..."
   $command 2> $out_err
 
-  head -n $test_size $data_file > data_file_test
-  head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
-  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.labels $autoencoder_labels
-  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
+  actual_test_size=$(wc -l $labeled_test_text)
+  echo "actual test size is $actual_test_size"  
+  echo "autoencoder test size is $test_size"  
+
+  head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
+  #head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
+  tail -n $actual_test_size $prefix.labels > auto_test_labels
+  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test auto_test_labels $autoencoder_labels
+  $python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
 
   #echo "best hmm vs. latent crf:"
   #cat out_err | grep "variation of information"
@@ -232,8 +265,8 @@ task AutoencoderPosInduction
 task Evaluate
     :: test_size=@
     :: wammar_utils_dir=@
-    :: data_file=@
-    :: gold_file=@
+    :: labeled_test_text=@
+    :: labeled_test_labels=@
     < labels=(Model:
                 featurized_hmm=$labels@FeaturizedHmmPosInduction
                 autoencoder=$autoencoder_labels@AutoencoderPosInduction
@@ -246,8 +279,7 @@ task Evaluate
     > scores 
 {
   # convert tokens and gold labels to token/label format
-  head -n $test_size $data_file > data_file_test
-  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $gold_file $gold_file2
+  python $wammar_utils_dir/combine-token-label-in-one-file.py $labeled_test_text $labeled_test_labels $gold_file2
   python $wammar_utils_dir/score-classes.py $gold_file2 $labels 2> $scores
   python $wammar_utils_dir/score-vm.py $gold_file2 $labels 2>> $scores
   cat $ll >> $scores

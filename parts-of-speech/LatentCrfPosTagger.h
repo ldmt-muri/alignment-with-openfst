@@ -52,11 +52,17 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   void Label(const string &labelsFilename);
 
+  double ComputeNllYGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) override;
+
+  
  public:
   std::vector<std::vector<int64_t> > data, testData;
+  std::vector<std::vector<int> > goldLabelSequences;
 
   std::vector<int64_t> empty;
 
+  std::map<int, string> labelIntToString;
+  std::map<string, int> labelStringToInt;
 
 };
 

@@ -5,10 +5,17 @@ global {
     # general
     cores=10
 
-    # data
-    data_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok"
-    gold_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos"
-    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    # data files
+    labeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.0k-1k"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.1k-2k"
+    unlabeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.2k-3k"
+    labeled_train_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.0k-1k"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.1k-2k"
+    
+    embeddings_file="/usr0/home/chuchenl/git/tweet-embedding/w2v_model"
+
+    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    supervised=1
 
     test_size=0
     labels_count=12

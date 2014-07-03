@@ -88,6 +88,45 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   }
   // zero is reserved for FST epsilon
   assert(this->yDomain.count(0) == 0);
+  
+  // if gold labels are provided, establish a one-to-one mapping between elements in yDomain and the label strings
+  if(learningInfo.goldFilename.size() > 0) {
+    auto yDomainIter = yDomain.begin();
+    // skip the START-OF-SENTENCE label
+    if(*yDomainIter == LatentCrfModel::START_OF_SENTENCE_Y_VALUE) { 
+      yDomainIter++;
+    }
+    std::vector<std::vector<std::string> > labelStringSequences;
+    goldLabelSequences.clear();
+    StringUtils::ReadTokens(learningInfo.goldFilename, labelStringSequences);
+    for(auto labelStringSequencesIter = labelStringSequences.begin(); 
+        labelStringSequencesIter != labelStringSequences.end();
+        ++labelStringSequencesIter) {
+      vector<int> goldLabelSequence;
+      for(auto labelStringIter = labelStringSequencesIter->begin(); 
+          labelStringIter != labelStringSequencesIter->end(); 
+          ++labelStringIter) {
+        // is it a new label?
+        if(labelStringToInt.count(*labelStringIter) == 0) {
+          // yes!
+          // are there any unused elements in yDomain (excluding the start of sentence label)?
+          if(yDomainIter == yDomain.end() || yDomain.size() - 1 <= labelStringToInt.size()) {
+            cerr << "ERROR: the number of unique label strings in the gold file is greater than the predefined number of classes = " << NUMBER_OF_LABELS << " (fyi: yDomain.size() = " << yDomain.size() << ")" << endl;
+            assert(false);
+          }
+          labelStringToInt[*labelStringIter] = *yDomainIter;
+          labelIntToString[*yDomainIter] = *labelStringIter;
+          yDomainIter++;
+          if(yDomainIter != yDomain.end() && *yDomainIter == LatentCrfModel::START_OF_SENTENCE_Y_VALUE) { 
+            yDomainIter++;
+          }
+        }
+        goldLabelSequence.push_back(labelStringToInt[*labelStringIter]);
+      }
+      goldLabelSequences.push_back(goldLabelSequence);
+    }
+    cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
+  }
 
   // slaves wait for master
   if(learningInfo.mpiWorld->rank() != 0) {
@@ -139,8 +178,7 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
 
   // load the mapping from each target word to its word class (e.g. brown clusters)
   LoadTgtWordClasses(data);
-
-    
+  
   // initialize (and normalize) the log theta params to gaussians
   InitTheta();
   if(initThetaFilename.size() > 0) {
@@ -213,6 +251,128 @@ void LatentCrfPosTagger::InitTheta() {
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "done" << endl;
   }
+}
+
+// -loglikelihood is the return value
+// nll = - log ( exp( \lambda . f(y-gold, x) ) / \sum_y exp( \lambda.f(y,x) )
+//     = - \lambda . f(y-gold, x) + log \sum_y exp( \lambda . f(y, x) )
+//     = - \lambda . f(y-gold, x) - nLogZ
+// nDerivative_k = - f_k(y-gold, x) + [ \sum_y f_k(y,x) * exp (\lambda . f(y,x)) ] / [ \sum_y exp( \lambda . f(y, x)) ]
+//               = - f_k(y-gold, x) + E_{p(y|x)}[f_k(y,x)]
+double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
+							  vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) {
+  
+  // this method is used for supervised training. if we don't have any gold labels then we can't do supervised training.
+  assert(goldLabelSequences.size() > 0);
+
+  double objective = 0;
+
+  assert(derivativeWRTLambda.size() == lambda->GetParamsCount());
+  
+  // for each training example
+  for(int sentId = fromSentId; sentId < toSentId; sentId++) {
+
+    // only process sentences for which there are gold labels
+    if(sentId >= goldLabelSequences.size()) {
+      break;
+    }
+   
+    // sentId is assigned to the process with rank = sentId % world.size()
+    if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      continue;
+    }
+
+    vector<int64_t> &tokens = GetObservableSequence(sentId);
+    vector<int> &labels = goldLabelSequences[sentId];
+    if(tokens.size() != labels.size()) {
+      cerr << "ERROR: the number of tokens = " << tokens.size() << " is different than the number of labels = " << labels.size() << " in sentId = " << sentId << endl;
+    }
+    
+    // prune long sequences
+    if( learningInfo.maxSequenceLength > 0 && 
+        tokens.size() > learningInfo.maxSequenceLength ) {
+      continue;
+    }
+    
+    // build the FSTs
+    fst::VectorFst<FstUtils::LogArc> lambdaFst;
+    vector<FstUtils::LogWeight> lambdaAlphas, lambdaBetas;
+    BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, &derivativeWRTLambda, &objective);
+    
+    // compute the F map fro this sentence
+    FastSparseVector<LogVal<double> > FSparseVector;
+    ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
+
+    // compute the Z value for this sentence
+    double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+    
+    // keep an eye on bad numbers
+    if(std::isinf(nLogZ)) {
+      cerr << "WARNING: nLogZ = " << nLogZ << ". ";
+      cerr << "I will just ignore this sentence ..." << endl;
+      assert(false);
+      continue;
+    } else if(std::isnan(nLogZ)) {
+      cerr << "ERROR: nLogZ = " << nLogZ << endl;
+      assert(false);
+    }
+
+    // the denominator
+    double sentLevelObjective = -nLogZ; // this term should always be greater than the (supervision) other term
+    objective -= nLogZ;
+    
+    // subtract F/Z from the gradient
+    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); 
+        fIter != FSparseVector.end(); ++fIter) {
+      double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
+      double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
+      if(std::isnan(fOverZ) || std::isinf(fOverZ)) {
+        if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
+          cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
+        }
+        assert(false);
+      }
+      assert(fIter->first < derivativeWRTLambda.size());
+      derivativeWRTLambda[fIter->first] += fOverZ;
+      if(std::isnan(derivativeWRTLambda[fIter->first]) || 
+         std::isinf(derivativeWRTLambda[fIter->first])) {
+        cerr << "rank #" << learningInfo.mpiWorld->rank()               \
+             << ": ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf  \
+             << ". my mistake. will halt!" << endl;
+        assert(false);
+      }
+    }
+    
+    double goldSequenceScore = 0.0;
+    // now, add terms of the gold label
+    int prevLabel = LatentCrfModel::START_OF_SENTENCE_Y_VALUE;
+    for(int tokenIndex = 0; tokenIndex < tokens.size(); ++tokenIndex) {
+      FastSparseVector<double> activeFeatures;
+      FireFeatures(labels[tokenIndex], prevLabel, sentId, tokenIndex, activeFeatures);
+      prevLabel = labels[tokenIndex];
+      // update objective
+      goldSequenceScore += lambda->DotProduct(activeFeatures);
+      sentLevelObjective -= lambda->DotProduct(activeFeatures);
+      objective -= lambda->DotProduct(activeFeatures);
+      // update gradient
+      for(auto activeFeatureIndex = activeFeatures.begin(); 
+          activeFeatureIndex != activeFeatures.end();
+          ++activeFeatureIndex) {
+        derivativeWRTLambda[activeFeatureIndex->first] -= activeFeatureIndex->second;
+      }
+    }
+    if(goldSequenceScore > -nLogZ) {
+      cerr << "sentId=" << sentId << ": is gold score=" << goldSequenceScore << " <= logZ=" << -nLogZ << "?" << (goldSequenceScore < -nLogZ) << endl;
+    }
+    // debug info
+    if(sentId % learningInfo.nSentsPerDot == 0) {
+      cerr << ".";
+    }
+  } // end of training examples 
+
+  cerr << learningInfo.mpiWorld->rank() << "|";
+  
+  return objective;
 }
 
 void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {

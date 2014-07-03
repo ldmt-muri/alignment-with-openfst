@@ -64,7 +64,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     GOLD_LABELS_FILENAME = "gold-labels-filename",
     TAG_DICT_FILENAME = "tag-dict-filename",
-    LABELS_COUNT = "labels-count";
+    LABELS_COUNT = "labels-count",
+    SUPERVISED = "supervised";
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -99,6 +100,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (GOLD_LABELS_FILENAME.c_str(), po::value<string>(&goldLabelsFilename), "(string) specifies filename of the hand-annotated POS tags corresponding to training data") 
     (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
     (LABELS_COUNT.c_str(), po::value<unsigned int>(&labelsCount)->default_value(12), "(unsigned int) specifies the number of word classes that will be induced.")
+    (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(flag) (defaults to false) when set, gold labels must also be provided, and supervised training is performed. When clear but gold labels are provided, semi-supervised training is performed. When clear and gold labels are not provided, unsupervised training is performed.")
     ;
 
   po::variables_map vm;
@@ -119,6 +121,11 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
 
   learningInfo.goldFilename = goldLabelsFilename;
 
+  if(goldLabelsFilename.size() == 0 && learningInfo.supervisedTraining) {
+    cerr << "Error: Supervised training requires gold labels." << endl;
+    assert(false);
+  }
+  
   if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
     learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
       vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
@@ -255,6 +262,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     }
     cerr << endl;
     cerr << GOLD_LABELS_FILENAME << "=" << goldLabelsFilename << endl;
+    cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
     cerr << endl << "=====================" << endl;
   }
     
@@ -504,7 +512,7 @@ int main(int argc, char **argv) {
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
   LatentCrfPosTagger &tagger = * ( (LatentCrfPosTagger*) model );
   
-  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0) {
+  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0 && learningInfo.goldFilename.size() == 0) {
     // hmm initialization
     unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
     model->BroadcastTheta(bestRank);
@@ -519,28 +527,32 @@ int main(int argc, char **argv) {
   }
 
   // use gold labels to do supervised training
-  //if(learningInfo.supervisedTraining) {
-  //  model->SupervisedTrain(goldLabelsFilename);
-  //  if(learningInfo.mpiWorld->rank() == 0) {
-  //    model->PersistTheta(outputFilenamePrefix + ".supervised.theta");
-  //    model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda");
-  //  }
-  //}
+  if(goldLabelsFilename.size() > 0) {
+    bool fitLambdas = true, fitThetas = false;
+    model->SupervisedTrain(fitLambdas, fitThetas);
+    if(learningInfo.mpiWorld->rank() == 0) {
+      model->PersistTheta(outputFilenamePrefix + ".supervised.theta");
+      model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda.humane", true);
+      model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda", false);
+    }
+  } 
 
-  // unsupervised training of the model
-  if(world.rank() == 0) {
-    cerr << "master" << world.rank() << ": train the model..." << endl;
-  }
-  model->Train();
-  if(world.rank() == 0) {
-    cerr << "training finished!" << endl;
-  }
-  
-  // print best params
-  if(learningInfo.mpiWorld->rank() == 0) {
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
-    model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
-    model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
+  if(!learningInfo.supervisedTraining){
+    // unsupervised training of the model
+    if(world.rank() == 0) {
+      cerr << "master" << world.rank() << ": train the model..." << endl;
+    }
+    model->Train();
+    if(world.rank() == 0) {
+      cerr << "training finished!" << endl;
+    }
+
+    // print best params
+    if(learningInfo.mpiWorld->rank() == 0) {
+      model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda.humane"), true);
+      model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
+      model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
+    }
   }
 
   // viterbi
