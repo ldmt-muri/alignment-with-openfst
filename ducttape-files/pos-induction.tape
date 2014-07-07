@@ -5,9 +5,9 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
-  brown_clusters_dir="/home/wammar/git/brown-cluster"
-  wammar_utils_dir="/home/wammar/wammar-utils"
-  alignment_with_openfst_dir="/home/wammar/alignment-with-openfst/"
+  brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
+  wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+  alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
   tag_dict_file=""
@@ -21,7 +21,7 @@ global {
   test_with_crf_only=false
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix=(Prefix: pos=pos other=other other2=other2)
+  prefix=(Prefix: pos=pos-1 other=other other2=other2)
   #fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
@@ -43,7 +43,7 @@ task PreprocessData
 {
   cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
   cp $labeled_train_labels $autoencoder_labels
-  cat $labeled_train_text $labeled_test_text | wc -l > $autoencoder_test_size
+  cat $labeled_train_text $labeled_test_text | wc -l |awk -F" " '{print $1}' > $autoencoder_test_size
 }
 
 task FeaturizedHmmPosInduction
@@ -149,11 +149,11 @@ task AutoencoderPosInduction
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
-    > hmm_labels 
+    # > hmm_labels 
     > autoencoder_labels 
     > out_err 
     > autoencoder_ll
-    > hmm_ll
+    # > hmm_ll
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
   variational="true"
@@ -245,21 +245,22 @@ task AutoencoderPosInduction
   echo "executing $command..."
   $command 2> $out_err
 
-  actual_test_size=$(wc -l $labeled_test_text)
+  actual_test_size=$(wc -l $labeled_test_text |awk -F" " '{print $1}')
   echo "actual test size is $actual_test_size"  
   echo "autoencoder test size is $test_size"  
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
-  #head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
+  # head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
   tail -n $actual_test_size $prefix.labels > auto_test_labels
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test auto_test_labels $autoencoder_labels
-  $python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
+  # python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
 
   #echo "best hmm vs. latent crf:"
   #cat out_err | grep "variation of information"
   #cat out_err | grep "many-to-one"
-  cat out_err | grep "Nll" | tail -n 1 > $autoencoder_ll 
-  cat out_err | grep "global max loglikelihood is" | tail -n 1 > $hmm_ll
+  # cat out_err | grep "Nll" | tail -n 1 > $autoencoder_ll 
+  touch $autoencoder_ll
+  # cat out_err | grep "global max loglikelihood is" | tail -n 1 > $hmm_ll
 }
 
 task Evaluate
@@ -269,12 +270,12 @@ task Evaluate
     :: labeled_test_labels=@
     < labels=(Model:
                 featurized_hmm=$labels@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_labels@AutoencoderPosInduction
-                hmm=$hmm_labels@AutoencoderPosInduction)
+                autoencoder=$autoencoder_labels@AutoencoderPosInduction)
+                # hmm=$hmm_labels@AutoencoderPosInduction)
     < ll=(Model:
                 featurized_hmm=$ll@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_ll@AutoencoderPosInduction
-                hmm=$hmm_ll@AutoencoderPosInduction)
+                autoencoder=$autoencoder_ll@AutoencoderPosInduction)
+                # hmm=$hmm_ll@AutoencoderPosInduction)
     > gold_file2
     > scores 
 {
