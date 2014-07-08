@@ -27,25 +27,25 @@ class LogLinearModel : public IAlignmentModel {
   void NormalizeParams();
   
   // creates an acceptor for a target sentence
-  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<LogQuadArc>& tgtFst, set<int>& uniqueTgtTokens);
+  void CreateTgtFst(const vector<int>& tgtTokens, VectorFst<FstUtils::LogQuadArc>& tgtFst, set<int>& uniqueTgtTokens);
 
   // create an acceptor of many possible translations of the source sentence
   void CreateAllTgtFst(const set<int>& srcTokens, 
 		       int tgtSentLen, 
-		       VectorFst<LogQuadArc>& allTgtFst,
+		       VectorFst<FstUtils::LogQuadArc>& allTgtFst,
 		       set<int>& uniqueTgtTokens);
 
   void CreateGrammarFst();
   
-  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+  void Create1stOrderSrcFst(const vector<int>& srcTokens, VectorFst<FstUtils::LogQuadArc>& srcFst);
 
-  void CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<LogQuadArc>& srcFst);
+  void CreateSimpleSrcFst(const vector<int>& srcTokens, VectorFst<FstUtils::LogQuadArc>& srcFst);
 
   void CreateSampleAlignmentFst(const vector<int>& srcTokens,
 				const vector< vector<int> >& translations, 
 				const vector< vector<int> >& alignments, 
 				const vector< double >& logProbs,
-				VectorFst< LogQuadArc >& alignmentFst);
+				VectorFst< FstUtils::LogQuadArc >& alignmentFst);
 
   bool IsModelConverged();
 
@@ -76,11 +76,11 @@ class LogLinearModel : public IAlignmentModel {
 
   virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
-  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<LogQuadArc>& alignmentFst, 
+  void BuildAlignmentFst(const vector<int>& srcTokens, const vector<int>& tgtTokens, VectorFst<FstUtils::LogQuadArc>& alignmentFst, 
 			 bool tgtLineIsGiven, 
-			 int sentId, Distribution::Distribution distribution, VectorFst<LogQuadArc>& tgtFst);
+			 int sentId, Distribution::Distribution distribution, VectorFst<FstUtils::LogQuadArc>& tgtFst);
 
-  void AddSentenceContributionToGradient(const VectorFst< LogQuadArc >& descriptorFst, 
+  void AddSentenceContributionToGradient(const VectorFst< FstUtils::LogQuadArc >& descriptorFst, 
 					 const VectorFst< LogArc >& totalProbFst, 
 					 LogLinearParams& gradient,
 					 const vector<int> &srcTokens,
@@ -88,12 +88,12 @@ class LogLinearModel : public IAlignmentModel {
 					 bool subtract);
   
   void AddRegularizerTerm(LogLinearParams& gradient);
-  void BuildAllSentTranslationFst(int tgtSentLength, fst::VectorFst<LogQuadArc>& sentTranslationFst);
+  void BuildAllSentTranslationFst(int tgtSentLength, fst::VectorFst<FstUtils::LogQuadArc>& sentTranslationFst);
 
  private:
   string srcCorpusFilename, tgtCorpusFilename, outputPrefix;
   LogLinearParams params;
-  VectorFst<LogQuadArc> grammarFst;
+  VectorFst<FstUtils::LogQuadArc> grammarFst;
   // lots of configurations, including but not limited to reguarlization, optimization method ...etc
   LearningInfo learningInfo;
   // maps a srcTokenId to a map of tgtTokenIds and the number of times they co-occurred in a sent pair
@@ -101,7 +101,7 @@ class LogLinearModel : public IAlignmentModel {
   // number of sentences in the corpus
   int corpusSize;
   // vector of (allTgtSentenceFst o grammarFst), indexed by target length
-  std::vector<fst::VectorFst<LogQuadArc> > tgtLengthToSentTranslationFst;
+  std::vector<fst::VectorFst<FstUtils::LogQuadArc> > tgtLengthToSentTranslationFst;
   // set of tgt types
   std::set<int> tgtTypes;
   // set of src types

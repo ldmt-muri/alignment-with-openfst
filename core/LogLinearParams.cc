@@ -413,7 +413,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
     while(splitsIter != splits.end()) {
       // read feature id
       std::vector<string> featureIdAndValue;
-      StringUtils::SplitString(*(splitsIter++), '=', featureIdAndValue);
+      StringUtils::RSplitString(*(splitsIter++), '=', featureIdAndValue);
       if(featureIdAndValue.size() != 2) {
         cerr << "UH-OH: featureIdAndValue.size() == " << featureIdAndValue.size() << endl;
         cerr << "elements:" << endl; 

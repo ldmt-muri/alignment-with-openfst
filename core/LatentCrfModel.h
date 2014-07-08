@@ -349,7 +349,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   std::vector< std::vector<int64_t> > classTgtSents, testClassTgtSents;
   boost::unordered_map<int64_t, int64_t> tgtWordToClass;
   static LatentCrfModel *instance;
-  std::tr1::unordered_set<int> /*zDomain, */yDomain;
+  std::vector<int> yDomain;
   GaussianSampler gaussianSampler;
   // during training time, and by default, this should be set to false. 
   // When we use the trained model to predict the labels, we set it to true

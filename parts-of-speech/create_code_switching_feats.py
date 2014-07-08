@@ -3,7 +3,7 @@ import time
 import io
 import sys
 import argparse
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 import util
 
@@ -42,8 +42,12 @@ for fname in args.space_delimited_files:
     word_set = get_words(fname, word_set)
 
 suffix_counts = defaultdict(int)
+prefix_counts = defaultdict(int)
+trigram_counts = Counter()
+quadgram_counts = Counter()
 counter = 0
 brown_paths = defaultdict(str)
+brown_freq = defaultdict(int)
 for line in brown_file:
     counter += 1
     splits = line.split('\t')
@@ -54,10 +58,18 @@ for line in brown_file:
     cluster, word, frequency = splits
 
     brown_paths[word] = cluster
+    brown_freq[word] = frequency
     for suffix_length in range(1, 4):
         if len(word) > suffix_length:
             suffix_counts[word[-suffix_length:]] += 1
-min_suffix_count = 10
+    for prefix_length in range(1, 4):
+        if len(word) > prefix_length:
+            prefix_counts[word[:prefix_length]] += 1
+    trigram_counts.update(util.get_char_ngrams(word, 3))
+    quadgram_counts.update(util.get_char_ngrams(word, 4))
+min_suffix_count = 0
+min_prefix_count = 0
+min_ngram_count = 0
 
 for word in word_set:
     features = {
@@ -65,12 +77,27 @@ for word in word_set:
         #    u'clus-{}'.format(cluster[0:4]):1
     }
     features.update(util.get_embedding_feats_dict(word, embedding_model))
+
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1
 
     for suffix_length in range(1, 4):
         if len(word) > suffix_length and suffix_counts[word[-suffix_length:]] > min_suffix_count:
             features[u'{}-suff-{}'.format(suffix_length, word[-suffix_length:])] = 1
+
+    for prefix_length in range(1, 4):
+        if len(word) > prefix_length and prefix_counts[word[:prefix_length]] > min_prefix_count:
+            features[u'{}-pre-{}'.format(prefix_length, word[:prefix_length])] = 1
+
+    trigrams = util.get_char_ngrams(word, 3)
+    for w in trigrams:
+        if trigram_counts[w] > min_ngram_count:
+            features[u'trigram-{}'.format(w)] = 1
+
+    quadgrams = util.get_char_ngrams(word, 4)
+    for w in quadgrams:
+        if quadgram_counts[w] > min_ngram_count:
+            features[u'quadgram-{}'.format(w)] = 1
 
     # alphanumeric
     if word.isdigit():
@@ -93,8 +120,8 @@ for word in word_set:
         features[u'upper-initial'] = 1
 
     # word string
-    if frequency > 10:
-        features[word.decode('utf-8').lower().replace(u'=', u'eq')] = 1
+    # if brown_freq[word] > 10 or brown_freq[word.lower()] > 10:
+    features[word.decode('utf-8').lower().replace(u'=', u'eq')] = 1
 
     # word shape
     shape = [u'^']

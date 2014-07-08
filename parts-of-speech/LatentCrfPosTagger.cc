@@ -82,12 +82,12 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   // POS tag yDomain
   unsigned latentClasses = NUMBER_OF_LABELS;
   assert(latentClasses > 1);
-  this->yDomain.insert(LatentCrfModel::START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
+  this->yDomain.push_back(LatentCrfModel::START_OF_SENTENCE_Y_VALUE); // the conceptual yValue of word at position -1 in a sentence
   for(unsigned i = 0; i < latentClasses; i++) {
-    this->yDomain.insert(LatentCrfModel::START_OF_SENTENCE_Y_VALUE + i + 1);
+    this->yDomain.push_back(LatentCrfModel::START_OF_SENTENCE_Y_VALUE + i + 1);
   }
   // zero is reserved for FST epsilon
-  assert(this->yDomain.count(0) == 0);
+  assert(LatentCrfModel::START_OF_SENTENCE_Y_VALUE > 0);
   
   // if gold labels are provided, establish a one-to-one mapping between elements in yDomain and the label strings
   if(learningInfo.goldFilename.size() > 0) {
@@ -113,6 +113,13 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
           if(yDomainIter == yDomain.end() || yDomain.size() - 1 <= labelStringToInt.size()) {
             cerr << "ERROR: the number of unique label strings in the gold file is greater than the predefined number of classes = " << NUMBER_OF_LABELS << " (fyi: yDomain.size() = " << yDomain.size() << ")" << endl;
             assert(false);
+          } 
+	  if(false) {
+	    auto trimmed = StringUtils::Trim(*labelStringIter);
+	    if (trimmed.length() == 0) {
+	      cerr << "ERROR: label has zero length when trimmed\n";
+	      assert(false);
+	    }
           }
           labelStringToInt[*labelStringIter] = *yDomainIter;
           labelIntToString[*yDomainIter] = *labelStringIter;
@@ -124,6 +131,24 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
         goldLabelSequence.push_back(labelStringToInt[*labelStringIter]);
       }
       goldLabelSequences.push_back(goldLabelSequence);
+    }
+    if(yDomainIter != yDomain.end()) {
+      cerr << "The unique gold labels are fewer than the possible values in yDomain. Therefore, we will remove the unused elements in yDomain. " << endl;
+    }
+    while(yDomainIter != yDomain.end()) {
+      yDomainIter = yDomain.erase(yDomainIter);
+    }
+    cerr << "now, |yDomain| = " << yDomain.size() << endl;
+    cerr << "the mapping between string labels and yDomain elements is as follows: " << endl;
+    for(auto labelIntToStringIter = labelIntToString.begin();
+	labelIntToStringIter != labelIntToString.end();
+	++labelIntToStringIter) {
+      cerr << labelIntToStringIter->first << " -> " << labelIntToStringIter->second << endl;
+    }
+    for(auto labelStringToIntIter = labelStringToInt.begin();
+	labelStringToIntIter != labelStringToInt.end();
+	++labelStringToIntIter) {
+      cerr << labelStringToIntIter->first << " -> " << labelStringToIntIter->second << endl;
     }
     cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
   }
@@ -371,6 +396,13 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
 
   cerr << learningInfo.mpiWorld->rank() << "|";
   
+  if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "at the end of some lbfgs iteration " << endl;
+    lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda", false);
+    lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda.humane", true);
+    cerr << "parameters can be found at " << learningInfo.outputFilenamePrefix << ".current.lambda" << endl;
+  }
+  
   return objective;
 }
 
@@ -454,7 +486,7 @@ void LatentCrfPosTagger::Label(const string &labelsFilename) {
     stringstream ss;
     if(labelIntToString.size()>0) {
       for(unsigned i = 0; i < labels.size(); ++i) {
-        ss << labelIntToString[labels[i]] << " ";
+        ss << labelIntToString[labels[i]] << "/" << labels[i] << " ";
       }
     } else {
       for(unsigned i = 0; i < labels.size(); ++i){
