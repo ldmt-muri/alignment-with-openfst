@@ -1,0 +1,28 @@
+global {
+    # Output directory:
+    ducttape_output="/usr0/home/chuchenl/crf-auto-pos/cs-ne"
+
+    # general
+    cores=20
+
+    # data files
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd_0"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.sd_0"
+    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/unlabeled"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels_0"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels_0"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv_0"
+    
+    embeddings_file="/usr0/home/chuchenl/git/tweet-embedding/w2v_model"
+    word_list="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian"
+
+    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    supervised=1
+
+    labels_count=6
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+}
+
