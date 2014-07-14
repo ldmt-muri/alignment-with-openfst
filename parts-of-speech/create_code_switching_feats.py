@@ -104,7 +104,7 @@ prefix_counts = defaultdict(int)
 trigram_counts = Counter()
 quadgram_counts = Counter()
 counter = 0
-brown_paths = defaultdict(str)
+brown_paths = defaultdict(unicode)
 brown_freq = defaultdict(int)
 for line in brown_file:
     counter += 1
