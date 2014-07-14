@@ -10,6 +10,24 @@ import util
 entries = defaultdict(dict)
 
 
+def load_dict(gzipped_pickle):
+    if gzipped_pickle is None or len(gzipped_pickle) == 0:
+        return (set(), set())
+    import cPickle as pickle, gzip
+
+    with gzip.open(gzipped_pickle) as fh:
+        r = fh.read()
+        (words, ne) = pickle.loads(r)
+        return (words, ne)
+
+
+def get_dict_features(w, s, dict_name=u'words'):
+    to_return = dict()
+    if w in s:
+        to_return[u'wordlist-{}-{}'.format(dict_name, w.decode('utf-8'))] = 1
+    return to_return
+
+
 def get_words(sd_filename, building=None):
     if building is None:
         to_return = set()
@@ -22,17 +40,57 @@ def get_words(sd_filename, building=None):
             to_return.update(words)
     return to_return
 
+
+def get_l1_words(sd_file, label_file, l1='lang1'):
+    from codecs import open
+
+    to_return = set()
+    with open(sd_file) as sd_f:
+        with open(label_file) as lbl_f:
+            for text_line, label_line in zip(sd_f, lbl_f):
+                text = text_line.strip().split()
+                label = label_line.strip().split()
+                to_return.update([text[idx] for idx in range(len(label)) if label[idx] == l1])
+    return to_return
+
 # parse/validate arguments
 argParser = argparse.ArgumentParser()
-argParser.add_argument("-b", "--brown_filename")
-argParser.add_argument("-o", "--output_filename")
-argParser.add_argument("-e", "--embedding_filename")
+argParser.add_argument("-b", "--brown-filename")
+argParser.add_argument("-o", "--output-filename")
+argParser.add_argument("-e", "--embedding-filename")
+argParser.add_argument("-d", "--dict-filename")
 argParser.add_argument("-s", "--space-delimited-files", nargs='+')
+argParser.add_argument("-t", "--training-texts", nargs='*')
+argParser.add_argument("-l", "--training-labels", nargs='*')
+argParser.add_argument("-w", "--word-list", nargs="*")
 args = argParser.parse_args()
+
+if args.training_labels is not None and len(args.training_labels) > 0:
+    assert len(args.training_texts) == len(args.training_labels)
+
+    l1_words = set()
+    for (sd, l) in zip(args.training_texts, args.training_labels):
+        l1_words.update(get_l1_words(sd, l, l1='lang1'))
+else:
+    l1_words = None
+
+if len(args.word_list) > 0:
+    word_list = set()
+    import codecs
+
+    for f in args.word_list:
+        with codecs.open(f, encoding='utf-8') as fh:
+            for l in fh:
+                words_in_wordlist = l.lstrip().strip().split()
+                # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
+                word_list.update(words_in_wordlist)
+else:
+    word_list = None
 
 brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
 
 embedding_model = util.load_embedding_model(args.embedding_filename)
+(words, nes) = load_dict(args.dict_filename)
 
 digit_regex = re.compile('\d')
 hyphen_regex = re.compile('-')
@@ -73,10 +131,17 @@ min_ngram_count = 0
 
 for word in word_set:
     features = {
-        #    u'cluster-{}'.format(cluster):1,
-        #    u'clus-{}'.format(cluster[0:4]):1
+        # u'cluster-{}'.format(cluster):1,
+        # u'clus-{}'.format(cluster[0:4]):1
     }
-    features.update(util.get_embedding_feats_dict(word, embedding_model))
+    if embedding_model is not None:
+        features.update(util.get_embedding_feats_dict(word, embedding_model))
+    features.update(get_dict_features(word, words, dict_name=u'words'))
+    features.update(get_dict_features(word, nes, dict_name=u'nes'))
+    if l1_words is not None:
+        features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
+    if word_list is not None:
+        features.update(get_dict_features(word, word_list, dict_name=u'in_provided'))
 
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1

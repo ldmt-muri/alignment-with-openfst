@@ -48,23 +48,28 @@ def tokenize(str_list):
     return to_return
 
 
-def leave_one_uid_out_split(list_tweets):
+def leave_n_uid_out_split(list_tweets, n):
     assert isinstance(list_tweets, list)
+    from itertools import permutations
 
     all_uid = {t['user_id'] for t in list_tweets}
 
-    for u in all_uid:
+    for u in permutations(all_uid, r=n):
         test_list = []
         training_list = []
         for t in list_tweets:
-            if t['user_id'] == u:
+            if t['user_id'] in u:
                 test_list.append(t)
             else:
                 training_list.append(t)
         yield (test_list, training_list)
 
 
-def load_tweets_from_json_gz(fname):
+def leave_one_uid_out_split(list_tweets):
+    return leave_n_uid_out_split(list_tweets, n=1)
+
+
+def load_tweets_from_json_gz(fname, verbose=False):
     assert isinstance(fname, basestring)
 
     import json, gzip
@@ -72,6 +77,8 @@ def load_tweets_from_json_gz(fname):
     with gzip.open(fname) as fh:
         l = fh.read()
         to_return = json.loads(l)
+        if verbose:
+            print to_return
     return to_return
 
 
@@ -151,19 +158,20 @@ def append_embedding(X, model, words):
 
 
 def get_embedding_feats_dict(word, model):
+    import logging
     from gensim import models
     import numpy as np
 
     assert isinstance(model, models.Word2Vec)
     to_return = dict()
     dim = model.layer1_size
-    print 'model dim: {}'.format(dim)
+    logging.info(u'model dim: {}'.format(dim))
     if word in model:
         vec = model[word]
+        for i in range(dim):
+            to_return[u'embedding_dim_{}'.format(i)] = vec[i]
     else:
-        vec = np.zeros(shape=(dim,))
-    for i in range(dim):
-        to_return['embedding_dim_{}'.format(i)] = vec[i]
+        to_return[u'no_embedding_{}'.format(word)] = 1
 
     return to_return
 
