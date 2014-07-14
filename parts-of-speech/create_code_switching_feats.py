@@ -24,7 +24,7 @@ def load_dict(gzipped_pickle):
 def get_dict_features(w, s, dict_name=u'words'):
     to_return = dict()
     if w in s:
-        to_return[u'wordlist-{}-{}'.format(dict_name, w.decode('utf-8'))] = 1
+        to_return[u'wordlist-{}-{}'.format(dict_name, w)] = 1
     return to_return
 
 
@@ -208,7 +208,7 @@ for word in word_set:
 
 with io.open(args.output_filename, encoding='utf8', mode='w') as output_file:
     for (word, features) in entries.iteritems():
-        output_file.write(u'{} ||| {} |||'.format(word.decode('utf-8'), word.decode('utf-8')))
+        output_file.write(u'{} ||| {} |||'.format(word, word))
         for featureId in features.keys():
             # deal with space
             featureId_norm = '_'.join(featureId.strip().split())
