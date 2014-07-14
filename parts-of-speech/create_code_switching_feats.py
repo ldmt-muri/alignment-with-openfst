@@ -43,7 +43,7 @@ def get_words(sd_filename, building=None):
 
 
 def get_l1_words(sd_file, label_file, l1='lang1'):
-    from codecs import open
+    from io import open
 
     to_return = set()
     with open(sd_file) as sd_f:
@@ -77,10 +77,9 @@ else:
 
 if len(args.word_list) > 0:
     word_list = set()
-    import codecs
 
     for f in args.word_list:
-        with codecs.open(f, encoding='utf-8') as fh:
+        with io.open(f, encoding='utf-8') as fh:
             for l in fh:
                 words_in_wordlist = l.lstrip().strip().split()
                 # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
@@ -187,7 +186,7 @@ for word in word_set:
 
     # word string
     # if brown_freq[word] > 10 or brown_freq[word.lower()] > 10:
-    features[word.decode('utf-8').lower().replace(u'=', u'eq')] = 1
+    features[word.lower().replace(u'=', u'eq')] = 1
 
     # word shape
     shape = [u'^']
