@@ -29,12 +29,13 @@ def get_dict_features(w, s, dict_name=u'words'):
 
 
 def get_words(sd_filename, building=None):
+    from io import open
     if building is None:
         to_return = set()
     else:
         assert isinstance(building, set)
         to_return = building
-    with open(sd_filename) as fh:
+    with open(sd_filename, encoding='utf-8') as fh:
         for l in fh:
             words = l.strip().split()
             to_return.update(words)
