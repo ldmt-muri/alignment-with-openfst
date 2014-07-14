@@ -162,6 +162,7 @@ task AutoencoderPosInduction
     > autoencoder_labels 
     > out_err 
     > autoencoder_ll
+    > auto_test_labels
     # > hmm_ll
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
@@ -261,8 +262,8 @@ task AutoencoderPosInduction
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
   # head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
-  tail -n $actual_test_size $prefix.labels > auto_test_labels
-  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test auto_test_labels $autoencoder_labels
+  tail -n $actual_test_size $prefix.labels > $auto_test_labels
+  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
   # python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
 
   #echo "best hmm vs. latent crf:"
@@ -281,6 +282,8 @@ task Evaluate
     :: labeled_test_labels=@
     :: tsv_template=@
     :: cs_sharedtask_dir=@
+    :: evaluation_script_dir=@
+    < auto_test_labels=$auto_test_labels@AutoencoderPosInduction
     < labels=(Model:
                 featurized_hmm=$labels@FeaturizedHmmPosInduction
                 autoencoder=$autoencoder_labels@AutoencoderPosInduction)
@@ -292,6 +295,7 @@ task Evaluate
     > gold_file2
     > scores 
     > eval_results
+    > test_tsv
 {
   # convert tokens and gold labels to token/label format
   python $wammar_utils_dir/combine-token-label-in-one-file.py $labeled_test_text $labeled_test_labels $gold_file2
@@ -300,6 +304,6 @@ task Evaluate
   cat $ll >> $scores
 
   # converts autoencoder output to tsv
-  python $cs_sharedtask_dir/crf_labels_to_tsv.py $labeled_test_labels $tsv_template $test_tsv
+  python $cs_sharedtask_dir/crf_labels_to_tsv.py $auto_test_labels $tsv_template $test_tsv
   perl $evaluation_script_dir/evaluateOffsets.pl $test_tsv $gold_tsv $eval_results 
 }
