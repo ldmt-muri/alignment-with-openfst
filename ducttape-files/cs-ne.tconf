@@ -1,9 +1,9 @@
 global {
     # Output directory:
-    ducttape_output="/usr0/home/chuchenl/crf-auto-pos/cs-ne"
+    ducttape_output="/usr2/home/wammar/crf-auto-cs/ne"
 
     # general
-    cores=20
+    cores=1
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd_0"

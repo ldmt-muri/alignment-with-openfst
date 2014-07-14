@@ -5,12 +5,12 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
-  brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
-  wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
-  alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
+  brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
+  wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
+  alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
-  evaluation_script_dir="/usr0/home/chuchenl/git/cs-shared-task/Evaluation/Scripts/"
-  cs_sharedtask_dir="/usr0/home/chuchenl/git/cs-shared-task"
+  evaluation_script_dir="/usr0/home/wammar/git/cs-shared-task/Evaluation/Scripts/"
+  cs_sharedtask_dir="/usr0/home/wammar/git/cs-shared-task"
 
   tag_dict_file=""
 
@@ -23,7 +23,7 @@ global {
   test_with_crf_only=true
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix=(Prefix: pos=pos-1 other=other other2=other2)
+  prefix="cs"
   #fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
@@ -115,7 +115,8 @@ task GenerateWordpairFeats
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
   # python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
-  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels -w $word_list -e $embeddings_file
+  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels -w $word_list
+  # -e $embeddings_file
 } 
 
 task BuildLatentCrfPosTagger
@@ -297,12 +298,6 @@ task Evaluate
     > eval_results
     > test_tsv
 {
-  # convert tokens and gold labels to token/label format
-  python $wammar_utils_dir/combine-token-label-in-one-file.py $labeled_test_text $labeled_test_labels $gold_file2
-  python $wammar_utils_dir/score-classes.py $gold_file2 $labels 2> $scores
-  python $wammar_utils_dir/score-vm.py $gold_file2 $labels 2>> $scores
-  cat $ll >> $scores
-
   # converts autoencoder output to tsv
   python $cs_sharedtask_dir/crf_labels_to_tsv.py $auto_test_labels $tsv_template $test_tsv
   perl $evaluation_script_dir/evaluateOffsets.pl $test_tsv $gold_tsv $eval_results 

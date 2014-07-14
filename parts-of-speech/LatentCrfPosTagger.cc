@@ -486,7 +486,7 @@ void LatentCrfPosTagger::Label(const string &labelsFilename) {
     stringstream ss;
     if(labelIntToString.size()>0) {
       for(unsigned i = 0; i < labels.size(); ++i) {
-        ss << labelIntToString[labels[i]] << "/" << labels[i] << " ";
+        ss << labelIntToString[labels[i]] << " ";
       }
     } else {
       for(unsigned i = 0; i < labels.size(); ++i){
