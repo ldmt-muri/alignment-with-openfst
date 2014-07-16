@@ -1017,3 +1017,8 @@ boost::target(int edge, const complete_graph &g)
   return edge % g.n_vertices;
 }
 
+void LatentCrfParser::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  FastSparseVector<double> &activeFeatures) { 
+    cerr << "this method is not implemented for dependency parsing" << endl;
+    assert(false);
+}

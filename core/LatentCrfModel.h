@@ -221,8 +221,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		    const fst::VectorFst<FstUtils::LogArc> &fst,
 		    FastSparseVector<double> &h);
 
-  void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
-		    FastSparseVector<double> &activeFeatures);
+  virtual void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+		    FastSparseVector<double> &activeFeatures) = 0;
 
   double GetNLogTheta(int yim1, int yi, int64_t zi, unsigned exampleId);
   double GetNLogTheta(const std::pair<int64_t,int64_t> context, int64_t event);

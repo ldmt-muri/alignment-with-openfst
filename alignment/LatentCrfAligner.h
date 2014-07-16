@@ -49,6 +49,9 @@ class LatentCrfAligner : public LatentCrfModel {
 
   void SetTestExample(std::vector<int64_t> &x_t, std::vector<int64_t> &x_s);
 
+  void FireFeatures(int yI, int yIM1, unsigned sentId, int i,
+            FastSparseVector<double> &activeFeatures) override;
+
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;

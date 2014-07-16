@@ -93,7 +93,7 @@ LatentCrfModel::LatentCrfModel(const string &textFilename,
   this->textFilename = textFilename;
   this->outputPrefix = outputPrefix;
   this->learningInfo = learningInfo;
-  this->lambda->SetLearningInfo(learningInfo);
+  this->lambda->SetLearningInfo(learningInfo, (task==POS_TAGGING));
 
   // by default, we are operating in the training (not testing) mode
   testingMode = false;
@@ -300,29 +300,6 @@ void LatentCrfModel::ComputeF(unsigned sentId,
     iP1States.clear();
   }  
 }			   
-
-void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
-				  FastSparseVector<double> &activeFeatures) { 
-  if(task == Task::POS_TAGGING) {
-    // fire the pos tagger features
-    assert(activeFeatures.size() == 0);
-    lambda->FireFeatures(yI, yIM1, sentId, GetObservableSequence(sentId), i, activeFeatures);
-    
-  } else if(task == Task::WORD_ALIGNMENT) {
-    // fire the word aligner features
-    int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
-    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), GetObservableContext(sentId), i, 
-			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, firstPos, 
-			 activeFeatures);
-    assert(GetObservableSequence(sentId).size() > 0);
-  } else if(task == Task::DEPENDENCY_PARSING) {
-    cerr << "this method is not implemented for dependency parsing" << endl;
-    assert(false);
-  } else {
-    cerr << "i don't know about this task!" << endl;
-    assert(false);
-  }
-}
 
 void LatentCrfModel::FireFeatures(const unsigned sentId,
                                   FastSparseVector<double> &h) {
@@ -2257,3 +2234,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   }
   return nLogP_ZGivenX;
 }
+
+
+
+

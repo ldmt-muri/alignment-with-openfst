@@ -160,6 +160,9 @@ class LatentCrfParser : public LatentCrfModel {
   void FireFeatures(const unsigned sentId,
                     FastSparseVector<double> &h) override;
   
+  void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  FastSparseVector<double> &activeFeatures) override;
+  
  private:
   // vocabulary of src language
   //std::set<int64_t> x_sDomain;

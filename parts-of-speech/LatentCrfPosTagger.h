@@ -55,6 +55,9 @@ class LatentCrfPosTagger : public LatentCrfModel {
   void Label(string &inputFilename, string &outputFilename, bool parallelize) override;
 
   double ComputeNllYGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) override;
+  
+  void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  FastSparseVector<double> &activeFeatures) override;
 
   
  public:

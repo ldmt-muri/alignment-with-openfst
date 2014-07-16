@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr0/home/chuchenl/crf-auto-pos/english-final"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/english-final"
 
     # general
     cores=10

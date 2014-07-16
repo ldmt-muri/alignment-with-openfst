@@ -331,3 +331,13 @@ int64_t LatentCrfAligner::GetContextOfTheta(unsigned sentId, int y) {
     return srcSent[y - NULL_POSITION];
   }
 }
+
+void LatentCrfAligner::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  FastSparseVector<double> &activeFeatures) { 
+    // fire the word aligner features
+    int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
+    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), GetObservableContext(sentId), i, 
+			 LatentCrfModel::START_OF_SENTENCE_Y_VALUE, firstPos, 
+			 activeFeatures);
+    assert(GetObservableSequence(sentId).size() > 0);
+}

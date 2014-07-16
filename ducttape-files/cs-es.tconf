@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr0/home/chuchenl/crf-auto-pos/cs-es"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/cs-es"
 
     # general
     cores=20
@@ -20,6 +20,7 @@ global {
     supervised=1
 
     labels_count=6
+    lbfgs_itercount=200
 }
 
 plan Full {

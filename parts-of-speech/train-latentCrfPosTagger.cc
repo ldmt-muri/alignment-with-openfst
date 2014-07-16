@@ -198,7 +198,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::SYNC_END);
     } else if(*featIter == "OTHER_ALIGNERS") {
-      learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_ALIGNERS);
+      // TODO this is a very dirty hack
+      learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_POS);
     } else if(*featIter == "NULL_ALIGNMENT") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);

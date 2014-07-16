@@ -1,4 +1,5 @@
 #include "LogLinearParams.h"
+#include "LatentCrfModel.h"
 
 VocabEncoder* FeatureId::vocabEncoder = 0;
 
@@ -160,6 +161,10 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   case FeatureTemplate::OTHER_ALIGNERS:
     os << "OTHER_ALIGNERS";
     os << "|" << obj.otherAligner.alignerId << "|" << obj.otherAligner.compatible;
+    break;
+  case FeatureTemplate::OTHER_POS:
+    os << "OTHER_POS";
+    os << "|" << obj.otherPos.posId << "|" << obj.otherPos.label << "|" << obj.otherPos.pred_hash;
     break;
   case FeatureTemplate::NULL_ALIGNMENT:
     os << "NULL_ALIGNMENT";
@@ -484,11 +489,45 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
   
 }
 
-void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo) {
-  this->learningInfo = &learningInfo;
+void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo, bool otherForPos) {
+    this->learningInfo = &learningInfo;
+    if (otherForPos) {
+        LoadPosOutput();
+    } else {
+        // load word alignments of other aligners
+        LoadOtherAlignersOutput();
+    }
+}
 
-  // load word alignments of other aligners
-  LoadOtherAlignersOutput();
+void LogLinearParams::LoadPosOutput() {
+    set<string> keys;
+    if (learningInfo->otherAlignersOutputFilenames.size() > 0) {
+        for (auto filenameIter = learningInfo->otherAlignersOutputFilenames.begin();
+                filenameIter != learningInfo->otherAlignersOutputFilenames.end();
+                ++filenameIter) {
+            cerr << "other POS filename: " << *filenameIter << endl;
+            auto posOutput = new vector< vector< string > >();
+            std::ifstream infile(filenameIter->c_str());
+            std::string line;
+            while (std::getline(infile, line)) {
+                vector<std::string> parts;
+                StringUtils::SplitString(line, ' ', parts);
+                posOutput->push_back(parts);
+                for (auto p : parts) {
+                    keys.insert(p);
+                }
+            }
+            otherPOSOutput.push_back(posOutput);
+        }
+    }
+    if (keys.size() > 0) {
+        std::hash<string> hash_fn;
+        cerr << "hashes: \n";
+        for (auto k : keys) {
+            cerr << k << ":\t" << hash_fn(k) << endl;
+        }
+    }
+    return;
 }
 
 void LogLinearParams::LoadOtherAlignersOutput() {
@@ -513,6 +552,9 @@ void LogLinearParams::LoadOtherAlignersOutput() {
         for(auto pairIter = srcpos_tgtpos_pairs.begin(); 
             pairIter != srcpos_tgtpos_pairs.end();
             ++pairIter) {
+          // TODO check if task == POS_TAGGING
+          // if yes, convert label string to ids using map LatentCrfPosTagger::labelStringToInt 
+          // 
           // read this pair
           int srcpos, tgtpos; 
           char del;
@@ -631,11 +673,11 @@ void LogLinearParams::FireFeatures(const ObservationDetails &headDetails,
   unsigned laterIndex = max(headDetails.details[ObservationDetailsHeader::ID]-1, 
                             childDetails.details[ObservationDetailsHeader::ID]-1);
   int64_t headSurfaceForm = 
-    FeatureId::vocabEncoder->GetFrequencyCount(headDetails.details[ObservationDetailsHeader::FORM]) < learningInfo->minTokenFrequency?
-    FeatureId::vocabEncoder->UnkInt(): headDetails.details[ObservationDetailsHeader::FORM];
+    (FeatureId::vocabEncoder)->GetFrequencyCount(headDetails.details[ObservationDetailsHeader::FORM]) < learningInfo->minTokenFrequency?
+    (FeatureId::vocabEncoder)->UnkInt(): headDetails.details[ObservationDetailsHeader::FORM];
   int64_t childSurfaceForm = 
     FeatureId::vocabEncoder->GetFrequencyCount(childDetails.details[ObservationDetailsHeader::FORM]) < learningInfo->minTokenFrequency?
-    FeatureId::vocabEncoder->UnkInt(): childDetails.details[ObservationDetailsHeader::FORM];
+    (FeatureId::vocabEncoder)->UnkInt(): childDetails.details[ObservationDetailsHeader::FORM];
   
   int binnedDistance = (laterIndex - earlierIndex <= 4)? laterIndex - earlierIndex:
     (laterIndex - earlierIndex <= 6)? 6:
@@ -1180,7 +1222,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         }
       break;
 
-    case FeatureTemplate::OTHER_ALIGNERS:
+      case FeatureTemplate::OTHER_ALIGNERS:
         for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
         assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
         if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
@@ -1192,9 +1234,25 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
           (yI == 0 && woodAlignments->size() == 0);
         featureId.otherAligner.alignerId = alignerId;
         AddParam(featureId);
-        activeFeatures[paramIndexes[featureId]] += 1.0;
-      }
+            activeFeatures[paramIndexes[featureId]] += 1.0;
+        }
       break;
+
+    case FeatureTemplate::OTHER_POS:
+        std::hash<string> hash_fn;
+        for (unsigned posId = 0; posId < otherPOSOutput.size(); posId++) {
+            if ((*otherPOSOutput[posId])[learningInfo->currentSentId].size() <= i)
+                continue;
+            auto otherPred = (*otherPOSOutput[posId])[learningInfo->currentSentId][i];
+            featureId.type = FeatureTemplate::OTHER_POS;
+            featureId.otherPos.posId = posId; // predictor ID
+            featureId.otherPos.pred_hash = hash_fn(otherPred); // otherPred can be 'en', 'es', ...
+            featureId.otherPos.label = yI; // lang1, lang2
+            AddParam(featureId);
+         // activeFeatures[paramIndexes[featureId]] += (1.0/double(x.size()));
+        activeFeatures[paramIndexes[featureId]] += 1.0;
+        }
+        break;
 
     case FeatureTemplate::BOUNDARY_LABELS:
       if(i <= 0 || i >= x.size() - 1) {

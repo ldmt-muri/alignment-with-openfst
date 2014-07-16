@@ -5,30 +5,32 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
-  brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-  wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
-  alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
-  featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
-  evaluation_script_dir="/usr0/home/wammar/git/cs-shared-task/Evaluation/Scripts/"
-  cs_sharedtask_dir="/usr0/home/wammar/git/cs-shared-task"
+   brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
+   wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+   alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
+   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
+   evaluation_script_dir="/usr0/home/chuchenl/git/cs-shared-task/Evaluation/Scripts/"
+   cs_sharedtask_dir="/usr0/home/chuchenl/git/cs-shared-task"
+
 
   tag_dict_file=""
 
   # autoencoder hyperparams
   l2_strength=(L2Strength: zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1 point_three=0.3 one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_o_one=1.01 one=1.0 o_ninety_nine=0.99 o_nine=0.9 o_five=0.5 o_three=0.3 o_one=0.1 o_o_three=0.03 o_o_one=0.01 o_o_o_one=0.001 o_o_o_o_one=0.0001 )
-  lbfgs_itercount=10
   em_itercount=1
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
   test_with_crf_only=true
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix="cs"
-  #fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
+  prefix="cs-chucheng"
+  fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
-  #fire_precomputed_features_for_xip2=(FirePrecomputedFeaturesForXIP2: no="" yes=yes)
+  fire_precomputed_features_for_xip2=(FirePrecomputedFeaturesForXIP2: no="" yes=yes)
   reconstruct_brown_clusters=(ReconstructBrownClusters: yes=1 no="")
+  is_crfsuite=(Model: autoencoder="" crfsuite="--crfsuite")
+  embeddings=(UseEmbeddings: yes="-e" no="")
 }
 
 #import ../submitters.tape
@@ -45,11 +47,14 @@ task PreprocessData
     > autoencoder_labels
     > autoencoder_test_size
     > gold_tsv
+    > pred_ldig
 {
   cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
   cp $labeled_train_labels $autoencoder_labels
   cat $labeled_train_text $labeled_test_text | wc -l |awk -F" " '{print $1}' > $autoencoder_test_size
   python $cs_sharedtask_dir/crf_labels_to_tsv.py $labeled_test_labels $tsv_template $gold_tsv
+
+  python $cs_sharedtask_dir/get_ldig.py $autoencoder_text $pred_ldig 
 }
 
 task FeaturizedHmmPosInduction
@@ -103,6 +108,7 @@ task FeaturizedHmmPosInduction
 
 task GenerateWordpairFeats 
     < data_file=$autoencoder_text@PreprocessData 
+    :: embeddings=@
     :: embeddings_file=@
     :: brown_clusters_dir=@
     :: alignment_with_openfst_dir=@
@@ -115,15 +121,36 @@ task GenerateWordpairFeats
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
   # python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
-  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels -w $word_list
-  # -e $embeddings_file
+  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels -w $word_list $embeddings $embeddings_file
 } 
+
+task GenerateCRFSuiteInput
+< wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats
+:: labeled_train_text=@
+:: labeled_train_labels=@
+:: labeled_test_text=@
+:: labeled_test_labels=@
+:: cs_sharedtask_dir=@
+> crfsuite_train
+> crfsuite_test
+{
+  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $crfsuite_train --pre 2 --post 2
+  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2
+}
+
+task TrainCRFSuite
+< train=$crfsuite_train@GenerateCRFSuiteInput
+> model
+{
+  crfsuite learn -m $model $train
+}
 
 task BuildLatentCrfPosTagger
     :: alignment_with_openfst_dir=@
     > executable
    # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=1g .q=shared 
 {
+  source ~/.profile
   pushd $alignment_with_openfst_dir
   #make clean -f Makefile-latentCrfPosTagger
   make -f Makefile-latentCrfPosTagger
@@ -150,10 +177,10 @@ task AutoencoderPosInduction
     :: optimize_lambdas_first=@
     :: min_relative_diff=@
     :: prefix=@
-    #:: fire_precomputed_features_for_xim2=@
+    :: fire_precomputed_features_for_xim2=@
     :: fire_precomputed_features_for_xim1=@
     :: fire_precomputed_features_for_xip1=@
-    #:: fire_precomputed_features_for_xip2=@
+    :: fire_precomputed_features_for_xip2=@
     :: tag_dict_file=@
     :: labeled_test_text=@
     < executable=$executable@BuildLatentCrfPosTagger
@@ -164,6 +191,7 @@ task AutoencoderPosInduction
     > out_err 
     > autoencoder_ll
     > auto_test_labels
+    < pred_ldig=$pred_ldig@PreprocessData
     # > hmm_ll
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
@@ -186,8 +214,9 @@ task AutoencoderPosInduction
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
   --gold-labels-filename $gold_file
-  --check-gradient true
-  --test-size $test_size "
+  --test-size $test_size 
+  --feat OTHER_ALIGNERS
+  --other-aligners-output-filenames $pred_ldig"
 
   # hide  
   #   --init-theta /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.ze ro+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.theta
@@ -198,9 +227,9 @@ task AutoencoderPosInduction
     command="$command --supervised true"
   fi
  
-  #if [[ $fire_precomputed_features_for_xim2 ]]; then
-  #  command="$command --feat PRECOMPUTED_XIM2"
-  #fi
+  if [[ $fire_precomputed_features_for_xim2 ]]; then
+    command="$command --feat PRECOMPUTED_XIM2"
+  fi
  
   if [[ $fire_precomputed_features_for_xim1 ]]; then
     command="$command --feat PRECOMPUTED_XIM1"
@@ -210,9 +239,9 @@ task AutoencoderPosInduction
     command="$command --feat PRECOMPUTED_XIP1"
   fi
  
-  #if [[ $fire_precomputed_features_for_xip2 ]]; then
-  #  command="$command --feat PRECOMPUTED_XIP2"
-  #fi
+  if [[ $fire_precomputed_features_for_xip2 ]]; then
+    command="$command --feat PRECOMPUTED_XIP2"
+  fi
  
   if [[ $tgt_brown_clusters && $reconstruct_brown_clusters ]]; then
     command="$command --tgt-word-classes-filename $tgt_brown_clusters"
@@ -272,32 +301,30 @@ task AutoencoderPosInduction
   #cat out_err | grep "variation of information"
   #cat out_err | grep "many-to-one"
   # cat out_err | grep "Nll" | tail -n 1 > $autoencoder_ll 
-  touch $autoencoder_ll
   # cat out_err | grep "global max loglikelihood is" | tail -n 1 > $hmm_ll
 }
 
+task TestCRFSuite
+  < test=$crfsuite_test@GenerateCRFSuiteInput
+  < model=$model@TrainCRFSuite
+  :: tsv_template=@
+  > test_results
+{
+  crfsuite tag -m $model -t $test > $test_results
+}
+
 task Evaluate
-    < test_size=$autoencoder_test_size@PreprocessData
     < gold_tsv=$gold_tsv@PreprocessData
-    :: wammar_utils_dir=@
-    :: labeled_test_text=@
-    :: labeled_test_labels=@
     :: tsv_template=@
     :: cs_sharedtask_dir=@
     :: evaluation_script_dir=@
-    < auto_test_labels=$auto_test_labels@AutoencoderPosInduction
-    < labels=(Model:
-                featurized_hmm=$labels@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_labels@AutoencoderPosInduction)
-                # hmm=$hmm_labels@AutoencoderPosInduction)
-    < ll=(Model:
-                featurized_hmm=$ll@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_ll@AutoencoderPosInduction)
-                # hmm=$hmm_ll@AutoencoderPosInduction)
+    :: is_crfsuite=@
+    < results=(Model: autoencoder=$auto_test_labels@AutoencoderPosInduction
+                      crfsuite=$test_results@TestCRFSuite)
     > eval_results
     > test_tsv
 {
   # converts autoencoder output to tsv
-  python $cs_sharedtask_dir/crf_labels_to_tsv.py $auto_test_labels $tsv_template $test_tsv
+  python $cs_sharedtask_dir/crf_labels_to_tsv.py $results $tsv_template $test_tsv $is_crfsuite
   perl $evaluation_script_dir/evaluateOffsets.pl $test_tsv $gold_tsv $eval_results 
 }

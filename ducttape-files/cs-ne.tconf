@@ -1,9 +1,9 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-cs/ne"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ne"
 
     # general
-    cores=1
+    cores=20
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd_0"
@@ -13,16 +13,20 @@ global {
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels_0"
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv_0"
     
-    embeddings_file="/usr0/home/chuchenl/git/tweet-embedding/w2v_model"
+    embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
     supervised=1
 
     labels_count=6
+    lbfgs_itercount=10
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: one) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIM2: yes) * (FirePrecomputedFeaturesForXIP1: yes) * (FirePrecomputedFeaturesForXIP2: yes) * (ReconstructBrownClusters: no)
 }
 
+plan crfsuite {
+    reach Evaluate via (Model: crfsuite ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes no)
+}

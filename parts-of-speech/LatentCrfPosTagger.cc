@@ -516,3 +516,10 @@ void LatentCrfPosTagger::Label(const string &labelsFilename) {
   labelsFile.close();
 }
 
+void LatentCrfPosTagger::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
+				  FastSparseVector<double> &activeFeatures) { 
+    // fire the pos tagger features
+    lambda->FireFeatures(yI, yIM1, sentId, GetObservableSequence(sentId), i, activeFeatures);
+
+}
+

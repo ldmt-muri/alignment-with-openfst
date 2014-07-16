@@ -4,8 +4,8 @@
 #include <string>
 #include <sstream>
 #include <fstream>
-#include <assert.h>
-#include <math.h>
+#include <cassert>
+// #include <math.h>
 #include <cmath>
 #include <functional>
 #include <utility>
@@ -36,6 +36,7 @@
 #include "../wammar-utils/Samplers.h"
 #include "../wammar-utils/tuple.h"
 
+
 struct LogLinearParamsException : public std::exception
 {
   std::string s;
@@ -57,8 +58,9 @@ public:
     struct { int64_t srcWord, tgtWord; } wordPair;
     struct { int64_t word1, word2, word3; } wordTriple;
     int64_t precomputed;
-    struct { unsigned alignerId; bool compatible; } otherAligner;
+    struct { unsigned alignerId; bool compatible; } otherAligner; // use the compatible attribute this way: if other_pred == pred , set true otherwise false
     struct { int position; int label; } boundaryLabel;
+    struct { unsigned posId; size_t pred_hash; int label;} otherPos;
   };
 
   friend inline std::istream& operator>>(std::istream& is, FeatureId& obj)
@@ -73,6 +75,7 @@ public:
       temp == "BOUNDARY_LABELS"? FeatureTemplate::BOUNDARY_LABELS:
       temp == "EMISSION"? FeatureTemplate::EMISSION:
       temp == "LABEL_BIGRAM"? FeatureTemplate::LABEL_BIGRAM:
+      temp == "OTHER_POS"? FeatureTemplate::OTHER_POS:
       temp == "SRC_BIGRAM"? FeatureTemplate::SRC_BIGRAM:
       temp == "ALIGNMENT_JUMP"? FeatureTemplate::ALIGNMENT_JUMP:
       temp == "LOG_ALIGNMENT_JUMP"? FeatureTemplate::LOG_ALIGNMENT_JUMP:
@@ -183,6 +186,11 @@ public:
       tempSS.str(splits[1]); tempSS >> obj.otherAligner.alignerId; // otherAligner.alignerId
       tempSS.str(splits[2]); tempSS >> obj.otherAligner.compatible; //otherAligner.compatible;
       break;
+    case FeatureTemplate::OTHER_POS:
+      tempSS.str(splits[1]); tempSS >> obj.otherPos.posId;
+      tempSS.str(splits[2]); tempSS >> obj.otherPos.label;
+      tempSS.str(splits[3]); tempSS >> obj.otherPos.pred_hash;
+      break;
     case FeatureTemplate::SYNC_START:
     case FeatureTemplate::SYNC_END:
     case FeatureTemplate::NULL_ALIGNMENT:
@@ -263,6 +271,11 @@ public:
       ar & otherAligner.alignerId;
       ar & otherAligner.compatible;
       break;
+    case FeatureTemplate::OTHER_POS:
+      ar & otherPos.posId;
+      ar & otherPos.pred_hash;
+      ar & otherPos.label;
+      break;
     default:
       assert(false);
     }
@@ -342,6 +355,10 @@ public:
     case OTHER_ALIGNERS:
       return otherAligner.alignerId < rhs.otherAligner.alignerId || \
         (otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible);
+    case OTHER_POS:
+      return otherPos.posId < rhs.otherPos.posId || \
+        (otherPos.posId == rhs.otherPos.posId && otherPos.pred_hash < rhs.otherPos.pred_hash) || \
+        (otherPos.posId == rhs.otherPos.posId && otherPos.pred_hash == rhs.otherPos.pred_hash && otherPos.label < rhs.otherPos.label);
       
       default:
         assert(false);
@@ -414,7 +431,9 @@ public:
       break;
     case OTHER_ALIGNERS:
       return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
-    default:
+    case OTHER_POS:
+      return otherPos.posId != rhs.otherPos.posId || otherPos.pred_hash != rhs.otherPos.pred_hash || otherPos.label != rhs.otherPos.label;
+        default:
       assert(false);
     }
   }
@@ -493,6 +512,11 @@ public:
 	  boost::hash_combine(seed, x.otherAligner.alignerId);
 	  boost::hash_combine(seed, x.otherAligner.compatible);
 	  break;
+        case OTHER_POS:
+	  boost::hash_combine(seed, x.otherPos.posId);
+	  boost::hash_combine(seed, x.otherPos.pred_hash);
+	  boost::hash_combine(seed, x.otherPos.label);
+          break;
         default:
           assert(false);
       }
@@ -568,6 +592,11 @@ public:
 	return left.otherAligner.alignerId == right.otherAligner.alignerId && \
 	  left.otherAligner.compatible == right.otherAligner.compatible;
 	  break;
+        case FeatureTemplate::OTHER_POS:
+	return left.otherPos.posId == right.otherPos.posId && \
+	  left.otherPos.pred_hash == right.otherPos.pred_hash && \
+          left.otherPos.label == right.otherPos.label;
+	  break;
         default:
           assert(false);
       }
@@ -605,6 +634,7 @@ class LogLinearParams {
 
   // inline and template member functions
 #include "LogLinearParams-inl.h"
+
 
  public:
 
@@ -658,16 +688,19 @@ class LogLinearParams {
   double Hash();
 
   // set learning info
-  void SetLearningInfo(LearningInfo &learningInfo);
+  void SetLearningInfo(LearningInfo &learningInfo, bool otherForPos);
 
+  // load output from other pos taggers
+  void LoadPosOutput();
+  
   // load the word alignments when available
   void LoadOtherAlignersOutput();
 
-  // given the description of one transition on the alignment FST, find the features that would fire along with their values
-  void FireFeatures(int srcToken, int prevSrcToken, int tgtToken, 
-		    int srcPos, int prevSrcPos, int tgtPos, 
-		    int srcSentLength, int tgtSentLength, 
-		    unordered_map_featureId_double& activeFeatures);
+    // given the description of one transition on the alignment FST, find the features that would fire along with their values
+    void FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
+            int srcPos, int prevSrcPos, int tgtPos,
+            int srcSentLength, int tgtSentLength,
+            unordered_map_featureId_double& activeFeatures);
 
   // for pos tagging
   void FireFeatures(int yI, int yIM1, int sentId, const vector<int64_t> &x, unsigned i, 
@@ -762,6 +795,9 @@ class LogLinearParams {
   // determines the corresponding src position 
   std::vector< std::vector< std::vector< std::set<int>* >* >* > otherAlignersOutput;
 
+  // for each other POS output, for each sentence, for each token, determines the predicted label
+  std::vector< std::vector< std::vector< string > >* > otherPOSOutput;
+  
   boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
  
   boost::unordered_map< PosFactorId, FastSparseVector<double>, PosFactorId::PosFactorHash, PosFactorId::PosFactorEqual > posFactorIdToFeatures;
