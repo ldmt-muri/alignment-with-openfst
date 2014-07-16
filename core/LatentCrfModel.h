@@ -116,6 +116,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // evaluate the \sum_<x,z>  -log(z|x) , plus L2(\lambda) when the model is configured to use it
   double EvaluateNll();
 
+  // use the method of finite differences to numerically check the gradient computed with dynamic programming
+  double CheckGradient(vector<int> &testIndexes, double epsilon);
+
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double LbfgsCallbackEvalYGivenXLambdaGradient(void *ptrFromSentId,
 						       const double *lambdasArray,

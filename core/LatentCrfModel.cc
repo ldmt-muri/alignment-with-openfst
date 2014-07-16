@@ -138,6 +138,12 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   PrepareExample(sentId);
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
+  /*if(sentId == 383) {
+    cerr << endl << "sentId=" << sentId << ", tokens=";
+    for(auto tokensIter = x.begin(); tokensIter != x.end(); ++tokensIter) {
+      cerr << vocabEncoder.Decode(*tokensIter) << " ";
+    }
+    }*/
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -184,6 +190,11 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
         // compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
         FireFeatures(yI, yIM1, sentId, i, h);
+        /*if(sentId == 383 && lambda->IsSealed()) {
+          for(auto hIter = h.begin(); hIter != h.end(); ++hIter) {
+            cerr << "i = " << i << ", yI = " << yI << ", feature #" << hIter->first << " = " << (*lambda->paramIdsPtr)[hIter->first] << ", val = " << hIter->second << endl;
+          }
+          }*/
         // compute the weight of this transition:
         // \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
         double nLambdaH = -1.0 * lambda->DotProduct(h);
@@ -304,7 +315,14 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
 				  FastSparseVector<double> &activeFeatures) { 
   if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
-    lambda->FireFeatures(yI, yIM1, GetObservableSequence(sentId), i, activeFeatures);
+    assert(activeFeatures.size() == 0);
+    if(sentId == 383) {
+      //lambda->logging = true;
+    }
+    lambda->FireFeatures(yI, yIM1, sentId, GetObservableSequence(sentId), i, activeFeatures);
+    if(sentId == 383) {
+      lambda->logging = false;
+    }
   } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
     int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
@@ -741,6 +759,22 @@ void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
         cerr << "will start LBFGS " <<  " at " << time(0) << endl;    
       }
 
+      // check the analytic gradient computation by computing the derivatives numerically 
+      // using method of finite differenes for a subset of the features
+      if(learningInfo.checkGradient) {
+        cerr << "calling CheckGradient() *before* running lbfgs" << endl; 
+        vector<int> testIndexes;
+        int testIndexesCount = 10;
+        for(int i = 0; i < testIndexesCount; i++) {
+          testIndexes.push_back( lambdasArrayLength / testIndexesCount * i );
+        }
+        double epsilon = 0.00000001;
+        for(int granularities = 0; granularities < 1; epsilon /= 10, granularities++) {
+          CheckGradient(testIndexes, epsilon);
+        }
+      }
+
+
       // only the master executes lbfgs
       int sentId = 0;
       lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
@@ -748,6 +782,22 @@ void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
       int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &nll, 
                               LbfgsCallbackEvalYGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
 
+      // check the analytic gradient computation by computing the derivatives numerically 
+      // using method of finite differenes for a subset of the features
+      if(learningInfo.checkGradient) {
+        cerr << "calling CheckGradient() *after* running lbfgs" << endl; 
+        vector<int> testIndexes;
+        int testIndexesCount = 10;
+        for(int i = 0; i < testIndexesCount; i++) {
+          testIndexes.push_back( lambdasArrayLength / testIndexesCount * i );
+        }
+        double epsilon = 0.00000001;
+        for(int granularities = 0; granularities < 2; epsilon /= 10, granularities++) {
+          cerr << "####granularities = " << granularities << ", epsilon = " << epsilon << endl;
+          CheckGradient(testIndexes, epsilon);
+        }
+      }
+      
       bool NEED_HELP = false;
       mpi::broadcast<bool>(*learningInfo.mpiWorld, NEED_HELP, 0);
 
@@ -873,7 +923,65 @@ float LatentCrfModel::EvaluateNll(float *lambdasArray) {
   float objective = (float)LbfgsCallbackEvalZGivenXLambdaGradient(ptrFromSentId, dblLambdasArray, dummy, lambdasCount, 1.0);
   return objective;
 }
- 
+
+double LatentCrfModel::CheckGradient(vector<int> &testIndexes, double epsilon) {
+
+  // first, use the lbfgs callback function to analytically compute the objective and gradient at the current lambdas
+  void *uselessPtr = 0;
+  double* lambdasArray = lambda->GetParamWeightsArray();
+  int lambdasArrayLength = lambda->GetParamsCount();
+  double* analyticGradient = new double[lambdasArrayLength];
+  double originalObjective = LbfgsCallbackEvalYGivenXLambdaGradient(uselessPtr, lambdasArray, analyticGradient, 
+                                                                   lambdasArrayLength, 0);
+  
+  // copy the derivatives we need to compare (the gradient vector will be overwritten)
+  vector<double> analyticDerivatives;
+  for(auto testIndexIter = testIndexes.begin();
+      testIndexIter != testIndexes.end();
+      ++testIndexIter) {
+    analyticDerivatives.push_back(analyticGradient[*testIndexIter]);
+  }
+  
+  // test each test index
+  vector<double> numericDerivatives;
+  for(auto testIndexIter = testIndexes.begin(); 
+      testIndexIter != testIndexes.end();
+      ++testIndexIter) {
+
+    // by first modifying the corresponding feature weight, 
+    lambdasArray[*testIndexIter] += epsilon;
+    
+    // computing the new objective
+    double modifiedObjective = LbfgsCallbackEvalYGivenXLambdaGradient(uselessPtr, lambdasArray, analyticGradient, 
+                                                                      lambdasArrayLength, 0);
+    
+    // compute the derivative numerically,
+    double objectiveDiff = modifiedObjective - originalObjective;
+    double derivative = objectiveDiff / epsilon;
+    numericDerivatives.push_back(derivative);
+    
+    // reset this feature's weight
+    lambdasArray[*testIndexIter] -= epsilon;
+  }
+  
+  // summarize your findings
+  cerr << "======================" << endl;
+  cerr << "CheckGradient summary (with epsilon = " << epsilon << "):" << endl;
+
+  cerr << "feature\tfeature\tfeature\tanalytic\tnumeric\tdiff" << endl;
+  cerr << "index\tid\tvalue\tderivative\tderivative\tsquared" << endl;
+  double sumOfDiffSquared = 0.0;
+  for(int i = 0; i < testIndexes.size(); ++i) { 
+    double diff = analyticDerivatives[i] - numericDerivatives[i];
+    double diffSquared = diff * diff;
+    sumOfDiffSquared += diffSquared;
+    cerr << testIndexes[i] << "\t" << (*lambda->paramIdsPtr)[testIndexes[i]] << "\t" << lambdasArray[testIndexes[i]] << "\t";
+    cerr << analyticDerivatives[i] << "\t" << numericDerivatives[i] << "\t" << diffSquared << endl;    
+  }
+  cerr << "\\sum_i (analytic - numeric)^2 = " << sumOfDiffSquared << endl;
+  cerr << "=====================" << endl;
+}
+
 // lbfgs' callback function for evaluating -logliklihood(y|x) and its d/d_\lambda
 // this is needed for supervised training of the CRF
 // this function is not expected to be executed by any slave; only the master process with rank 0
@@ -980,7 +1088,7 @@ double LatentCrfModel::AddL2Term(const vector<double> &unregularizedGradient,
     gradientL2Norm += regularizedGradient[i] * regularizedGradient[i];
     assert(!std::isnan(unregularizedGradient[i]) || !std::isinf(unregularizedGradient[i]));
   } 
-  cerr << " l2term = " << l2term << ", gradientL2Norm = " << l2term << endl;
+  cerr << " l2term = " << l2term << ", gradientL2Norm = " << gradientL2Norm << endl;
   return l2RegularizedObjective;
 }
 
@@ -1986,10 +2094,10 @@ void LatentCrfModel::Analyze(string &inputFilename, string &outputFilename) {
 // make sure all features which may fire on this training data have a corresponding parameter in lambda (member)
 void LatentCrfModel::InitLambda() {
   if(learningInfo.mpiWorld->rank() == 0) {
+    cerr << "examplesCount = " << examplesCount << endl;
     cerr << "master" << learningInfo.mpiWorld->rank() << ": initializing lambdas..." << endl;
   }
 
-  cerr << "examplesCount = " << examplesCount << endl;
   assert(examplesCount > 0);
 
   // then, each process discovers the features that may show up in their sentences.

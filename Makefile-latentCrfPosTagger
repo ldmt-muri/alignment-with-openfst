@@ -9,7 +9,7 @@ all: train-latentCrfPosTagger
 train-latentCrfPosTagger: train-latentCrfPosTagger.o
 	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o  $(LIBS) -o parts-of-speech/train-latentCrfPosTagger
 
-train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o parts-of-speech/train-latentCrfPosTagger.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h core/BasicTypes.h wammar-utils/FstUtils.h
+train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o parts-of-speech/train-latentCrfPosTagger.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h core/BasicTypes.h wammar-utils/FstUtils.h 
 	$(CC) $(BEFORE) $(SINGLE) parts-of-speech/train-latentCrfPosTagger.cc $(OPT)
 
 LatentCrfPosTagger.o: LatentCrfModel.o parts-of-speech/LatentCrfPosTagger.h parts-of-speech/LatentCrfPosTagger.cc core/BasicTypes.h
@@ -19,7 +19,7 @@ LatentCrfPosTagger.o: LatentCrfModel.o parts-of-speech/LatentCrfPosTagger.h part
 LatentCrfModel.o: FstUtils.o LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h core/BasicTypes.h
 	$(CC) $(BEFORE) $(SINGLE) core/LatentCrfModel.cc $(OPT)
 
-LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h core/BasicTypes.h
+LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h core/BasicTypes.h core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) core/LogLinearParams.cc $(OPT)
 
 HmmModel.o: FstUtils.o core/HmmModel.cc core/HmmModel.h core/LearningInfo.h wammar-utils/StringUtils.h core/MultinomialParams.h core/BasicTypes.h

@@ -160,14 +160,12 @@ class VocabEncoder {
             tokenIter != splits.end();
             tokenIter++) {
           int temp = Encode(*tokenIter);
-          cerr << "typeFreq[" << *tokenIter << "] = " << typeFrequency[*tokenIter] << ", encoding = " << temp; 
           // if this string is not frequent enough, modify its encoding to UNK
           if(typeFrequency[*tokenIter] < minFreq) {
             char_string token_char_string(tokenIter->c_str(), *alloc_inst);
             tokenToInt->find(token_char_string)->second = UnkInt();
             cerr << " => " << tokenToInt->find(token_char_string)->second;
           }
-          cerr << endl;
         }
       }
       cerr << "done reading." << endl;

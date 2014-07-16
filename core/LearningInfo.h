@@ -23,6 +23,7 @@ class LearningInfo {
  LearningInfo(boost::mpi::communicator *mpiWorld, string outputFilenamePrefix) : 
   mpiWorld(mpiWorld), 
   outputFilenamePrefix(outputFilenamePrefix) {
+    checkGradient = false;
     minTokenFrequency = 100;
     featureGaussianMeanFilename = "";
     SetSharedMemorySegment(mpiWorld->rank() == 0);
@@ -392,6 +393,8 @@ class LearningInfo {
   // tokens which appear in the corpus less frequently than this number will be replaced with 
   // "unk" in feature extraction
   int minTokenFrequency;
+
+  bool checkGradient;
 
 };
 

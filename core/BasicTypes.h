@@ -144,8 +144,10 @@ struct PosFactorId
 {
 public:
   int64_t yI, yIM1, xI, xIM1, xIM2, xIP1, xIP2;
+  int sentId;
+
   inline void Print() const {
-    std::cerr << "(yI=" << yI << ", yIM1=" << yIM1 << ", xI=" << xI << ", xIM1=" << xIM1 << ", xIM2=" << xIM2 << ", xIP1=" << xIP1 << ", xIP2=" << xIP2 << ")" << std::endl;
+    std::cerr << "(yI=" << yI << ", yIM1=" << yIM1 << ", xI=" << xI << ", xIM1=" << xIM1 << ", xIM2=" << xIM2 << ", xIP1=" << xIP1 << ", xIP2=" << xIP2 << ", sentId=" << sentId << ")" << std::endl;
   }
 
   inline bool operator < (const PosFactorId &other) const {
@@ -163,6 +165,8 @@ public:
       return xIP1 < other.xIP1;
     } else if(xIP2 != other.xIP2) {
       return xIP2 < other.xIP2;
+    } else if(sentId != other.sentId) {
+      return sentId < other.sentId;
     } else {
       return false;
     }
@@ -179,6 +183,7 @@ public:
       boost::hash_combine(seed, x.xI);
       boost::hash_combine(seed, x.xIP1);
       boost::hash_combine(seed, x.xIP2);
+      boost::hash_combine(seed, x.sentId);
       return seed;
     }
   };
@@ -188,7 +193,7 @@ public:
       return left.yI == right.yI && left.yIM1 == right.yIM1 &&
         left.xIM2 == right.xIM2 && left.xIM1 == right.xIM1 &&
         left.xI == right.xI && left.xIP1 == right.xIP1 &&
-        left.xIP2 == right.xIP2;
+        left.xIP2 == right.xIP2 && left.sentId == right.sentId;
     }
   };
 };

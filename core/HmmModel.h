@@ -64,13 +64,13 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   using UnsupervisedSequenceTaggingModel::Label;
   void Label(vector<int64_t> &tokens, vector<int> &labels);
   
+  // configurations
+  LearningInfo *learningInfo;
+  
  private:
   
   // constants
   const int START_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
-  
-  // configurations
-  LearningInfo *learningInfo;
   
   // training data
   vector< vector<int64_t> > observations;

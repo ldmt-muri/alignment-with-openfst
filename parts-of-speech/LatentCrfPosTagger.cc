@@ -138,21 +138,23 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
     while(yDomainIter != yDomain.end()) {
       yDomainIter = yDomain.erase(yDomainIter);
     }
-    cerr << "now, |yDomain| = " << yDomain.size() << endl;
-    cerr << "the mapping between string labels and yDomain elements is as follows: " << endl;
-    for(auto labelIntToStringIter = labelIntToString.begin();
-	labelIntToStringIter != labelIntToString.end();
-	++labelIntToStringIter) {
-      cerr << labelIntToStringIter->first << " -> " << labelIntToStringIter->second << endl;
+    if(learningInfo.mpiWorld->rank() == 0) {
+      cerr << "now, |yDomain| = " << yDomain.size() << endl;
+      cerr << "the mapping between string labels and yDomain elements is as follows: " << endl;
+      for(auto labelIntToStringIter = labelIntToString.begin();
+          labelIntToStringIter != labelIntToString.end();
+          ++labelIntToStringIter) {
+        cerr << labelIntToStringIter->first << " -> " << labelIntToStringIter->second << endl;
+      }
+      for(auto labelStringToIntIter = labelStringToInt.begin();
+          labelStringToIntIter != labelStringToInt.end();
+          ++labelStringToIntIter) {
+        cerr << labelStringToIntIter->first << " -> " << labelStringToIntIter->second << endl;
+      }
+      cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
     }
-    for(auto labelStringToIntIter = labelStringToInt.begin();
-	labelStringToIntIter != labelStringToInt.end();
-	++labelStringToIntIter) {
-      cerr << labelStringToIntIter->first << " -> " << labelStringToIntIter->second << endl;
-    }
-    cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
   }
-
+  
   // slaves wait for master
   if(learningInfo.mpiWorld->rank() != 0) {
     bool vocabEncoderIsReady;
@@ -305,8 +307,15 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     if(sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
       continue;
     }
-
+    
     vector<int64_t> &tokens = GetObservableSequence(sentId);
+    /*if(sentId == 383) {
+      cerr << endl << "sentId=" << sentId << ", tokens=";
+      for(auto tokensIter = tokens.begin(); tokensIter != tokens.end(); ++tokensIter) {
+        cerr << vocabEncoder.Decode(*tokensIter) << " ";
+      }
+    }
+    */
     vector<int> &labels = goldLabelSequences[sentId];
     if(tokens.size() != labels.size()) {
       cerr << "ERROR: the number of tokens = " << tokens.size() << " is different than the number of labels = " << labels.size() << " in sentId = " << sentId << endl;
@@ -344,7 +353,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     // the denominator
     double sentLevelObjective = -nLogZ; // this term should always be greater than the (supervision) other term
     objective -= nLogZ;
-    
+
     // subtract F/Z from the gradient
     for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); 
         fIter != FSparseVector.end(); ++fIter) {
@@ -357,6 +366,11 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
         assert(false);
       }
       assert(fIter->first < derivativeWRTLambda.size());
+
+      /*if(sentId == 383) {
+        //cerr << "feature #" << fIter->first << " = " << (*lambda->paramIdsPtr)[fIter->first] << ", fOverZ = " << fOverZ << endl;
+        }*/
+      
       derivativeWRTLambda[fIter->first] += fOverZ;
       if(std::isnan(derivativeWRTLambda[fIter->first]) || 
          std::isinf(derivativeWRTLambda[fIter->first])) {
@@ -416,7 +430,6 @@ void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
 }
 
 void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
-  cerr << "inside LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename, bool parallelize=true) " << endl;
   std::vector<std::vector<std::string> > tokens;
   StringUtils::ReadTokens(inputFilename, tokens);
   vector<vector<int> > labels;
@@ -459,7 +472,6 @@ void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
 }
 
 void LatentCrfPosTagger::Label(const string &labelsFilename) {
-  cerr << learningInfo.mpiWorld->rank() << ": inside LatentCrfPosTagger::Label(const string &labelsFilename)" << endl;
   // run viterbi (and write the classes to file)
   ofstream labelsFile(labelsFilename.c_str());
   if(learningInfo.firstKExamplesToLabel == 0) {

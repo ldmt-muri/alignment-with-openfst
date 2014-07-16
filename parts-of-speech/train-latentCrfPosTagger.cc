@@ -65,7 +65,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     GOLD_LABELS_FILENAME = "gold-labels-filename",
     TAG_DICT_FILENAME = "tag-dict-filename",
     LABELS_COUNT = "labels-count",
-    SUPERVISED = "supervised";
+    SUPERVISED = "supervised",
+    CHECK_GRADIENT = "check-gradient";
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -101,6 +102,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
     (LABELS_COUNT.c_str(), po::value<unsigned int>(&labelsCount)->default_value(12), "(unsigned int) specifies the number of word classes that will be induced.")
     (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(flag) (defaults to false) when set, gold labels must also be provided, and supervised training is performed. When clear but gold labels are provided, semi-supervised training is performed. When clear and gold labels are not provided, unsupervised training is performed.")
+    (CHECK_GRADIENT.c_str(), po::value<bool>(&learningInfo.checkGradient)->default_value(false), "(flag) (defaults to false) when set, gradient computation is checked numerically with the method of finite differences.")
     ;
 
   po::variables_map vm;
@@ -349,8 +351,9 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
       cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
       bool parallelize=false;
       hmmModel.Label(textFilename, labelsFilename, parallelize);
-      cerr << "automatic labels can be found at " << labelsFilename << endl;
-
+      if(hmmModel.learningInfo->mpiWorld->rank() == 0) {
+        cerr << "automatic labels can be found at " << labelsFilename << endl;
+      }
     }
 
     // first, initialize the latentCrfPosTagger's theta parameters to zeros
@@ -415,7 +418,9 @@ void endOfKIterationsCallbackFunction() {
   if(tagger.learningInfo.mpiWorld->rank() == 0) {
     bool parallelize=false;
     tagger.Label(tagger.dataFilename, labelsFilename, false);
-    cerr << "automatic labels can be found at " << labelsFilename << endl;
+    if(tagger.learningInfo.mpiWorld->rank() == 0) {
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+    }
   }
 }
 
@@ -559,6 +564,7 @@ int main(int argc, char **argv) {
   string labelsFilename = outputFilenamePrefix + ".labels";
   //model->Label(textFilename, labelsFilename);
   tagger.Label(labelsFilename);
-  cerr << "automatic labels can be found at " << labelsFilename << endl;
-
+  if(tagger.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
+  }
 }

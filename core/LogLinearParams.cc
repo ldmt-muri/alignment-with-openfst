@@ -177,6 +177,7 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
 LogLinearParams::LogLinearParams(VocabEncoder &types, 
                                  double gaussianStdDev) :
   types(types) {
+  logging = false;
   learningInfo = 0;
   gaussianSampler = new GaussianSampler(0.0, gaussianStdDev);
   FeatureId::vocabEncoder = &types;
@@ -1031,11 +1032,13 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 
 // for pos induction
 // features for the latent crf model
-void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, unsigned i, 
+void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<int64_t> &x, unsigned i, 
 				   FastSparseVector<double> &activeFeatures) {
 
-  //  cerr << "FireFeatures(yI = " << yI << ", yIM1 = " << yIM1 << ", |x| = " << x.size() << ", i = " << i << ", |activeFeatures| = " << activeFeatures.size() << endl;
-  
+  if(logging) {
+    cerr << "LogLinearParams::FireFeatures(yI = " << yI << ", yIM1 = " << yIM1 << ", |x| = " << x.size() << ", x[i] = " << x[i] << " = " << FeatureId::vocabEncoder->Decode(x[i]) << ", i = " << i << ", |activeFeatures| = " << activeFeatures.size() << endl;
+  }
+
   const int64_t &xI = x[i];
   const int64_t &xIM1 = i >= 1? x[i-1] : -1;
   const int64_t &xIM2 = i >= 2? x[i-2] : -1;
@@ -1052,11 +1055,29 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
     factorId.xI = xI;
     factorId.xIP1 = xIP1;
     factorId.xIP2 = xIP2;
+    factorId.sentId = sentId;
+
     if(posFactorIdToFeatures.count(factorId) == 1) {
+      if(logging) {
+        cerr << "posFactorIdToFeatures.count(factorId) == 1" << endl;
+      }
       activeFeatures = posFactorIdToFeatures[factorId];
       // logging
-      //factorId.Print();
-      //cerr << "activeFeatures.size() = " << activeFeatures.size() << endl;
+      if(logging) {
+        cerr << "factor found in cache!" << endl;
+        factorId.Print();
+        for(auto activeFeaturesIter = activeFeatures.begin();
+            activeFeaturesIter != activeFeatures.end();
+            ++activeFeaturesIter) {
+          cerr << "feature #" << activeFeaturesIter->first << " = ";
+          if(paramIdsPtr == 0) {
+            cerr << paramIdsTemp[activeFeaturesIter->first];
+          } else {
+            cerr << (*paramIdsPtr)[activeFeaturesIter->first];
+          }
+          cerr << ", val = " << activeFeaturesIter->second << endl;
+        }
+      }
       return;
     }
   }
@@ -1142,10 +1163,13 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
           featureId.emission.displacement = k;
           AddParam(featureId);
           activeFeatures[paramIndexes[featureId]] += 1.0;
+          if(logging) {
+            cerr << "firing up feature id " << featureId << " with word = " << xI << endl;
+          }
         }
       break;
 
-      case FeatureTemplate::OTHER_ALIGNERS:
+    case FeatureTemplate::OTHER_ALIGNERS:
         for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
         assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
         if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
@@ -1185,8 +1209,21 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x, u
       cerr << learningInfo->mpiWorld->rank() << ": |factorIds| is now " << posFactorIdToFeatures.size() << endl;
     } 
     // logging
-    //factorId.Print();
-    //cerr << "activeFeatures.size() = " << activeFeatures.size() << endl;
+    if(logging) {
+      cerr << "factor not found in cache!" << endl;
+      factorId.Print();
+      for(auto activeFeaturesIter = activeFeatures.begin();
+          activeFeaturesIter != activeFeatures.end();
+          ++activeFeaturesIter) {
+        cerr << "feature #" << activeFeaturesIter->first;
+        if(paramIdsPtr == 0) {
+          cerr << " = " << paramIdsTemp[activeFeaturesIter->first];
+        } else {
+          cerr << " = " << (*paramIdsPtr)[activeFeaturesIter->first];
+        }
+        cerr << ", val = " << activeFeaturesIter->second << endl;
+      }
+    }
   }
 }
 

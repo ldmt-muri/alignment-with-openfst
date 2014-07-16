@@ -670,7 +670,7 @@ class LogLinearParams {
 		    unordered_map_featureId_double& activeFeatures);
 
   // for pos tagging
-  void FireFeatures(int yI, int yIM1, const vector<int64_t> &x, unsigned i, 
+  void FireFeatures(int yI, int yIM1, int sentId, const vector<int64_t> &x, unsigned i, 
 		    FastSparseVector<double> &activeFeatures);
   
   // for word alignment
@@ -767,7 +767,9 @@ class LogLinearParams {
   boost::unordered_map< PosFactorId, FastSparseVector<double>, PosFactorId::PosFactorHash, PosFactorId::PosFactorEqual > posFactorIdToFeatures;
  
   unordered_map_featureId_double featureGaussianMeans;
-  
+
+  bool logging;
+
  private:
   bool sealed;
   
