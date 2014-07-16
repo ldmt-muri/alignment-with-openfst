@@ -5,7 +5,7 @@ LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serializati
 OPT=-O3 -g
 all: train-latentCrfPosTagger
 
-# specifiic to the pos tagging task
+# specific to the pos tagging task
 train-latentCrfPosTagger: train-latentCrfPosTagger.o
 	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o  $(LIBS) -o parts-of-speech/train-latentCrfPosTagger
 

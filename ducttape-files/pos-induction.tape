@@ -170,7 +170,7 @@ task AutoencoderPosInduction
   --feat LABEL_BIGRAM --feat PRECOMPUTED --feat EMISSION
   --min-relative-diff $min_relative_diff
   --max-iter-count 30
-  --cache-feats true
+  --cache-feats false
   --optimizer adagrad --minibatch-size 8000
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count

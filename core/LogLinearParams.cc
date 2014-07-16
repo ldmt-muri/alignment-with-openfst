@@ -289,16 +289,12 @@ void LogLinearParams::Seal() {
       paramWeightsPtr->push_back(paramWeightsTemp[i]);
       paramIdsPtr->push_back(paramIdsTemp[i]);
     }
-    paramWeightsTemp.clear(); 
-    paramIdsTemp.clear(); 
 
   } else {
 
     // this is done by the slaves, not the master
     assert(learningInfo->mpiWorld->rank() != 0);
     // first, wipe off all the parameters you already have to save memory
-    paramWeightsTemp.clear(); 
-    paramIdsTemp.clear(); 
 
     // sync
     bool dummy = true;
@@ -310,6 +306,46 @@ void LogLinearParams::Seal() {
   }
   assert(paramIdsPtr != 0 && paramWeightsPtr != 0);
 
+  // update the feature indexes to reference paramIdsPtr instead of paramIdsTemp. you need to keep track of the indexes served by your process. note: this puts a restriction that a sentence must be decoded using its respective process.
+  int localParams = paramIndexes.size(), localParamsInGlobalVector = 0;
+  for(int i = 0; i < paramIdsPtr->size(); ++i) {
+    if(paramIndexes.count( (*paramIdsPtr)[i] ) == 1) {
+      paramIndexes[ (*paramIdsPtr)[i] ] = i;
+      localParamsInGlobalVector++;
+    }
+  }
+  // sanity check
+  if(localParams != localParamsInGlobalVector) {
+    cerr << "this is a major bug in LogLinearParams.cc; I'm not sure what caused the bug but "
+         << "process #" << learningInfo->mpiWorld->rank() << " fired " << localParams << " unique features "
+         << "while initializing lambdas, and now only " << localParamsInGlobalVector << " out of them appear "
+         << "in the shared vector of all features (paramIdsPtr). This *is* a problem." << endl;
+    assert(false);
+  }
+
+  // when feature caching is enabled, we maintain a map from factor ids to the list of feature indexes
+  // invoked by that factor. now that we changed the feature indexes, we need to update the map.
+  for(auto factorIdIter = posFactorIdToFeatures.begin(); 
+      factorIdIter != posFactorIdToFeatures.end();
+      factorIdIter++) {
+    FastSparseVector<double> oldFeatureIndexes = factorIdIter->second;
+    factorIdIter->second.clear();
+    for(auto oldIndexIter = oldFeatureIndexes.begin();
+        oldIndexIter != oldFeatureIndexes.end();
+        ++oldIndexIter) {
+      int oldIndex = oldIndexIter->first;
+      double featureValue = oldIndexIter->second;
+      FeatureId &featureId = paramIdsTemp[oldIndex];
+      int newIndex = paramIndexes[featureId];
+      factorIdIter->second[newIndex] = featureValue;
+    }
+  }
+  
+  // we no longer need the temp weights/ids
+  paramWeightsTemp.clear(); 
+  paramIdsTemp.clear(); 
+    
+  
   // now every core reads the mean of the gaussian prior for features specified in learningInfo.featureGaussianMeanFilename, and keep a map with FeatureId keys and double values (i.e. the mean)
   if(learningInfo->featureGaussianMeanFilename.size() > 0) {
     std::ifstream featureGaussianMeanFile(learningInfo->featureGaussianMeanFilename.c_str(), std::ios::in);
@@ -1035,10 +1071,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<int64_t> &x, unsigned i, 
 				   FastSparseVector<double> &activeFeatures) {
 
-  if(logging) {
-    cerr << "LogLinearParams::FireFeatures(yI = " << yI << ", yIM1 = " << yIM1 << ", |x| = " << x.size() << ", x[i] = " << x[i] << " = " << FeatureId::vocabEncoder->Decode(x[i]) << ", i = " << i << ", |activeFeatures| = " << activeFeatures.size() << endl;
-  }
-
   const int64_t &xI = x[i];
   const int64_t &xIM1 = i >= 1? x[i-1] : -1;
   const int64_t &xIM2 = i >= 2? x[i-2] : -1;
@@ -1058,26 +1090,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
     factorId.sentId = sentId;
 
     if(posFactorIdToFeatures.count(factorId) == 1) {
-      if(logging) {
-        cerr << "posFactorIdToFeatures.count(factorId) == 1" << endl;
-      }
       activeFeatures = posFactorIdToFeatures[factorId];
-      // logging
-      if(logging) {
-        cerr << "factor found in cache!" << endl;
-        factorId.Print();
-        for(auto activeFeaturesIter = activeFeatures.begin();
-            activeFeaturesIter != activeFeatures.end();
-            ++activeFeaturesIter) {
-          cerr << "feature #" << activeFeaturesIter->first << " = ";
-          if(paramIdsPtr == 0) {
-            cerr << paramIdsTemp[activeFeaturesIter->first];
-          } else {
-            cerr << (*paramIdsPtr)[activeFeaturesIter->first];
-          }
-          cerr << ", val = " << activeFeaturesIter->second << endl;
-        }
-      }
       return;
     }
   }
@@ -1163,9 +1176,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
           featureId.emission.displacement = k;
           AddParam(featureId);
           activeFeatures[paramIndexes[featureId]] += 1.0;
-          if(logging) {
-            cerr << "firing up feature id " << featureId << " with word = " << xI << endl;
-          }
+          
         }
       break;
 
@@ -1208,22 +1219,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
     if(posFactorIdToFeatures.size() % 1000000 == 0) {
       cerr << learningInfo->mpiWorld->rank() << ": |factorIds| is now " << posFactorIdToFeatures.size() << endl;
     } 
-    // logging
-    if(logging) {
-      cerr << "factor not found in cache!" << endl;
-      factorId.Print();
-      for(auto activeFeaturesIter = activeFeatures.begin();
-          activeFeaturesIter != activeFeatures.end();
-          ++activeFeaturesIter) {
-        cerr << "feature #" << activeFeaturesIter->first;
-        if(paramIdsPtr == 0) {
-          cerr << " = " << paramIdsTemp[activeFeaturesIter->first];
-        } else {
-          cerr << " = " << (*paramIdsPtr)[activeFeaturesIter->first];
-        }
-        cerr << ", val = " << activeFeaturesIter->second << endl;
-      }
-    }
+    
   }
 }
 

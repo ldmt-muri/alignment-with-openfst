@@ -138,12 +138,6 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
   PrepareExample(sentId);
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
-  /*if(sentId == 383) {
-    cerr << endl << "sentId=" << sentId << ", tokens=";
-    for(auto tokensIter = x.begin(); tokensIter != x.end(); ++tokensIter) {
-      cerr << vocabEncoder.Decode(*tokensIter) << " ";
-    }
-    }*/
   // arcs represent a particular choice of y_i at time step i
   // arc weights are -\lambda h(y_i, y_{i-1}, x, i)
   assert(fst.NumStates() == 0);
@@ -190,11 +184,7 @@ void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::Lo
         // compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;
         FireFeatures(yI, yIM1, sentId, i, h);
-        /*if(sentId == 383 && lambda->IsSealed()) {
-          for(auto hIter = h.begin(); hIter != h.end(); ++hIter) {
-            cerr << "i = " << i << ", yI = " << yI << ", feature #" << hIter->first << " = " << (*lambda->paramIdsPtr)[hIter->first] << ", val = " << hIter->second << endl;
-          }
-          }*/
+        
         // compute the weight of this transition:
         // \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representation
         double nLambdaH = -1.0 * lambda->DotProduct(h);
@@ -316,13 +306,8 @@ void LatentCrfModel::FireFeatures(int yI, int yIM1, unsigned sentId, int i,
   if(task == Task::POS_TAGGING) {
     // fire the pos tagger features
     assert(activeFeatures.size() == 0);
-    if(sentId == 383) {
-      //lambda->logging = true;
-    }
     lambda->FireFeatures(yI, yIM1, sentId, GetObservableSequence(sentId), i, activeFeatures);
-    if(sentId == 383) {
-      lambda->logging = false;
-    }
+    
   } else if(task == Task::WORD_ALIGNMENT) {
     // fire the word aligner features
     int firstPos = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
