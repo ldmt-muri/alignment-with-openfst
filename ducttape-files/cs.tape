@@ -48,6 +48,7 @@ task PreprocessData
     > autoencoder_test_size
     > gold_tsv
     > pred_ldig
+    > pred_cld2
 {
   cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
   cp $labeled_train_labels $autoencoder_labels
@@ -55,6 +56,7 @@ task PreprocessData
   python $cs_sharedtask_dir/crf_labels_to_tsv.py $labeled_test_labels $tsv_template $gold_tsv
 
   python $cs_sharedtask_dir/get_ldig.py $autoencoder_text $pred_ldig 
+  python $cs_sharedtask_dir/get_cld2.py $autoencoder_text $pred_cld2 
 }
 
 task FeaturizedHmmPosInduction
@@ -126,6 +128,7 @@ task GenerateWordpairFeats
 
 task GenerateCRFSuiteInput
 < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats
+:: other_pred_arg="--other-predictors"
 :: labeled_train_text=@
 :: labeled_train_labels=@
 :: labeled_test_text=@
@@ -134,8 +137,10 @@ task GenerateCRFSuiteInput
 > crfsuite_train
 > crfsuite_test
 {
-  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $crfsuite_train --pre 2 --post 2
-  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2
+  python $cs_sharedtask_dir/get_ldig.py $labeled_train_text ldig 
+  python $cs_sharedtask_dir/get_cld2.py $labeled_test_text cld2 
+  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $crfsuite_train --pre 2 --post 2 $other_pred_arg ldig cld2
+  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2 $other_pred_arg ldig cld2
 }
 
 task TrainCRFSuite
@@ -192,6 +197,7 @@ task AutoencoderPosInduction
     > autoencoder_ll
     > auto_test_labels
     < pred_ldig=$pred_ldig@PreprocessData
+    < pred_cld2=$pred_cld2@PreprocessData
     # > hmm_ll
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
@@ -216,7 +222,7 @@ task AutoencoderPosInduction
   --gold-labels-filename $gold_file
   --test-size $test_size 
   --feat OTHER_ALIGNERS
-  --other-aligners-output-filenames $pred_ldig"
+  --other-aligners-output-filenames $pred_ldig $pred_cld2"
 
   # hide  
   #   --init-theta /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.ze ro+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.theta
