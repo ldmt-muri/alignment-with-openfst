@@ -754,6 +754,8 @@ class LogLinearParams {
    				LogLinearParams& appliedL1Penalty, 
    				const double correctL1Penalty); 
 
+  std::vector<int> SampleFeatures(int sampleSize);
+
   void PrintFirstNParams(unsigned n); 
   
   void PrintParams(); 

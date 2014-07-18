@@ -327,8 +327,8 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, &derivativeWRTLambda, &objective);
     
     // compute the F map fro this sentence
-    FastSparseVector<LogVal<double> > FSparseVector;
-    ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
+    FastSparseVector<double> FOverZSparseVector;
+    ComputeFOverZ(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FOverZSparseVector);
     
     // compute the Z value for this sentence
     double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
@@ -349,23 +349,29 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     objective -= nLogZ;
     
     // subtract F/Z from the gradient
-    for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); 
-        fIter != FSparseVector.end(); ++fIter) {
-      double nLogf = fIter->second.s_? fIter->second.v_ : -fIter->second.v_; // multiply the inner logF representation by -1.
-      double fOverZ = MultinomialParams::nExp(nLogf - nLogZ);
+    bool noise = false;
+    if(noise)  {
+      cerr << "sentId=" << sentId << ": d/d\\lambda_noise+=";
+    }
+    for(FastSparseVector<double>::iterator fOverZIter = FOverZSparseVector.begin(); 
+        fOverZIter != FOverZSparseVector.end(); ++fOverZIter) {
+      double fOverZ = fOverZIter->second;
       if(std::isnan(fOverZ) || std::isinf(fOverZ)) {
         if(learningInfo.debugLevel >= DebugLevel::ESSENTIAL) {
-          cerr << "ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf << ". my mistake. will halt!" << endl;
+          cerr << "ERROR: fOverZ = " << fOverZ << ". my mistake. will halt!" << endl;
         }
         assert(false);
       }
-      assert(fIter->first < derivativeWRTLambda.size());
+      assert(fOverZIter->first < derivativeWRTLambda.size());
 
-      derivativeWRTLambda[fIter->first] += fOverZ;
-      if(std::isnan(derivativeWRTLambda[fIter->first]) || 
-         std::isinf(derivativeWRTLambda[fIter->first])) {
+      if(noise && fOverZIter->first == 6) {
+        cerr << "+" << fOverZ;
+      }
+      derivativeWRTLambda[fOverZIter->first] += fOverZ;
+      if(std::isnan(derivativeWRTLambda[fOverZIter->first]) || 
+         std::isinf(derivativeWRTLambda[fOverZIter->first])) {
         cerr << "rank #" << learningInfo.mpiWorld->rank()               \
-             << ": ERROR: fOverZ = " << nLogZ << ", nLogf = " << nLogf  \
+             << ": ERROR: fOverZ = " << fOverZ                          \
              << ". my mistake. will halt!" << endl;
         assert(false);
       }
@@ -387,9 +393,14 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
       for(auto activeFeatureIndex = activeFeatures.begin(); 
           activeFeatureIndex != activeFeatures.end();
           ++activeFeatureIndex) {
+        if(noise && activeFeatureIndex->first == 6) {
+          cerr << "-" << activeFeatureIndex->second;
+        }
         derivativeWRTLambda[activeFeatureIndex->first] -= activeFeatureIndex->second;
       }
+      
     }
+    if(noise) cerr << endl;
     
     if(goldSequenceScore > -nLogZ) {
       cerr << "sentId=" << sentId << ": is gold score=" << goldSequenceScore << " <= logZ=" << -nLogZ << "?" << (goldSequenceScore < -nLogZ) << endl;
@@ -403,7 +414,6 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
   cerr << learningInfo.mpiWorld->rank() << "|";
   
   if(learningInfo.mpiWorld->rank() == 0) {
-    cerr << "at the end of some lbfgs iteration " << endl;
     lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda", false);
     lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda.humane", true);
     cerr << "parameters can be found at " << learningInfo.outputFilenamePrefix << ".current.lambda" << endl;
