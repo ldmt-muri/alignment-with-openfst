@@ -128,11 +128,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     assert(false);
   }
   
-  if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
-    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
-      vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
-  }
-  
   if (vm.count(FEAT.c_str()) == 0) {
     cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
     learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);

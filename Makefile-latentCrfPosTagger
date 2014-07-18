@@ -1,13 +1,14 @@
 CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
-LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
+LIBS=-lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
+#-llbfgs
 OPT=-O3 -g
 all: train-latentCrfPosTagger
 
 # specific to the pos tagging task
-train-latentCrfPosTagger: train-latentCrfPosTagger.o
-	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o  $(LIBS) -o parts-of-speech/train-latentCrfPosTagger
+train-latentCrfPosTagger: train-latentCrfPosTagger.o lbfgs.o
+	$(CC) train-latentCrfPosTagger.o HmmModel.o FstUtils.o LatentCrfModel.o LatentCrfPosTagger.o LogLinearParams.o fdict.o lbfgs.o $(LIBS) -o parts-of-speech/train-latentCrfPosTagger
 
 train-latentCrfPosTagger.o: HmmModel.o LatentCrfModel.o LatentCrfPosTagger.o parts-of-speech/train-latentCrfPosTagger.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h core/BasicTypes.h wammar-utils/FstUtils.h 
 	$(CC) $(BEFORE) $(SINGLE) parts-of-speech/train-latentCrfPosTagger.cc $(OPT)
@@ -16,7 +17,7 @@ LatentCrfPosTagger.o: LatentCrfModel.o parts-of-speech/LatentCrfPosTagger.h part
 	$(CC) $(BEFORE) $(SINGLE) parts-of-speech/LatentCrfPosTagger.cc $(OPT)
 
 # shared code
-LatentCrfModel.o: FstUtils.o LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h core/BasicTypes.h
+LatentCrfModel.o: FstUtils.o LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h core/BasicTypes.h wammar-utils/StringUtils.h 
 	$(CC) $(BEFORE) $(SINGLE) core/LatentCrfModel.cc $(OPT)
 
 LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h core/BasicTypes.h core/VocabEncoder.h
@@ -34,5 +35,8 @@ FstUtils.o: wammar-utils/FstUtils.cc wammar-utils/FstUtils.h core/BasicTypes.h
 fdict.o:
 	$(CC) $(BEFORE) $(SINGLE) cdec-utils/fdict.cc $(OPT)
 
+lbfgs.o:
+	$(CC) $(BEFORE) $(SINGLE) /usr0/home/wammar/git/liblbfgs/lib/lbfgs.c $(OPT)
+
 clean:
-	rm -rf FstUtils.o HmmModel.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfPosTagger.o train-latentCrfPosTagger LatentCrfPosTagger.o IbmModel1.o
+	rm -rf FstUtils.o HmmModel.o fdict.o LogLinearParams.o LatentCrfModel.o train-latentCrfPosTagger.o train-latentCrfPosTagger LatentCrfPosTagger.o IbmModel1.o lbfgs.o

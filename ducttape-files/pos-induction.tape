@@ -97,7 +97,6 @@ task FeaturizedHmmPosInduction
 
 task GenerateWordpairFeats 
     < data_file=$autoencoder_text@PreprocessData 
-    :: embeddings_file=@
     :: brown_clusters_dir=@
     :: alignment_with_openfst_dir=@
     > wordpair_feats_file 
@@ -171,6 +170,7 @@ task AutoencoderPosInduction
   --min-relative-diff $min_relative_diff
   --max-iter-count 30
   --cache-feats false
+  --check-gradient true
   --optimizer adagrad --minibatch-size 8000
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count

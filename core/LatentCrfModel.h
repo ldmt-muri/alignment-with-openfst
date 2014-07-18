@@ -37,7 +37,7 @@
 #include "../cdec-utils/semiring.h"
 #include "../cdec-utils/fast_sparse_vector.h"
 
-#include "../wammar-utils/ClustersComparer.h"
+//#include "../wammar-utils/ClustersComparer.h"
 #include "../wammar-utils/StringUtils.h"
 #include "../wammar-utils/FstUtils.h"
 #include "../wammar-utils/LbfgsUtils.h"
@@ -192,6 +192,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   // configure lbfgs parameters according to the LearningInfo member of the model
   lbfgs_parameter_t SetLbfgsConfig();
+  void PrintLbfgsConfig(lbfgs_parameter_t &lbfgsParams);
 
   // (MINI)BATCH LEVEL
 

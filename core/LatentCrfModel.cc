@@ -264,34 +264,34 @@ void LatentCrfModel::ComputeF(unsigned sentId,
     
     // from each state at timestep i
     for(auto iStatesIter = iStates.begin(); 
-	iStatesIter != iStates.end(); 
-	iStatesIter++) {
+        iStatesIter != iStates.end(); 
+        iStatesIter++) {
       int fromState = *iStatesIter;
-
+      
       // for each arc leaving this state
       for(fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> > aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
-	FstUtils::LogArc arc = aiter.Value();
-	int yIM1 = arc.ilabel;
-	int yI = arc.olabel;
-	double arcWeight = arc.weight.Value();
-	int toState = arc.nextstate;
-
-	// compute marginal weight of passing on this arc
-	double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
-
-	// for each feature that fires on this arc
-	FastSparseVector<double> h;
-	FireFeatures(yI, yIM1, sentId, i, h);
-	for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
-	  // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
-	  if(FXk.find(h_k->first) == FXk.end()) {
-	    FXk[h_k->first] = LogVal<double>(0.0);
-	  }
-	  FXk[h_k->first] += LogVal<double>(-1.0 * nLogMarginal, init_lnx()) * LogVal<double>(h_k->second);
-	}
-
-	// prepare the schedule for visiting states in the next timestep
-	iP1States.insert(toState);
+        FstUtils::LogArc arc = aiter.Value();
+        int yIM1 = arc.ilabel;
+        int yI = arc.olabel;
+        double arcWeight = arc.weight.Value();
+        int toState = arc.nextstate;
+        
+        // compute marginal weight of passing on this arc
+        double nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
+        
+        // for each feature that fires on this arc
+        FastSparseVector<double> h;
+        FireFeatures(yI, yIM1, sentId, i, h);
+        for(FastSparseVector<double>::iterator h_k = h.begin(); h_k != h.end(); ++h_k) {
+          // add the arc's h_k feature value weighted by the marginal weight of passing through this arc
+          if(FXk.find(h_k->first) == FXk.end()) {
+            FXk[h_k->first] = LogVal<double>(0.0);
+          }
+          FXk[h_k->first] += LogVal<double>(-1.0 * nLogMarginal, init_lnx()) * LogVal<double>(h_k->second);
+        }
+        
+        // prepare the schedule for visiting states in the next timestep
+        iP1States.insert(toState);
       } 
     }
 
@@ -729,18 +729,22 @@ void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
         int testIndexesCount = 10;
         for(int i = 0; i < testIndexesCount; i++) {
           testIndexes.push_back( lambdasArrayLength / testIndexesCount * i );
+          //          testIndexes.push_back(i);
         }
         double epsilon = 0.00000001;
         for(int granularities = 0; granularities < 1; epsilon /= 10, granularities++) {
           CheckGradient(testIndexes, epsilon);
         }
       }
-
-
+      
       // only the master executes lbfgs
       int sentId = 0;
       lbfgs_parameter_t lbfgsParams = SetLbfgsConfig();
-      lbfgsParams.max_iterations *= 4;
+      lbfgsParams.max_iterations;
+      if(learningInfo.mpiWorld->rank() == 0) {
+        PrintLbfgsConfig(lbfgsParams);
+      }
+      
       int lbfgsStatus = lbfgs(lambdasArrayLength, lambdasArray, &nll, 
                               LbfgsCallbackEvalYGivenXLambdaGradient, LbfgsProgressReport, &sentId, &lbfgsParams);
 
@@ -752,10 +756,10 @@ void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
         int testIndexesCount = 10;
         for(int i = 0; i < testIndexesCount; i++) {
           testIndexes.push_back( lambdasArrayLength / testIndexesCount * i );
+          //testIndexes.push_back(i);
         }
         double epsilon = 0.00000001;
-        for(int granularities = 0; granularities < 2; epsilon /= 10, granularities++) {
-          cerr << "####granularities = " << granularities << ", epsilon = " << epsilon << endl;
+        for(int granularities = 0; granularities < 1; epsilon /= 10, granularities++) {
           CheckGradient(testIndexes, epsilon);
         }
       }
@@ -948,12 +952,13 @@ double LatentCrfModel::CheckGradient(vector<int> &testIndexes, double epsilon) {
 // this is needed for supervised training of the CRF
 // this function is not expected to be executed by any slave; only the master process with rank 0
 double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
-							       const double *lambdasArray,
-							      double *gradient,
-							      const int lambdasCount,
-							      const double step) {
-
+                                                              const double *lambdasArray,
+                                                              double *gradient,
+                                                              const int lambdasCount,
+                                                              const double step) {
+  
   LatentCrfModel &model = LatentCrfModel::GetInstance();
+
   // only the master executes the lbfgs() call and therefore only the master is expected to come here
   assert(model.learningInfo.mpiWorld->rank() == 0);
 
@@ -977,7 +982,7 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
   assert(reducedNll != -1);
   
   // fill in the gradient array allocated by lbfgs
-  cerr << "before l2 reg, reducednll = " << reducedNll;
+  cerr << ">>> before l2 reg: reducednll = " << reducedNll;
   double gradientL2Norm = 0.0;
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
     reducedNll = model.AddL2Term(reducedGradient, gradient, reducedNll, gradientL2Norm);
@@ -990,15 +995,15 @@ double LatentCrfModel::LbfgsCallbackEvalYGivenXLambdaGradient(void *uselessPtr,
       assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
     } 
   }
-  cerr << endl << "gradient l2 norm = " << gradientL2Norm << endl;
-  cerr << "after l2 reg, reducednll = " << reducedNll;
-
-  if(model.learningInfo.debugLevel == DebugLevel::MINI_BATCH) {
-    if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-      cerr << " l2 reg. objective = " << reducedNll << endl;
-    } else {
-      cerr << " unregularized objective = " << reducedNll << endl;	
+  cerr << ", after l2 reg: reducednll = " << reducedNll;
+  cerr << ", gradient l2 norm = " << gradientL2Norm << endl;
+  
+  if(model.learningInfo.checkGradient && model.learningInfo.mpiWorld->rank() == 0) {
+    cerr << endl << endl << "index\tid\tweight\tderivative" << endl;
+    for(int i = 0; i < model.lambda->paramIdsPtr->size(); ++i) {
+      cerr << i << "\t" << (*model.lambda->paramIdsPtr)[i] << "\t" << (*model.lambda->paramWeightsPtr)[i] << "\t" << gradient[i] << endl;
     }
+    cerr << endl << endl;
   }
 
   return reducedNll;
@@ -1333,7 +1338,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   
   // show progress
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH /* && model.learningInfo.mpiWorld->rank() == 0*/) {
-    cerr << endl << "rank" << model.learningInfo.mpiWorld->rank() << ": -report: coord-descent iteration # " << model.learningInfo.iterationsCount;
+    cerr << endl << "<<< " << model.learningInfo.mpiWorld->rank() << "report: coord-descent iteration # " << model.learningInfo.iterationsCount;
     cerr << " sents(" << from << "-" << to;
     cerr << ")\tlbfgs Iteration " << k;
     if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::NONE) {
@@ -1351,7 +1356,7 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   if(model.learningInfo.debugLevel >= DebugLevel::MINI_BATCH) {
     cerr << endl << endl;
   }
-
+  
   if(model.learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "done" << endl;
   }
@@ -1389,6 +1394,29 @@ void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
   nLogThetaGivenOneLabel = mleGivenOneLabel;
 }
 
+void LatentCrfModel::PrintLbfgsConfig(lbfgs_parameter_t &lbfgsParams) {
+  cerr << "============================" << endl;
+  cerr << "configurations for liblbfgs:" << endl;
+  cerr << "============================" << endl;
+  cerr << "lbfgsParams.m = " << lbfgsParams.m << endl;
+  cerr << "lbfgsParams.epsilon = " << lbfgsParams.epsilon << endl;
+  cerr << "lbfgsParams.past = " << lbfgsParams.past << endl;
+  cerr << "lbfgsParams.delta = " << lbfgsParams.delta << endl;
+  cerr << "lbfgsParams.max_iterations = " << lbfgsParams.max_iterations << endl;
+  cerr << "lbfgsParams.linesearch = " << lbfgsParams.linesearch << endl;
+  cerr << "lbfgsParams.max_linesearch = " << lbfgsParams.max_linesearch << endl;
+  cerr << "lbfgsParams.min_step = " << lbfgsParams.min_step << endl;
+  cerr << "lbfgsParams.max_step = " << lbfgsParams.max_step << endl;
+  cerr << "lbfgsParams.ftol = " << lbfgsParams.ftol << endl;
+  cerr << "lbfgsParams.wolfe = " << lbfgsParams.wolfe << endl;
+  cerr << "lbfgsParams.gtol = " << lbfgsParams.gtol << endl;
+  cerr << "lbfgsParams.xtol = " << lbfgsParams.xtol << endl;
+  cerr << "lbfgsParams.orthantwise_c = " << lbfgsParams.orthantwise_c << endl;
+  cerr << "lbfgsParams.orthantwise_start = " << lbfgsParams.orthantwise_start << endl;
+  cerr << "lbfgsParams.orthantwise_end = " << lbfgsParams.orthantwise_end << endl;
+  cerr << "============================" << endl;
+}
+
 lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   // lbfgs configurations
   lbfgs_parameter_t lbfgsParams;
@@ -1396,30 +1424,15 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig() {
   assert(learningInfo.optimizationMethod.subOptMethod != 0);
   lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
   lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
-  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": m = " << lbfgsParams.m  << endl;
-  }
   lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
-  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": xtol = " << lbfgsParams.xtol  << endl;
-  }
   lbfgsParams.max_linesearch = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration;
-  if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
-    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": max_linesearch = " << lbfgsParams.max_linesearch  << endl;
-  }
   switch(learningInfo.optimizationMethod.subOptMethod->regularizer) {
   case Regularizer::L1:
     lbfgsParams.orthantwise_c = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1Strength;
     assert(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.l1Strength == 
            learningInfo.optimizationMethod.subOptMethod->regularizationStrength);
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": orthantwise_c = " << lbfgsParams.orthantwise_c  << endl;
-    }
     // this is the only linesearch algorithm that seems to work with orthantwise lbfgs
-    lbfgsParams.linesearch = LBFGS_LINESEARCH_BACKTRACKING;
-    if(learningInfo.mpiWorld->rank() == 0 && learningInfo.debugLevel >= DebugLevel::CORPUS) {
-      cerr << "rank #" << learningInfo.mpiWorld->rank() << ": linesearch = " << lbfgsParams.linesearch  << endl;
-    }
+    lbfgsParams.linesearch = 0;//LBFGS_LINESEARCH_BACKTRACKING_STRONG_WOLFE;
     break;
   case Regularizer::L2:
   case Regularizer::WeightedL2:

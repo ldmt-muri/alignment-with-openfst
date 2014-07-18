@@ -1136,7 +1136,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
       return;
     }
   }
-  
+
   FeatureId featureId;
 
   std::vector<int> kValues;
@@ -1199,6 +1199,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         featureId.bigram.previous = yIM1;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
+        
         // label bias features
         //featureId.bigram.previous = -1;
         //AddParam(featureId);

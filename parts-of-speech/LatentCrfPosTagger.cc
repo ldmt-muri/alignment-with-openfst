@@ -297,7 +297,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
   
   // for each training example
   for(int sentId = fromSentId; sentId < toSentId; sentId++) {
-
+    
     // only process sentences for which there are gold labels
     if(sentId >= goldLabelSequences.size()) {
       break;
@@ -309,13 +309,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     }
     
     vector<int64_t> &tokens = GetObservableSequence(sentId);
-    /*if(sentId == 383) {
-      cerr << endl << "sentId=" << sentId << ", tokens=";
-      for(auto tokensIter = tokens.begin(); tokensIter != tokens.end(); ++tokensIter) {
-        cerr << vocabEncoder.Decode(*tokensIter) << " ";
-      }
-    }
-    */
+    
     vector<int> &labels = goldLabelSequences[sentId];
     if(tokens.size() != labels.size()) {
       cerr << "ERROR: the number of tokens = " << tokens.size() << " is different than the number of labels = " << labels.size() << " in sentId = " << sentId << endl;
@@ -335,7 +329,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     // compute the F map fro this sentence
     FastSparseVector<LogVal<double> > FSparseVector;
     ComputeF(sentId, lambdaFst, lambdaAlphas, lambdaBetas, FSparseVector);
-
+    
     // compute the Z value for this sentence
     double nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
     
@@ -353,7 +347,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     // the denominator
     double sentLevelObjective = -nLogZ; // this term should always be greater than the (supervision) other term
     objective -= nLogZ;
-
+    
     // subtract F/Z from the gradient
     for(FastSparseVector<LogVal<double> >::iterator fIter = FSparseVector.begin(); 
         fIter != FSparseVector.end(); ++fIter) {
@@ -367,10 +361,6 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
       }
       assert(fIter->first < derivativeWRTLambda.size());
 
-      /*if(sentId == 383) {
-        //cerr << "feature #" << fIter->first << " = " << (*lambda->paramIdsPtr)[fIter->first] << ", fOverZ = " << fOverZ << endl;
-        }*/
-      
       derivativeWRTLambda[fIter->first] += fOverZ;
       if(std::isnan(derivativeWRTLambda[fIter->first]) || 
          std::isinf(derivativeWRTLambda[fIter->first])) {
@@ -389,9 +379,10 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
       FireFeatures(labels[tokenIndex], prevLabel, sentId, tokenIndex, activeFeatures);
       prevLabel = labels[tokenIndex];
       // update objective
-      goldSequenceScore += lambda->DotProduct(activeFeatures);
-      sentLevelObjective -= lambda->DotProduct(activeFeatures);
-      objective -= lambda->DotProduct(activeFeatures);
+      double dotproduct = lambda->DotProduct(activeFeatures);
+      goldSequenceScore += dotproduct;
+      sentLevelObjective -= dotproduct;
+      objective -= dotproduct;
       // update gradient
       for(auto activeFeatureIndex = activeFeatures.begin(); 
           activeFeatureIndex != activeFeatures.end();
@@ -399,6 +390,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
         derivativeWRTLambda[activeFeatureIndex->first] -= activeFeatureIndex->second;
       }
     }
+    
     if(goldSequenceScore > -nLogZ) {
       cerr << "sentId=" << sentId << ": is gold score=" << goldSequenceScore << " <= logZ=" << -nLogZ << "?" << (goldSequenceScore < -nLogZ) << endl;
     }
