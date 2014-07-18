@@ -1,11 +1,16 @@
 global {
     # Output directory:
+<<<<<<< HEAD
     ducttape_output="/usr2/home/wammar/crf-auto-cs/ne"
+=======
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ne-folds"
+>>>>>>> a3e0570b0d1e0e03b49a755c20c7082d6fb453a6
 
     # general
     cores=10
 
     # data files
+<<<<<<< HEAD
     labeled_train_text="/usr0/home/wammar/git/cs-shared-task/splits/ne/ne.text_training_0"
     labeled_test_text="/usr0/home/wammar/git/cs-shared-task/splits/ne/ne.text_test_0"
     unlabeled_train_text="/usr0/home/wammar/git/cs-shared-task/splits/ne/ne.text_training_0"
@@ -13,6 +18,15 @@ global {
     labeled_test_labels="/usr0/home/wammar/git/cs-shared-task/splits/ne/ne.labels_test_0"
     tsv_template="/usr0/home/wammar/git/cs-shared-task/splits/ne/ne.labels_test.tsv_0"
       
+=======
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.sd"
+    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/unlabeled"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv"
+    
+>>>>>>> a3e0570b0d1e0e03b49a755c20c7082d6fb453a6
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian"
 
@@ -32,5 +46,9 @@ plan Full {
 }
 
 plan crfsuite {
+<<<<<<< HEAD
     reach Evaluate via (Model: crfsuite ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes no)
+=======
+    reach Evaluate via (Model: crfsuite ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes) * (Fold: 0 1 2) 
+>>>>>>> a3e0570b0d1e0e03b49a755c20c7082d6fb453a6
 }
