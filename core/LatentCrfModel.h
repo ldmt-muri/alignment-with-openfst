@@ -306,10 +306,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // assumptions: 
   // - fst is populated using BuildLambdaFst()
   // - FXZk is cleared
-  void ComputeF(unsigned sentId, 
+  void ComputeFOverZ(unsigned sentId, 
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
-		FastSparseVector<LogVal<double> > &FXZk);
+		FastSparseVector<double> &FXZk);
 
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()

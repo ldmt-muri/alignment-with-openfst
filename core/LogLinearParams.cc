@@ -651,6 +651,33 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
   return returnValue;
 }
 
+// samples uniformly from each feature template
+// the returned vector will be of length max(sampleSize, # of unique feature templates)
+vector<int> LogLinearParams::SampleFeatures(int sampleSize) {
+  assert(sealed);
+  map<FeatureTemplate, int> templateToCount;
+  set<int> sampledIndexes;
+  // first, explore all the feature templates available
+  for(int index = 0; index < paramIdsPtr->size(); ++index) {
+    if( templateToCount.count( (*paramIdsPtr)[index].type ) == 0 ) {
+      sampledIndexes.insert(index);
+      templateToCount[ (*paramIdsPtr)[index].type ] = 1;
+    }
+  }
+  // then, sample more
+  for(int index = 0; index < paramIdsPtr->size(); ++index) {
+    if( templateToCount[ (*paramIdsPtr)[index].type ] < sampleSize / templateToCount.size() + 1 &&
+        sampledIndexes.find(index) == sampledIndexes.end()) {
+      sampledIndexes.insert(index);
+      templateToCount[ (*paramIdsPtr)[index].type ]++;
+    }
+  }
+  // return
+  vector<int> returnValue;
+  std::copy(sampledIndexes.begin(), sampledIndexes.end(), std::back_inserter(returnValue));
+  return returnValue;
+}
+
 void LogLinearParams::PrintFeatureValues(FastSparseVector<double> &feats) {
   assert(sealed);
   cerr << "active features are: " << endl;
