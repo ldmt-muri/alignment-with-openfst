@@ -1251,6 +1251,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
       break;
 
       case FeatureTemplate::OTHER_ALIGNERS:
+        std::hash<string> hash_fn;
         for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
         assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
         if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
