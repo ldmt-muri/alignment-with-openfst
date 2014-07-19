@@ -5,6 +5,9 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
+   brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
+   wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+   alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
    featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
    evaluation_script_dir="/usr0/home/chuchenl/git/cs-shared-task/Evaluation/Scripts/"
    cs_sharedtask_dir="/usr0/home/chuchenl/git/cs-shared-task"
@@ -20,11 +23,11 @@ global {
   test_with_crf_only=true
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix="cs-wammar"
-  fire_precomputed_features_for_xim2=""
-  fire_precomputed_features_for_xim1=""
-  fire_precomputed_features_for_xip1=""
-  fire_precomputed_features_for_xip2=""
+  prefix="cs-chucheng"
+  #fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
+  fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
+  fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
+  #fire_precomputed_features_for_xip2=(FirePrecomputedFeaturesForXIP2: no="" yes=yes)
   reconstruct_brown_clusters=(ReconstructBrownClusters: yes=1 no="")
   is_crfsuite=(Model: autoencoder="" crfsuite="--crfsuite")
   embeddings=(UseEmbeddings: yes="-e" no="")
@@ -152,7 +155,7 @@ task BuildLatentCrfPosTagger
     > executable
    # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=1g .q=shared 
 {
-  #source ~/.profile
+  source ~/.profile
   pushd $alignment_with_openfst_dir
   #make clean -f Makefile-latentCrfPosTagger
   make -f Makefile-latentCrfPosTagger
@@ -192,12 +195,7 @@ task AutoencoderPosInduction
     > out_err 
     > auto_test_labels
     < pred_ldig=$pred_ldig@PreprocessData
-<<<<<<< HEAD
-    
-=======
     < pred_cld2=$pred_cld2@PreprocessData
-    # > hmm_ll
->>>>>>> a3e0570b0d1e0e03b49a755c20c7082d6fb453a6
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
   variational="true"
@@ -301,7 +299,6 @@ task AutoencoderPosInduction
   # head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
   tail -n $actual_test_size $prefix.labels > $auto_test_labels
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
-
 }
 
 task TestCRFSuite

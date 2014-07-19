@@ -5,9 +5,6 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
-   brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
-   wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
-   alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
    featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
    evaluation_script_dir="/usr0/home/chuchenl/git/cs-shared-task/Evaluation/Scripts/"
    cs_sharedtask_dir="/usr0/home/chuchenl/git/cs-shared-task"
@@ -24,13 +21,12 @@ global {
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
   prefix="cs-chucheng"
-  fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
-  fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
-  fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
-  fire_precomputed_features_for_xip2=(FirePrecomputedFeaturesForXIP2: no="" yes=yes)
+  fire_precomputed_features_for_xim2=(XIM2: no="" yes=yes)
+  fire_precomputed_features_for_xim1=(XIM1: no="" yes=yes)
+  fire_precomputed_features_for_xip1=(XIP1: no="" yes=yes)
+  fire_precomputed_features_for_xip2=(XIP2: no="" yes=yes)
   reconstruct_brown_clusters=(ReconstructBrownClusters: yes=1 no="")
   is_crfsuite=(Model: autoencoder="" crfsuite="--crfsuite")
-  embeddings=(UseEmbeddings: yes="-e" no="")
 }
 
 #import ../submitters.tape
@@ -131,7 +127,6 @@ task FeaturizedHmmPosInduction
 
 task GenerateWordpairFeats 
     < data_file=$autoencoder_text@PreprocessData
-    :: embeddings=@
     :: embeddings_file=@
     :: brown_clusters_dir=@
     :: alignment_with_openfst_dir=@
@@ -145,8 +140,22 @@ task GenerateWordpairFeats
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
-  # python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
-  python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels -w $word_list $embeddings $embeddings_file
+  command="python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels"
+
+  if [[ $paths ]]; then
+    command="$command -b $paths";
+  fi
+
+  if [[ $word_list ]]; then
+    command="$command -w $word_list";
+  fi
+
+  if [[ $embeddings_file ]]; then
+    command="$command -e $embeddings_file"
+  fi
+
+  echo "$command" > command
+  $command
 } 
 
 task GenerateCRFSuiteInput
@@ -217,7 +226,6 @@ task AutoencoderPosInduction
     # > hmm_labels 
     > autoencoder_labels 
     > out_err 
-    > autoencoder_ll
     > auto_test_labels
     < pred_ldig=$pred_ldig@PreprocessData
     < pred_cld2=$pred_cld2@PreprocessData

@@ -6,36 +6,19 @@ global {
     cores=20
 
     # data files
-    labeled_train_text=(Fold:
-    0="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd_0"
-    1="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd_1"
-    2="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd_2"
-    )
-
-    labeled_test_text=(Fold:
-    0="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd_0"
-    1="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd_1"
-    2="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd_2"
-    )
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd"
     unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar/unlabeled"
-    labeled_train_labels=(Fold:
-    0="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels_0"
-    1="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels_1"
-    2="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels_2"
-    )
-    labeled_test_labels=(Fold:
-    0="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels_0"
-    1="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels_1"
-    2="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels_2"
-    )
-    tsv_template=(Fold:
-    0="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv_0"
-    1="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv_1"
-    2="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv_2"
-    )
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv"
     
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
-    word_list="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian"
+    word_list=(UseWL: yes="/usr1/home/wammar/monolingual/plain-ar/news-commentary-v8.ar" no="")
+
+    brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
+    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
     supervised=1
@@ -45,9 +28,9 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no)
 }
 
 plan crfsuite {
-    reach Evaluate via (Model: crfsuite ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes no) * (Fold: 0 1 2)
+    reach Evaluate via (Model: crfsuite ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes) * (UseWL: yes no) * (Fold: 0 1 2)
 }

@@ -30,6 +30,7 @@ def get_dict_features(w, s, dict_name=u'words'):
 
 def get_words(sd_filename, building=None):
     from io import open
+
     if building is None:
         to_return = set()
     else:
@@ -75,7 +76,9 @@ if args.training_labels is not None and len(args.training_labels) > 0:
 else:
     l1_words = None
 
-if len(args.word_list) > 0:
+word_lists = []
+
+if args.word_list is not None and len(args.word_list) > 0:
     word_list = set()
 
     for f in args.word_list:
@@ -84,10 +87,14 @@ if len(args.word_list) > 0:
                 words_in_wordlist = l.lstrip().strip().split()
                 # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
                 word_list.update(words_in_wordlist)
+    word_lists.append(word_list)
 else:
-    word_list = None
+    word_lists = None
 
-brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
+if args.brown_filename is not None and len(args.brown_filename) > 0:
+    brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
+else:
+    brown_file = None
 
 embedding_model = util.load_embedding_model(args.embedding_filename)
 (words, nes) = load_dict(args.dict_filename)
@@ -106,25 +113,26 @@ quadgram_counts = Counter()
 counter = 0
 brown_paths = defaultdict(unicode)
 brown_freq = defaultdict(int)
-for line in brown_file:
-    counter += 1
-    splits = line.split('\t')
-    if len(splits) != 3:
-        print 'len(splits) = ', len(splits), ' at line ', counter
-        print splits
-        assert False
-    cluster, word, frequency = splits
+if brown_file is not None:
+    for line in brown_file:
+        counter += 1
+        splits = line.split('\t')
+        if len(splits) != 3:
+            print 'len(splits) = ', len(splits), ' at line ', counter
+            print splits
+            assert False
+        cluster, word, frequency = splits
 
-    brown_paths[word] = cluster
-    brown_freq[word] = frequency
-    for suffix_length in range(1, 4):
-        if len(word) > suffix_length:
-            suffix_counts[word[-suffix_length:]] += 1
-    for prefix_length in range(1, 4):
-        if len(word) > prefix_length:
-            prefix_counts[word[:prefix_length]] += 1
-    trigram_counts.update(util.get_char_ngrams(word, 3))
-    quadgram_counts.update(util.get_char_ngrams(word, 4))
+        brown_paths[word] = cluster
+        brown_freq[word] = frequency
+        for suffix_length in range(1, 4):
+            if len(word) > suffix_length:
+                suffix_counts[word[-suffix_length:]] += 1
+        for prefix_length in range(1, 4):
+            if len(word) > prefix_length:
+                prefix_counts[word[:prefix_length]] += 1
+        trigram_counts.update(util.get_char_ngrams(word, 3))
+        quadgram_counts.update(util.get_char_ngrams(word, 4))
 min_suffix_count = 0
 min_prefix_count = 0
 min_ngram_count = 0
@@ -140,8 +148,9 @@ for word in word_set:
     features.update(get_dict_features(word, nes, dict_name=u'nes'))
     if l1_words is not None:
         features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
-    if word_list is not None:
-        features.update(get_dict_features(word, word_list, dict_name=u'in_provided'))
+    if word_lists is not None:
+        for idx, word_list in enumerate(word_lists):
+            features.update(get_dict_features(word, word_list, dict_name=u'in_provided_wl_{}'.format(idx)))
 
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1
