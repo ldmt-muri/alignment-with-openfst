@@ -342,7 +342,7 @@ task AutoencoderPosInduction
   fi
 
   if [[ $phrase_list ]]; then
-    command="$command --phrase-list-filenames $phrase_list"
+    command="$command --phrase-list-filenames $phrase_list --feat PHRASE"
   fi
 
   echo "executing $command..."
