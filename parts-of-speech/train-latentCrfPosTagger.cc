@@ -61,6 +61,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     REVERSE = "reverse",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
+    PHRASE_LIST_FILENAMES = "phrase-list-filenames",
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     GOLD_LABELS_FILENAME = "gold-labels-filename",
     TAG_DICT_FILENAME = "tag-dict-filename",
@@ -97,6 +98,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (TEST_WITH_CRF_ONLY.c_str(), po::value<bool>(&learningInfo.testWithCrfOnly)->default_value(false), "(bool) (defaults to false) only use the crf model (i.e. not the multinomials) to make predictions.")
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
+    (PHRASE_LIST_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.phraseListFilenames), "(multiple strings) specifies filenames which are phrase lists")
     (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     (GOLD_LABELS_FILENAME.c_str(), po::value<string>(&goldLabelsFilename), "(string) specifies filename of the hand-annotated POS tags corresponding to training data") 
     (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
@@ -195,6 +197,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     } else if(*featIter == "OTHER_ALIGNERS") {
       // TODO this is a very dirty hack
       learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_POS);
+    } else if(*featIter == "PHRASE") {
+        learningInfo.featureTemplates.push_back(FeatureTemplate::PHRASE);
     } else if(*featIter == "NULL_ALIGNMENT") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
@@ -256,6 +260,11 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
         filename != learningInfo.otherAlignersOutputFilenames.end(); ++filename) {
+      cerr << *filename << " ";
+    }
+    cerr << PHRASE_LIST_FILENAMES << "=";
+    for(auto filename = learningInfo.phraseListFilenames.begin();
+        filename != learningInfo.phraseListFilenames.end(); ++filename) {
       cerr << *filename << " ";
     }
     cerr << endl;

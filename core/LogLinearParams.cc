@@ -172,6 +172,12 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
   case FeatureTemplate::NULL_ALIGNMENT_LENGTH_RATIO:
     os << "NULL_ALIGNMENT_LENGTH_RATIO";
     break;
+  case FeatureTemplate::PHRASE:
+    os << "PHRASE" << '|' << obj.phraseListFeature.bigramInContext
+       << '|' << obj.phraseListFeature.imLabel << '|' 
+       << obj.phraseListFeature.label << '|' 
+       << obj.phraseListFeature.phraseListId;
+    break;
   default:
     assert(false);
   }
@@ -491,11 +497,47 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
 
 void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo, bool otherForPos) {
     this->learningInfo = &learningInfo;
+    LoadPhrases();
     if (otherForPos) {
         LoadPosOutput();
     } else {
         // load word alignments of other aligners
         LoadOtherAlignersOutput();
+    }
+}
+
+void LogLinearParams::LoadPhrases() {
+    std::hash<string> hash_fn;
+    const string init ("^");
+    if (learningInfo->phraseListFilenames.size() > 0) {
+        for (auto filenameIter = std::begin(learningInfo->phraseListFilenames);
+                filenameIter != std::end(learningInfo->phraseListFilenames); 
+                filenameIter++) {
+            cerr << "phrase list filename " << *filenameIter << endl;
+            auto bigrams = new set<size_t>();
+            std::ifstream infile(filenameIter->c_str());
+            std::string line;
+            while (std::getline(infile, line)) {
+                vector<std::string> parts;
+                StringUtils::SplitString(line, ' ', parts);
+                // add bigram to the set bigrams
+                
+                for(auto it = std::begin(parts); it != std::end(parts); it++) {
+                    string combined;
+                    if(it==std::begin(parts)){
+                        combined = init + *it;
+                    }
+                    else {
+                        auto p = std::prev(it,1);
+                        combined = *p + "_" + *it;
+                    }
+                    to_lower(combined);
+                    bigrams->insert(hash_fn(combined));
+                }
+            }
+            phraseBigrams.push_back(bigrams);
+        }
+        
     }
 }
 
@@ -1139,7 +1181,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, const vector<int64_t> &x_t,
 // features for the latent crf model
 void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<int64_t> &x, unsigned i, 
 				   FastSparseVector<double> &activeFeatures) {
-
+    // assert(sentId == learningInfo->currentSentId);
   const int64_t &xI = x[i];
   const int64_t &xIM1 = i >= 1? x[i-1] : -1;
   const int64_t &xIM2 = i >= 2? x[i-2] : -1;
@@ -1167,7 +1209,7 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
   FeatureId featureId;
 
   std::vector<int> kValues;
- 
+  std::hash<string> hash_fn;
   for(auto featTemplateIter = learningInfo->featureTemplates.begin();
       featTemplateIter != learningInfo->featureTemplates.end(); 
       ++featTemplateIter) {
@@ -1251,13 +1293,12 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
       break;
 
       case FeatureTemplate::OTHER_ALIGNERS:
-        std::hash<string> hash_fn;
         for(unsigned alignerId = 0; alignerId < otherAlignersOutput.size(); alignerId++) {
-        assert(learningInfo->currentSentId < (int)otherAlignersOutput[alignerId]->size());
-        if( (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId]).size() <= i ) {
+        assert(sentId < (int)otherAlignersOutput[alignerId]->size());
+        if( (*(*otherAlignersOutput[alignerId])[sentId]).size() <= i ) {
           continue;
         }
-        auto woodAlignments = (*(*otherAlignersOutput[alignerId])[learningInfo->currentSentId])[i];
+        auto woodAlignments = (*(*otherAlignersOutput[alignerId])[sentId])[i];
         featureId.type = FeatureTemplate::OTHER_ALIGNERS;
         featureId.otherAligner.compatible = woodAlignments->count(yI) == 1 || \
           (yI == 0 && woodAlignments->size() == 0);
@@ -1268,19 +1309,19 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
       break;
 
     case FeatureTemplate::OTHER_POS:
-        std::hash<string> hash_fn;
         for (unsigned posId = 0; posId < otherPOSOutput.size(); posId++) {
-            if ((*otherPOSOutput[posId])[learningInfo->currentSentId].size() <= i)
+            if ((*otherPOSOutput[posId])[sentId].size() <= i)
                 continue;
-            auto otherPred = (*otherPOSOutput[posId])[learningInfo->currentSentId][i];
+            auto otherPred = (*otherPOSOutput[posId])[sentId][i];
             featureId.type = FeatureTemplate::OTHER_POS;
             featureId.otherPos.posId = posId; // predictor ID
             featureId.otherPos.pred_hash = hash_fn(otherPred); // otherPred can be 'en', 'es', ...
             featureId.otherPos.label = yI; // lang1, lang2
             AddParam(featureId);
-         // activeFeatures[paramIndexes[featureId]] += (1.0/double(x.size()));
-        activeFeatures[paramIndexes[featureId]] += 1.0;
+            // activeFeatures[paramIndexes[featureId]] += (1.0/double(x.size()));
+            activeFeatures[paramIndexes[featureId]] += 1.0;
         }
+
         break;
 
     case FeatureTemplate::BOUNDARY_LABELS:
@@ -1292,7 +1333,46 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
-      
+    case FeatureTemplate::PHRASE:
+            {
+                // cerr << "phrase fired\n";
+                size_t bigram_hash_init;
+                size_t bigram_hash;
+                if (this->concatMap.count(std::make_pair(-1, x[i])) == 0) {
+                    const string init = "^";
+                    auto combined_init = string(init + FeatureId::vocabEncoder->Decode(x[i]));
+                    boost::algorithm::to_lower(combined_init);
+                    this->concatMap.insert(std::make_pair(std::make_pair(-1, x[i]), hash_fn(combined_init)));
+                }
+                bigram_hash_init = this->concatMap.at(std::make_pair(-1, x[i]));
+
+                if (i > 0) {
+                    if (this->concatMap.count(std::make_pair(x[i - 1], x[i])) == 0) {
+                        auto combined = FeatureId::vocabEncoder->Decode(x[i - 1]) + "_" + FeatureId::vocabEncoder->Decode(x[i]);
+                        boost::algorithm::to_lower(combined);
+                        this->concatMap.insert(std::make_pair(std::make_pair(x[i - 1], x[i]), hash_fn(combined)));
+                    }
+                    bigram_hash = this->concatMap.at(std::make_pair(x[i - 1], x[i]));
+                } else {
+                    bigram_hash = 0;
+                }
+                for (unsigned listId = 0; listId < phraseBigrams.size(); listId++) {
+                    featureId.type = FeatureTemplate::PHRASE;
+                    featureId.phraseListFeature.phraseListId = listId;
+                    featureId.phraseListFeature.label = yI;
+                    featureId.phraseListFeature.imLabel = yIM1;
+                    if (phraseBigrams[listId]->find(bigram_hash) != phraseBigrams[listId]->end() \
+                || phraseBigrams[listId]->find(bigram_hash_init) != phraseBigrams[listId]->end()) {
+                        featureId.phraseListFeature.bigramInContext = true;
+                    } else {
+                        featureId.phraseListFeature.bigramInContext = false;
+                    }
+                    AddParam(featureId);
+                    activeFeatures[paramIndexes[featureId]] += 1.0;
+                }
+                // cerr << "ended phrase fired\n";
+                break;
+            }
     default:
       assert(false);
       

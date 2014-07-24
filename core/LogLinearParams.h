@@ -9,6 +9,7 @@
 #include <cmath>
 #include <functional>
 #include <utility>
+#include <exception>
 
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/shared_memory_object.hpp>
@@ -24,6 +25,7 @@
 #include <boost/unordered_map.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/text_iarchive.hpp>
+#include <boost/algorithm/string.hpp> 
 //#include "boost/archive/binary_oarchive.hpp"
 //#include "boost/archive/binary_iarchive.hpp"
 
@@ -61,6 +63,7 @@ public:
     struct { unsigned alignerId; bool compatible; } otherAligner; // use the compatible attribute this way: if other_pred == pred , set true otherwise false
     struct { int position; int label; } boundaryLabel;
     struct { unsigned posId; size_t pred_hash; int label;} otherPos;
+    struct { bool bigramInContext; unsigned phraseListId; int label; int imLabel;} phraseListFeature;
   };
 
   friend inline std::istream& operator>>(std::istream& is, FeatureId& obj)
@@ -76,6 +79,7 @@ public:
       temp == "EMISSION"? FeatureTemplate::EMISSION:
       temp == "LABEL_BIGRAM"? FeatureTemplate::LABEL_BIGRAM:
       temp == "OTHER_POS"? FeatureTemplate::OTHER_POS:
+      temp == "PHRASE"? FeatureTemplate::PHRASE:
       temp == "SRC_BIGRAM"? FeatureTemplate::SRC_BIGRAM:
       temp == "ALIGNMENT_JUMP"? FeatureTemplate::ALIGNMENT_JUMP:
       temp == "LOG_ALIGNMENT_JUMP"? FeatureTemplate::LOG_ALIGNMENT_JUMP:
@@ -191,6 +195,13 @@ public:
       tempSS.str(splits[2]); tempSS >> obj.otherPos.label;
       tempSS.str(splits[3]); tempSS >> obj.otherPos.pred_hash;
       break;
+    case FeatureTemplate::PHRASE:
+        tempSS.str(splits[1]); 
+        tempSS >> obj.phraseListFeature.bigramInContext;
+        tempSS >> obj.phraseListFeature.imLabel;
+        tempSS >> obj.phraseListFeature.label;
+        tempSS >> obj.phraseListFeature.phraseListId;
+        break;
     case FeatureTemplate::SYNC_START:
     case FeatureTemplate::SYNC_END:
     case FeatureTemplate::NULL_ALIGNMENT:
@@ -276,6 +287,12 @@ public:
       ar & otherPos.pred_hash;
       ar & otherPos.label;
       break;
+        case FeatureTemplate::PHRASE:
+            ar & phraseListFeature.bigramInContext;
+            ar & phraseListFeature.imLabel;
+            ar & phraseListFeature.label;
+            ar & phraseListFeature.phraseListId;
+      break;
     default:
       assert(false);
     }
@@ -359,7 +376,12 @@ public:
       return otherPos.posId < rhs.otherPos.posId || \
         (otherPos.posId == rhs.otherPos.posId && otherPos.pred_hash < rhs.otherPos.pred_hash) || \
         (otherPos.posId == rhs.otherPos.posId && otherPos.pred_hash == rhs.otherPos.pred_hash && otherPos.label < rhs.otherPos.label);
-      
+        case PHRASE:
+            return phraseListFeature.phraseListId < rhs.phraseListFeature.phraseListId || \
+            (phraseListFeature.phraseListId == rhs.phraseListFeature.phraseListId && rhs.phraseListFeature.bigramInContext == true) || \
+            (phraseListFeature.phraseListId == rhs.phraseListFeature.phraseListId && phraseListFeature.bigramInContext == false && phraseListFeature.imLabel < rhs.phraseListFeature.imLabel) || \
+            (phraseListFeature.phraseListId == rhs.phraseListFeature.phraseListId && phraseListFeature.bigramInContext == false && phraseListFeature.imLabel == rhs.phraseListFeature.imLabel && phraseListFeature.label < rhs.phraseListFeature.label);
+            break;
       default:
         assert(false);
     }
@@ -433,6 +455,11 @@ public:
       return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
     case OTHER_POS:
       return otherPos.posId != rhs.otherPos.posId || otherPos.pred_hash != rhs.otherPos.pred_hash || otherPos.label != rhs.otherPos.label;
+        case PHRASE:
+            return phraseListFeature.bigramInContext != rhs.phraseListFeature.bigramInContext || \
+                   phraseListFeature.imLabel != rhs.phraseListFeature.imLabel || \
+                   phraseListFeature.label != rhs.phraseListFeature.label || \
+                   phraseListFeature.phraseListId != rhs.phraseListFeature.phraseListId;
         default:
       assert(false);
     }
@@ -517,6 +544,12 @@ public:
 	  boost::hash_combine(seed, x.otherPos.pred_hash);
 	  boost::hash_combine(seed, x.otherPos.label);
           break;
+          case PHRASE:
+              boost::hash_combine(seed, x.phraseListFeature.bigramInContext);
+              boost::hash_combine(seed, x.phraseListFeature.imLabel);
+              boost::hash_combine(seed, x.phraseListFeature.label);
+              boost::hash_combine(seed, x.phraseListFeature.phraseListId);
+              break;
         default:
           assert(false);
       }
@@ -597,6 +630,12 @@ public:
 	  left.otherPos.pred_hash == right.otherPos.pred_hash && \
           left.otherPos.label == right.otherPos.label;
 	  break;
+          case FeatureTemplate::PHRASE:
+              return left.phraseListFeature.bigramInContext == right.phraseListFeature.bigramInContext && \
+                     left.phraseListFeature.imLabel == right.phraseListFeature.imLabel && \
+                     left.phraseListFeature.label == right.phraseListFeature.label && \
+                     left.phraseListFeature.phraseListId == right.phraseListFeature.phraseListId;
+              break;
         default:
           assert(false);
       }
@@ -695,6 +734,9 @@ class LogLinearParams {
   
   // load the word alignments when available
   void LoadOtherAlignersOutput();
+  
+  // load phrase lists
+  void LoadPhrases();
 
     // given the description of one transition on the alignment FST, find the features that would fire along with their values
     void FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
@@ -800,9 +842,14 @@ class LogLinearParams {
   // for each other POS output, for each sentence, for each token, determines the predicted label
   std::vector< std::vector< std::vector< string > >* > otherPOSOutput;
   
+  // for each word see if it fires a bigram (or unigram if at sentence initial) in a list
+  std::vector< std::set<size_t>* > phraseBigrams;
+  
   boost::unordered_map< std::pair<int64_t, int64_t>, OuterMappedType*> cacheWordPairFeatures;
  
   boost::unordered_map< PosFactorId, FastSparseVector<double>, PosFactorId::PosFactorHash, PosFactorId::PosFactorEqual > posFactorIdToFeatures;
+  
+  boost::unordered_map<std::pair<int64_t, int64_t>, size_t> concatMap;
  
   unordered_map_featureId_double featureGaussianMeans;
 

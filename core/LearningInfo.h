@@ -374,6 +374,9 @@ class LearningInfo {
 
   // the filenames specifying output of other word aligners for this dataset
   vector< string > otherAlignersOutputFilenames;
+  
+  // phrase list filenames
+  vector< string > phraseListFilenames;
 
   // the id of the sentence pair currently being processed
   int currentSentId;
