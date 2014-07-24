@@ -27,6 +27,7 @@ global {
   fire_precomputed_features_for_xip2=(XIP2: no="" yes=yes)
   reconstruct_brown_clusters=(ReconstructBrownClusters: yes=1 no="")
   is_crfsuite=(Model: autoencoder="" crfsuite="--crfsuite")
+  test_only=(Fold: 0="" 1="" 2="" test="yes")
 }
 
 #import ../submitters.tape
@@ -37,18 +38,31 @@ task PickFold
     :: labeled_train_labels=@
     :: labeled_test_labels=@
     :: tsv_template=@ 
+    :: unlabeled_test_text=@
+    :: unlabeled_test_labels=@
+    :: unlabeled_test_tsv=@
     > labeled_train_text_f
     > labeled_test_text_f
     > labeled_train_labels_f
     > labeled_test_labels_f
     > tsv_template_f
-    :: fold=(Fold: 0="0" 1="1" 2="2" )
+    :: fold=(Fold: 0="0" 1="1" 2="2" test="")
+    :: test_only=@
     {
-      cp ${labeled_train_text}_${fold} $labeled_train_text_f
-      cp ${labeled_test_text}_${fold} $labeled_test_text_f
-      cp ${labeled_train_labels}_${fold} $labeled_train_labels_f
-      cp ${labeled_test_labels}_${fold} $labeled_test_labels_f
-      cp ${tsv_template}_${fold} $tsv_template_f
+      if [[ $test_only ]]; then
+          # TODO fix the variable names
+          cat ${labeled_test_text}_0 ${labeled_test_text}_1 ${labeled_test_text}_2 > $labeled_train_text_f
+          cat ${labeled_test_labels}_0 ${labeled_test_labels}_1 ${labeled_test_labels}_2 > $labeled_train_labels_f
+          cp ${unlabeled_test_text} $labeled_test_text_f
+          cp ${unlabeled_test_labels} $labeled_test_labels_f
+          cp ${unlabeled_test_tsv} $tsv_template_f
+      else
+          cp ${labeled_train_text}_${fold} $labeled_train_text_f
+          cp ${labeled_test_text}_${fold} $labeled_test_text_f
+          cp ${labeled_train_labels}_${fold} $labeled_train_labels_f
+          cp ${labeled_test_labels}_${fold} $labeled_test_labels_f
+          cp ${tsv_template}_${fold} $tsv_template_f
+      fi
     }
 
 
@@ -135,6 +149,7 @@ task GenerateWordpairFeats
     < labeled_test_text=$labeled_test_text_f@PickFold
     < labeled_train_labels=$labeled_train_labels_f@PickFold
     :: word_list=@
+    :: arabic_morph=@
     > wordpair_feats_file 
     > paths
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
@@ -151,7 +166,11 @@ task GenerateWordpairFeats
   fi
 
   if [[ $embeddings_file ]]; then
-    command="$command -e $embeddings_file"
+    command="$command -e $embeddings_file";
+  fi
+
+  if [[ $arabic_morph ]]; then
+    command="$command -a";
   fi
 
   echo "$command" > command
@@ -219,6 +238,7 @@ task AutoencoderPosInduction
     :: fire_precomputed_features_for_xip1=@
     :: fire_precomputed_features_for_xip2=@
     :: tag_dict_file=@
+    :: phrase_list=@
     < labeled_test_text=$labeled_test_text_f@PickFold
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
@@ -321,6 +341,10 @@ task AutoencoderPosInduction
     command="$command --tag-dict-filename tag_dict_file.cased"
   fi
 
+  if [[ $phrase_list ]]; then
+    command="$command --phrase-list-filenames $phrase_list"
+  fi
+
   echo "executing $command..."
   $command 2> $out_err
 
@@ -350,18 +374,23 @@ task TestCRFSuite
   crfsuite tag -m $model -t $test > $test_results
 }
 
-task Evaluate
-    < gold_tsv=$gold_tsv@PreprocessData
-    < tsv_template=$tsv_template_f@PickFold
-    :: cs_sharedtask_dir=@
-    :: evaluation_script_dir=@
-    :: is_crfsuite=@
-    < results=(Model: autoencoder=$auto_test_labels@AutoencoderPosInduction
+task GenerateForSubmission
+  :: is_crfsuite=@
+  :: cs_sharedtask_dir=@
+  < tsv_template=$tsv_template_f@PickFold
+  < results=(Model: autoencoder=$auto_test_labels@AutoencoderPosInduction
                       crfsuite=$test_results@TestCRFSuite)
-    > eval_results
-    > test_tsv
+  > test_tsv
 {
   # converts autoencoder output to tsv
   python $cs_sharedtask_dir/crf_labels_to_tsv.py $results $tsv_template $test_tsv $is_crfsuite
+}
+
+task Evaluate
+    < gold_tsv=$gold_tsv@PreprocessData
+    < test_tsv=$test_tsv@GenerateForSubmission
+    :: evaluation_script_dir=@
+    > eval_results
+{
   perl $evaluation_script_dir/evaluateOffsets.pl $test_tsv $gold_tsv $eval_results 
 }

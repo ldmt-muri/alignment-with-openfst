@@ -1,22 +1,21 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ne"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/zh"
 
     # general
     cores=20
 
     # data files
-    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd"
-    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/unlabeled"
-    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels"
-    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels"
-    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv"
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/training_zh.sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.sd"
+    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/unlabeled"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/training_zh.labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.labels"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.labels.tsv"
+    unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.sd_0"
+    unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.labels_0"
+    unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.labels.tsv_0"
     
-    unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.sd_0"
-    unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.labels_0"
-    unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.labels.tsv_0"
-
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model_cjk" no="")
     word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
 
@@ -31,6 +30,10 @@ global {
     lbfgs_itercount=200
 
     arabic_morph=""
+}
+
+plan testWordFeats {
+    reach GenerateWordpairFeats
 }
 
 plan Full {

@@ -1,29 +1,47 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/cs-es"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/es"
 
     # general
-    cores=20
+    cores=15
 
     # data files
-    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.sd_0"
-    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.sd_0"
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.sd"
     unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/unlabeled"
-    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.labels_0"
-    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels_0"
-    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels.tsv_0"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels.tsv"
     
-    embeddings_file="/usr0/home/chuchenl/git/tweet-embedding/w2v_model"
-    word_list="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian"
+    unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/es/es.sd_0"
+    unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/es/es.labels_0"
+    unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/es/es.labels.tsv_0"
+
+    embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
+    word_list=(UseWL: yes="/usr1/home/wammar/monolingual/plain-es/news-commentary-v8.es" no="")
+    phrase_list=(UseWL: yes="/mal2/corpora/wikipedia/dumps/es/titles" no="")
+
+    arabic_morph=""
+
+    brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
+    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
     supervised=1
 
     labels_count=6
-    lbfgs_itercount=200
+    lbfgs_itercount=300
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 0 1 2) * (UseEmbeddings: yes) * (XIM1: yes) * (XIM2: yes) * (XIP1: yes) * (XIP2: yes)
 }
 
+plan submission {
+    reach GenerateForSubmission via (Model: crfsuite) * (Fold: test)
+}
+
+plan crfsuite {
+    reach Evaluate via (Model: crfsuite ) * (UseEmbeddings: yes) * (UseWL: yes) * (Fold: 0 1 2)
+}
