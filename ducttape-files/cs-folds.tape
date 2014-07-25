@@ -20,7 +20,7 @@ global {
   test_with_crf_only=true
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix="cs-chucheng"
+  prefix="cs-wammar2"
   fire_precomputed_features_for_xim2=(XIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(XIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(XIP1: no="" yes=yes)
@@ -206,7 +206,7 @@ task BuildLatentCrfPosTagger
     > executable
    # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=1g .q=shared 
 {
-  source ~/.profile
+  #source ~/.profile
   pushd $alignment_with_openfst_dir
   #make clean -f Makefile-latentCrfPosTagger
   make -f Makefile-latentCrfPosTagger
@@ -353,11 +353,9 @@ task AutoencoderPosInduction
   echo "autoencoder test size is $test_size"  
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
-  # head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
-  tail -n $actual_test_size $prefix.labels > $auto_test_labels
+  tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
-  # python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
-
+  
   #echo "best hmm vs. latent crf:"
   #cat out_err | grep "variation of information"
   #cat out_err | grep "many-to-one"

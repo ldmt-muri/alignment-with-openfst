@@ -1,9 +1,9 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ne"
+    ducttape_output="/usr2/home/wammar/crf-auto-cs/ne-semi"
 
     # general
-    cores=20
+    cores=1
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd"
@@ -11,6 +11,7 @@ global {
     unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/unlabeled"
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels"
+
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv"
     
     unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.sd_0"
@@ -21,16 +22,18 @@ global {
     word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
 
     brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
-    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
+    wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
     supervised=1
 
     labels_count=6
-    lbfgs_itercount=200
+    lbfgs_itercount=50
 
     arabic_morph=""
+    phrase_list=""
+
 }
 
 plan Full {

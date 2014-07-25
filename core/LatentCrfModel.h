@@ -117,7 +117,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   double EvaluateNll();
 
   // use the method of finite differences to numerically check the gradient computed with dynamic programming
-  double CheckGradient(vector<int> &testIndexes, double epsilon);
+  double CheckGradient(lbfgs_evaluate_t proc_evaluate, vector<int> &testIndexes, double epsilon);
 
   // lbfgs call back function to compute the negative loglikelihood and its derivatives with respect to lambdas
   static double LbfgsCallbackEvalYGivenXLambdaGradient(void *ptrFromSentId,
@@ -191,7 +191,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void AddEnglishClosedVocab();
 
   // configure lbfgs parameters according to the LearningInfo member of the model
-  lbfgs_parameter_t SetLbfgsConfig();
+  lbfgs_parameter_t SetLbfgsConfig(bool);
   void PrintLbfgsConfig(lbfgs_parameter_t &lbfgsParams);
 
   // (MINI)BATCH LEVEL
@@ -314,10 +314,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // assumptions: 
   // - fst is populated using BuildThetaLambdaFst()
   // - DXZk is cleared
-  void ComputeD(unsigned sentId, const std::vector<int64_t> &z, 
+  void ComputeDOverC(unsigned sentId, const std::vector<int64_t> &z, 
 		const fst::VectorFst<FstUtils::LogArc> &fst,
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas,
-		FastSparseVector<LogVal<double> > &DXZk);
+		FastSparseVector<double> &DOverCk);
 
  protected:
   LatentCrfModel(const std::string &textFilename, 

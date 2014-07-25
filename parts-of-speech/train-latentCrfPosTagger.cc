@@ -429,8 +429,15 @@ void endOfKIterationsCallbackFunction() {
   }
 }
 
+bool AssertEnabled() {
+  cerr << "**ASSERTIONS ARE ENABLED**" << endl;
+  return true;
+}
+
 int main(int argc, char **argv) {  
   // feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+
+  assert(AssertEnabled());
 
   // boost mpi initialization
   mpi::environment env(argc, argv);
@@ -545,12 +552,40 @@ int main(int argc, char **argv) {
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda.humane", true);
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda", false);
     }
+
+    // viterbi
+    string labelsFilename = outputFilenamePrefix + ".supervised.labels";
+    //model->Label(textFilename, labelsFilename);
+    tagger.Label(labelsFilename);
+    if(tagger.learningInfo.mpiWorld->rank() == 0) {
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+    }
+    
   } 
 
-  if(!learningInfo.supervisedTraining){
+  if(learningInfo.supervisedTraining) {
+    // if all you really wanted to do is supervised training, there's nothing else that needs to be done.
+    // but i feel sorry for you because you're missing out on a chance to do super cool semi-supervised learning / 
+    // domain adaptation here.
+    assert(goldLabelsFilename.size() > 0);
+  } else {
+    if(goldLabelsFilename.size() > 0) {
+      // set the mean of the gaussian prior on lambdas to be their current values
+      // unfortunately, the means are currently not shared among cores
+      for(auto paramIdIter = model->lambda->paramIdsPtr->begin(); 
+          paramIdIter != model->lambda->paramIdsPtr->end();
+          ++paramIdIter) {
+        int paramIndex = model->lambda->paramIndexes[*paramIdIter];
+        double paramWeight =  (*model->lambda->paramWeightsPtr)[ paramIndex ];
+        model->lambda->featureGaussianMeans[*paramIdIter] = paramWeight;
+      }
+    }
+
     // unsupervised training of the model
     if(world.rank() == 0) {
-      cerr << "master" << world.rank() << ": train the model..." << endl;
+      cerr << "======" << "=" <<          "====================================================" << endl;
+      cerr << "master" << world.rank() << ": use unlabeled data to (further) train the model..." << endl;
+      cerr << "======" << "=" <<          "====================================================" << endl;
     }
     model->Train();
     if(world.rank() == 0) {
@@ -563,13 +598,14 @@ int main(int argc, char **argv) {
       model->lambda->PersistParams(outputFilenamePrefix + string(".final.lambda"), false);
       model->PersistTheta(outputFilenamePrefix + string(".final.theta"));
     }
+
+    // viterbi
+    string labelsFilename = outputFilenamePrefix + ".final.labels";
+    //model->Label(textFilename, labelsFilename);
+    tagger.Label(labelsFilename);
+    if(tagger.learningInfo.mpiWorld->rank() == 0) {
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+    }
   }
 
-  // viterbi
-  string labelsFilename = outputFilenamePrefix + ".labels";
-  //model->Label(textFilename, labelsFilename);
-  tagger.Label(labelsFilename);
-  if(tagger.learningInfo.mpiWorld->rank() == 0) {
-    cerr << "automatic labels can be found at " << labelsFilename << endl;
-  }
 }

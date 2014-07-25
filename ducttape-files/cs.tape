@@ -155,7 +155,7 @@ task BuildLatentCrfPosTagger
     > executable
    # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=1g .q=shared 
 {
-  source ~/.profile
+  #source ~/.profile
   pushd $alignment_with_openfst_dir
   #make clean -f Makefile-latentCrfPosTagger
   make -f Makefile-latentCrfPosTagger
