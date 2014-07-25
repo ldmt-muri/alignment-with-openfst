@@ -132,7 +132,7 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
       }
       goldLabelSequences.push_back(goldLabelSequence);
     }
-    if(yDomainIter != yDomain.end()) {
+    if(yDomainIter != yDomain.end() && learningInfo.mpiWorld->rank() == 0) {
       cerr << "The unique gold labels are fewer than the possible values in yDomain. Therefore, we will remove the unused elements in yDomain. " << endl;
     }
     while(yDomainIter != yDomain.end()) {
@@ -413,11 +413,13 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
 
   cerr << learningInfo.mpiWorld->rank() << "|";
   
+  /*
   if(learningInfo.mpiWorld->rank() == 0) {
     lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda", false);
     lambda->PersistParams(learningInfo.outputFilenamePrefix + ".current.lambda.humane", true);
     cerr << "parameters can be found at " << learningInfo.outputFilenamePrefix << ".current.lambda" << endl;
   }
+  */
   
   return objective;
 }
