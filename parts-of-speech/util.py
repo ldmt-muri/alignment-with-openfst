@@ -182,7 +182,8 @@ def append_embedding(X, model, words):
     return concat
 
 
-def get_embedding_feats_dict(word, model):
+def get_embedding_feats_dict(word, model, normalize=False):
+    from numpy import linalg as LA
     import logging
     from gensim import models
     import numpy as np
@@ -191,10 +192,17 @@ def get_embedding_feats_dict(word, model):
     to_return = dict()
     dim = model.layer1_size
     logging.info(u'model dim: {}'.format(dim))
+    if normalize:
+        logging.info(u'normalizing')
+
     if word in model:
         vec = model[word]
+        if normalize:
+            n = LA.norm(vec)
+        else:
+            n = 1.
         for i in range(dim):
-            to_return[u'embedding_dim_{}'.format(i)] = vec[i]
+            to_return[u'embedding_dim_{}'.format(i)] = vec[i]/n
     else:
         to_return[u'no_embedding_{}'.format(word)] = 1
 

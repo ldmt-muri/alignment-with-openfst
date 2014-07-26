@@ -67,6 +67,7 @@ argParser.add_argument("-l", "--training-labels", nargs='*')
 argParser.add_argument("-w", "--word-list", nargs="*")
 argParser.add_argument("-a", "--arabic-analyzer", action="store_true")
 argParser.add_argument("--morph-path", default="/usr0/home/chuchenl/git/cs-shared-task/arabic_morph")
+argParser.add_argument("-n", "--normalize", action='store_true')
 args = argParser.parse_args()
 
 if args.training_labels is not None and len(args.training_labels) > 0:
@@ -155,7 +156,7 @@ for word in word_set:
         # u'clus-{}'.format(cluster[0:4]):1
     }
     if embedding_model is not None:
-        features.update(util.get_embedding_feats_dict(word, embedding_model))
+        features.update(util.get_embedding_feats_dict(word, embedding_model, normalize=args.normalize))
     features.update(get_dict_features(word, words, dict_name=u'words'))
     features.update(get_dict_features(word, nes, dict_name=u'nes'))
 
