@@ -1084,11 +1084,11 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   assert(model.learningInfo.mpiWorld->rank() == 0);
   
   // important note: the parameters array manipulated by liblbfgs is the same one used in lambda. so, the new weights are already in effect
-
+  
   // the master tells the slaves that he needs their help to collectively compute the gradient
   bool NEED_HELP = true;
   mpi::broadcast<bool>(*model.learningInfo.mpiWorld, NEED_HELP, 0);
-
+  
   // even the master needs to process its share of sentences
   vector<double> gradientPiece(model.lambda->GetParamsCount(), 0.0), reducedGradient;
   int fromSentId = *( (int*)ptrFromSentId );
@@ -1115,8 +1115,11 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
   // fill in the gradient array allocated by lbfgs
   cerr << "before l2 reg, reducednll = " << reducedNll;
   double gradientL2Norm = 0.0;
+  double featuresL2Norm = 0.0;
   if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
+    double temp = reducedNll;
     reducedNll = model.AddL2Term(reducedGradient, gradient, reducedNll, gradientL2Norm);
+    featuresL2Norm = reducedNll - temp;
   } else {
     assert(gradientPiece.size() == reducedGradient.size() && gradientPiece.size() == model.lambda->GetParamsCount());
     assert((unsigned)lambdasCount == model.lambda->GetParamsCount());
@@ -1126,17 +1129,10 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *ptrFromSentI
       assert(!std::isnan(gradient[i]) || !std::isinf(gradient[i]));
     } 
   }
-  cerr << endl << "gradient l2 norm = " << gradientL2Norm << endl;
-  cerr << "after l2 reg, reducednll = " << reducedNll;
-
-  if(model.learningInfo.debugLevel == DebugLevel::MINI_BATCH) {
-    if(model.learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
-      cerr << " l2 reg. objective = " << reducedNll << endl;
-    } else {
-      cerr << " unregularized objective = " << reducedNll << endl;	
-    }
-  }
-
+  cerr << endl << "features l2 norm = " << featuresL2Norm;
+  cerr << endl << "gradient l2 norm = " << gradientL2Norm;
+  cerr << endl << "after l2 reg, reducednll = " << reducedNll << endl;
+  
   if(model.learningInfo.useEarlyStopping) {
     cerr << " dev set negative loglikelihood = " << reducedDevSetNll << endl;
   }
@@ -1193,10 +1189,10 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
     vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
     if(!ignoreThetaTerms) {
       BuildThetaLambdaFst(sentId, 
-			  GetReconstructedObservableSequence(sentId), 
-			  thetaLambdaFst, 
-			  thetaLambdaAlphas, 
-			  thetaLambdaBetas);
+                          GetReconstructedObservableSequence(sentId), 
+                          thetaLambdaFst, 
+                          thetaLambdaAlphas, 
+                          thetaLambdaBetas);
     }
     BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, &derivativeWRTLambda, &objective);
     
@@ -1220,7 +1216,6 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
       assert(false);
     }
     
-
     // update the loglikelihood
     if(!ignoreThetaTerms) {
       
@@ -1258,7 +1253,6 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(
       }
       assert(false);
     } 
-
 
     // update the log likelihood
     if(learningInfo.useEarlyStopping && sentId % 10 == 0) {
