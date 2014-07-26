@@ -1,4 +1,5 @@
-#!/usr/bin/env ducttape
+
+  #!/usr/bin/env ducttape
 
 global {
   ducttape_experimental_submitters=enable
@@ -15,12 +16,12 @@ global {
   # autoencoder hyperparams
   l2_strength=(L2Strength: zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1 point_three=0.3 one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_o_one=1.01 one=1.0 o_ninety_nine=0.99 o_nine=0.9 o_five=0.5 o_three=0.3 o_one=0.1 o_o_three=0.03 o_o_one=0.01 o_o_o_one=0.001 o_o_o_o_one=0.0001 )
-  em_itercount=1
+  em_itercount=3
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
   test_with_crf_only=true
-  optimize_lambdas_first=true
-  min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix="cs-chucheng"
+  optimize_lambdas_first=false
+  min_relative_diff=(MinRelativeDiff: point_o_o_one=0.001 point_o_o_o_one=0.0001 zero=0.0)
+  prefix="cs-wammar2"
   fire_precomputed_features_for_xim2=(XIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(XIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(XIP1: no="" yes=yes)
@@ -274,7 +275,6 @@ task AutoencoderPosInduction
   --min-relative-diff $min_relative_diff
   --max-iter-count 30
   --cache-feats false
-  --optimizer adagrad --minibatch-size 800
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
   --gold-labels-filename $gold_file
@@ -282,6 +282,7 @@ task AutoencoderPosInduction
   --feat OTHER_ALIGNERS
   --other-aligners-output-filenames $pred_ldig $pred_cld2"
 
+#  --optimizer adagrad --minibatch-size 800
   # hide  
   #   --init-theta /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.ze ro+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.theta
   #  --init-lambda /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.zero+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.lambda

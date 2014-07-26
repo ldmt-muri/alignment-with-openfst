@@ -3,12 +3,12 @@ global {
     ducttape_output="/usr2/home/wammar/crf-auto-cs/ne-semi"
 
     # general
-    cores=1
+    cores=30
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd"
     labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/unlabeled"
+    unlabeled_train_text="/usr0/home/wammar/empty"
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels"
 
@@ -20,16 +20,17 @@ global {
 
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model_cjk" no="")
     word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
+    dict_list=""
 
     brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
     wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
     alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=1
+    supervised=""
 
     labels_count=6
-    lbfgs_itercount=50
+    lbfgs_itercount=100
 
     arabic_morph=""
     phrase_list=""
@@ -37,7 +38,7 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: one_point_one) * (ReconstructBrownClusters: no)
 }
 
 plan submission {
