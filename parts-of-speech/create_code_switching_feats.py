@@ -23,7 +23,7 @@ def load_dict(gzipped_pickle):
 
 def get_dict_features(w, s, dict_name=u'words'):
     to_return = dict()
-    if w in s:
+    if w.lower() in s:
         to_return[u'wordlist-{}'.format(dict_name)] = 1
     return to_return
 
@@ -38,7 +38,7 @@ def get_words(sd_filename, building=None):
         to_return = building
     with open(sd_filename, encoding='utf-8') as fh:
         for l in fh:
-            words = l.strip().split()
+            words = [x.lower() for x in l.strip().split()]
             to_return.update(words)
     return to_return
 
@@ -50,7 +50,7 @@ def get_l1_words(sd_file, label_file, l1='lang1'):
     with open(sd_file) as sd_f:
         with open(label_file) as lbl_f:
             for text_line, label_line in zip(sd_f, lbl_f):
-                text = text_line.strip().split()
+                text = [x.lower() for x in text_line.strip().split()]
                 label = label_line.strip().split()
                 to_return.update([text[idx] for idx in range(len(label)) if label[idx] == l1])
     return to_return
@@ -141,6 +141,7 @@ min_ngram_count = 0
 
 if args.arabic_analyzer:
     import json, gzip
+
     with gzip.open(args.morph_path) as fh:
         l = fh.read()
         l = json.loads(l)
