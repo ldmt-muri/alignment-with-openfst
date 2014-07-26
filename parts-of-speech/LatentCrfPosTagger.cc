@@ -287,6 +287,14 @@ void LatentCrfPosTagger::InitTheta() {
 //               = - f_k(y-gold, x) + E_{p(y|x)}[f_k(y,x)]
 double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
 							  vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) {
+
+  boost::mpi::broadcast<int>(*learningInfo.mpiWorld, learningInfo.hackK, 0);
+  if(learningInfo.hackK % 10 == 0 &&				\
+     learningInfo.endOfKIterationsCallbackFunction != 0) {
+    learningInfo.hackK++;
+    // call the call back function
+    (*learningInfo.endOfKIterationsCallbackFunction)();
+  }
   
   // this method is used for supervised training. if we don't have any gold labels then we can't do supervised training.
   assert(goldLabelSequences.size() > 0);

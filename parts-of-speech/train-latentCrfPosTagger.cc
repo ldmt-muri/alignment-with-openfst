@@ -417,7 +417,7 @@ void endOfKIterationsCallbackFunction() {
 
   // viterbi
   stringstream labelsFilenameSs;
-  labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount;
+  labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount << "." << tagger.learningInfo.hackK;
   string labelsFilename = labelsFilenameSs.str();
   //tagger.Label(labelsFilename);
   if(tagger.learningInfo.mpiWorld->rank() == 0) {

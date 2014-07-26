@@ -82,6 +82,7 @@ class LearningInfo {
     // this is specific for dependnecy parsing
     generateChildAndDirection=false;
     generateChildConditionalOnDirection = false;
+    hackK=0;
   }
   
   bool IsModelConverged() {
@@ -399,6 +400,7 @@ class LearningInfo {
 
   bool checkGradient;
 
+  int hackK;
 };
 
 #endif
