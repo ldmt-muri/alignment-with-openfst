@@ -361,6 +361,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   Task task;
   // this is only set during training while optimizing loglinear parameters
   bool optimizingLambda;
+  
+  // gold label sequences used for supervised and semi-supervised training only. 
+  // in unsupervised training, this should be empty.
+  std::vector<std::vector<int> > goldLabelSequences;
 
   // tagging dictionary
   // this maps a word to the possible word classes

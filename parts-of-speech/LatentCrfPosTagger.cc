@@ -170,7 +170,7 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   data.clear();
   vocabEncoder.Read(textFilename, data);
   examplesCount = data.size();
-
+  
   // read and encode tagging dictionary
   vector<vector<int64_t> > rawTagDict;
   int wordClassCounter = FIRST_ALLOWED_LABEL_VALUE;
@@ -488,6 +488,9 @@ void LatentCrfPosTagger::Label(const string &labelsFilename) {
   ofstream labelsFile(labelsFilename.c_str());
   if(learningInfo.firstKExamplesToLabel == 0) {
     learningInfo.firstKExamplesToLabel = examplesCount;
+  }
+  if(learningInfo.firstKExamplesToLabel > examplesCount) {
+    cerr << "here's the situation: examplesCount = " << examplesCount << ", firstKExamplesToLabel = " << learningInfo.firstKExamplesToLabel << endl;
   }
   assert(learningInfo.firstKExamplesToLabel <= examplesCount);
   for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
