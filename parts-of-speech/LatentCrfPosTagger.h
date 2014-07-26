@@ -62,7 +62,6 @@ class LatentCrfPosTagger : public LatentCrfModel {
   
  public:
   std::vector<std::vector<int64_t> > data, testData;
-  std::vector<std::vector<int> > goldLabelSequences;
 
   std::vector<int64_t> empty;
 
