@@ -1,9 +1,9 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/es"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/es"
 
     # general
-    cores=15
+    cores=30
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.sd"
@@ -20,6 +20,7 @@ global {
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list=(UseWL: yes="/usr1/home/wammar/monolingual/plain-es/news-commentary-v8.es" no="")
     phrase_list=(UseWL: yes="/mal2/corpora/wikipedia/dumps/es/titles" no="")
+    dict_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/spanish/dict.pickle.gz" no="")
 
     arabic_morph=""
 
@@ -39,9 +40,17 @@ plan Full {
 }
 
 plan submission {
-    reach GenerateForSubmission via (Model: crfsuite) * (Fold: test)
+    reach GenerateForSubmission via (Model: crfsuite) * (Fold: test) * (ReconstructBrownClusters: no)
 }
 
 plan crfsuite {
-    reach Evaluate via (Model: crfsuite ) * (UseEmbeddings: yes) * (UseWL: yes) * (Fold: 0 1 2)
+    reach Evaluate via (Model: crfsuite) * (Fold: 0 1 2) * (UseWL:yes) * (UseEmbeddings: yes)
+}
+
+plan generatecrf {
+    reach GenerateCRFSuiteInput via (Fold: 0 1 2)
+}
+
+plan traincrf {
+    reach TrainCRFSuite via (Model: crfsuite) * (Fold: 0)
 }

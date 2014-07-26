@@ -20,7 +20,7 @@ global {
   test_with_crf_only=true
   optimize_lambdas_first=true
   min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix="cs-wammar2"
+  prefix="cs-chucheng"
   fire_precomputed_features_for_xim2=(XIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(XIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(XIP1: no="" yes=yes)
@@ -149,6 +149,7 @@ task GenerateWordpairFeats
     < labeled_test_text=$labeled_test_text_f@PickFold
     < labeled_train_labels=$labeled_train_labels_f@PickFold
     :: word_list=@
+    :: dict_list=@
     :: arabic_morph=@
     > wordpair_feats_file 
     > paths
@@ -173,32 +174,38 @@ task GenerateWordpairFeats
     command="$command -a";
   fi
 
+  if [[ $dict_list ]]; then
+    command="$command -d $dict_list";
+  fi
+
   echo "$command" > command
   $command
 } 
 
 task GenerateCRFSuiteInput
 < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats
-:: other_pred_arg="--other-predictors"
 < labeled_train_text=$labeled_train_text_f@PickFold
 < labeled_train_labels=$labeled_train_labels_f@PickFold
 < labeled_test_text=$labeled_test_text_f@PickFold
 < labeled_test_labels=$labeled_test_labels_f@PickFold
 :: cs_sharedtask_dir=@
-> crfsuite_train
+> train
 > crfsuite_test
 {
+  other_pred_arg="--other-predictors"
   python $cs_sharedtask_dir/get_ldig.py $labeled_train_text ldig 
   python $cs_sharedtask_dir/get_cld2.py $labeled_test_text cld2 
-  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $crfsuite_train --pre 2 --post 2 $other_pred_arg ldig cld2
+  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $train --pre 2 --post 2 $other_pred_arg ldig cld2
   python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2 $other_pred_arg ldig cld2
 }
 
 task TrainCRFSuite
-< train=$crfsuite_train@GenerateCRFSuiteInput
+< labeled_train_text=$labeled_train_text_f@PickFold
+< w=$train@GenerateCRFSuiteInput
 > model
 {
-  crfsuite learn -m $model $train
+  # touch model
+  crfsuite learn -m $model $w
 }
 
 task BuildLatentCrfPosTagger
@@ -266,7 +273,7 @@ task AutoencoderPosInduction
   --feat LABEL_BIGRAM --feat PRECOMPUTED --feat EMISSION
   --min-relative-diff $min_relative_diff
   --max-iter-count 30
-  --cache-feats true
+  --cache-feats false
   --optimizer adagrad --minibatch-size 800
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
