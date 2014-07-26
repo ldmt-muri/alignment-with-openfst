@@ -1350,6 +1350,10 @@ int LatentCrfModel::LbfgsProgressReport(void *ptrFromSentId,
   }
 
   //  cerr << "ending LatentCrfModel::LbfgsProgressReport" << endl;
+  //
+
+  model.learningInfo.hackK = k;
+  
   return 0;
 }
 

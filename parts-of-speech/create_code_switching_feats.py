@@ -24,7 +24,7 @@ def load_dict(gzipped_pickle):
 def get_dict_features(w, s, dict_name=u'words'):
     to_return = dict()
     if w in s:
-        to_return[u'wordlist-{}-{}'.format(dict_name, w)] = 1
+        to_return[u'wordlist-{}'.format(dict_name)] = 1
     return to_return
 
 
@@ -65,6 +65,8 @@ argParser.add_argument("-s", "--space-delimited-files", nargs='+')
 argParser.add_argument("-t", "--training-texts", nargs='*')
 argParser.add_argument("-l", "--training-labels", nargs='*')
 argParser.add_argument("-w", "--word-list", nargs="*")
+argParser.add_argument("-a", "--arabic-analyzer", action="store_true")
+argParser.add_argument("--morph-path", default="/usr0/home/chuchenl/git/cs-shared-task/arabic_morph")
 args = argParser.parse_args()
 
 if args.training_labels is not None and len(args.training_labels) > 0:
@@ -137,6 +139,15 @@ min_suffix_count = 0
 min_prefix_count = 0
 min_ngram_count = 0
 
+if args.arabic_analyzer:
+    import json, gzip
+    with gzip.open(args.morph_path) as fh:
+        l = fh.read()
+        l = json.loads(l)
+    analyzed = util.analyze_arabic_words(word_set, loaded=l)
+else:
+    analyzed = None
+
 for word in word_set:
     features = {
         # u'cluster-{}'.format(cluster):1,
@@ -146,11 +157,20 @@ for word in word_set:
         features.update(util.get_embedding_feats_dict(word, embedding_model))
     features.update(get_dict_features(word, words, dict_name=u'words'))
     features.update(get_dict_features(word, nes, dict_name=u'nes'))
+
+    if analyzed is not None:
+        features[u'{}_analyzable_{}'.format(word, analyzed[word])] = 1
+
     if l1_words is not None:
         features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
     if word_lists is not None:
+        fired_wl = []
         for idx, word_list in enumerate(word_lists):
-            features.update(get_dict_features(word, word_list, dict_name=u'in_provided_wl_{}'.format(idx)))
+            word_list_feature = get_dict_features(word, word_list, dict_name=u'in_provided_wl_{}'.format(idx))
+            if len(word_list_feature) > 0:
+                fired_wl.append(idx)
+            features.update(word_list_feature)
+        features.update({u' '})
 
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1

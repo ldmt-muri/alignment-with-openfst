@@ -33,19 +33,50 @@ def tokenize(str_list):
     '''
     calls external tokenizer
     '''
-    import codecs
+    import io
 
-    w_fh = codecs.open('temp_in', 'w', 'utf-8')
-    w_fh.writelines('\n'.join(str_list).decode('utf-8'))
+    w_fh = io.open('temp_in', mode='w', encoding='utf-8')
+    w_fh.writelines(u'\n'.join(str_list))
     w_fh.close()
 
     import os
 
     os.system('tokenizer.pl {} {}'.format('temp_in', 'temp_out'))
-    with codecs.open('temp_out', 'r', 'utf-8') as fh:
+    with io.open('temp_out', mode='r', encoding='utf-8') as fh:
         to_return = [x for x in fh]
 
     return to_return
+
+
+def split_specific(list_tweets, test_users):
+    assert isinstance(list_tweets, list)
+
+    test_list = []
+    training_list = []
+    for t in list_tweets:
+        if t['user_id'] in test_users:
+            test_list.append(t)
+        else:
+            training_list.append(t)
+    return (test_list, training_list)
+
+
+def n_fold_split(list_tweets, n, rand=True, seed=329):
+    assert isinstance(list_tweets, list)
+    all_uid = list(set(t['user_id'] for t in list_tweets))
+    if rand:
+        import random, math
+
+        random.seed(seed)
+        random.shuffle(all_uid)
+
+    fold_size = int(max(math.ceil((1. * len(all_uid)) / n), 1))
+    print 'set size:{} fold size: {}'.format(len(all_uid), fold_size)
+    for i in range(0,len(all_uid), fold_size):
+        selected = set(all_uid[i:min(len(all_uid), i + fold_size)])
+        print 'selected: {}'.format(selected)
+        (test_list, training_list) = split_specific(list_tweets, selected)
+        yield (test_list, training_list)
 
 
 def leave_n_uid_out_split(list_tweets, n):
@@ -55,13 +86,7 @@ def leave_n_uid_out_split(list_tweets, n):
     all_uid = {t['user_id'] for t in list_tweets}
 
     for u in permutations(all_uid, r=n):
-        test_list = []
-        training_list = []
-        for t in list_tweets:
-            if t['user_id'] in u:
-                test_list.append(t)
-            else:
-                training_list.append(t)
+        (test_list, training_list) = split_specific(list_tweets, u)
         yield (test_list, training_list)
 
 
@@ -180,3 +205,36 @@ def label_vectorize(labels):
     assert isinstance(labels, list)
     s = set(labels)
     return {k: idx for idx, k in enumerate(s)}
+
+
+def analyze_arabic_words(words, loaded=None):
+    from io import open
+
+    assert isinstance(words, set)
+    if loaded is not None:
+        assert isinstance(loaded, dict)
+        to_return = {k:v for k, v in loaded.iteritems() if k in words}
+    else:
+        to_return = dict()
+    import arabic_morphanalyzer
+
+    lst_words = list(words-set(loaded.keys()))
+
+    if len(lst_words) > 0:
+        with open('temp', encoding='utf-8', mode='w') as w_fh:
+            w_fh.write(u' '.join(lst_words) + u'\n')
+
+        sents = arabic_morphanalyzer.analyze_utf8_file('temp')
+
+        assert len(sents) == 1
+
+
+        for idx, w in enumerate(lst_words):
+            for t in sents[0][idx]:
+                if len(t.lex) == 0 and len(t.stem) == 0:
+                    to_return[w] = False
+                else:
+                    to_return[w] = True
+                    break
+
+    return to_return
