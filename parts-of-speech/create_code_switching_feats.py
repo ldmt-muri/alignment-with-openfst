@@ -172,7 +172,7 @@ for word in word_set:
             if len(word_list_feature) > 0:
                 fired_wl.append(idx)
             features.update(word_list_feature)
-        features.update({u' '})
+        features.update({u'wl_{}_fired'.format(u','.join(fired_wl)): 1})
 
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1
