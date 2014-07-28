@@ -21,11 +21,20 @@ def load_dict(gzipped_pickle):
         return (words, ne)
 
 
-def get_dict_features(w, s, dict_name=u'words'):
+def get_fuzzy_dict_features(w, s, dict_name=u'fuzzy', distance=5):
+    import jellyfish
     to_return = dict()
+    for cand in s:
+        if jellyfish.levenshtein_distance(w.lower(), cand) < distance:
+            to_return[u'wordlist-{}'.format(dict_name)] = 1
+        return to_return
+
+
+def get_dict_features(w, s, dict_name=u'words'):
     if w.lower() in s:
-        to_return[u'wordlist-{}'.format(dict_name)] = 1
-    return to_return
+        # print 'set size: {}, {} in {}'.format(len(s), w, dict_name)
+        return {u'wordlist-{}'.format(dict_name): 1}
+    return {}
 
 
 def get_words(sd_filename, building=None):
@@ -65,6 +74,7 @@ argParser.add_argument("-s", "--space-delimited-files", nargs='+')
 argParser.add_argument("-t", "--training-texts", nargs='*')
 argParser.add_argument("-l", "--training-labels", nargs='*')
 argParser.add_argument("-w", "--word-list", nargs="*")
+argParser.add_argument("--fuzzy-word-list", nargs="*")
 argParser.add_argument("-a", "--arabic-analyzer", action="store_true")
 argParser.add_argument("--morph-path", default="/usr0/home/chuchenl/git/cs-shared-task/arabic_morph")
 argParser.add_argument("-n", "--normalize", action='store_true')
@@ -82,17 +92,33 @@ else:
 word_lists = []
 
 if args.word_list is not None and len(args.word_list) > 0:
-    word_list = set()
+
+    for f in args.word_list:
+        with io.open(f, encoding='utf-8') as fh:
+            word_list = set()
+            for l in fh:
+                words_in_wordlist = l.lstrip().strip().split()
+                # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
+                word_list.update(words_in_wordlist) 
+        word_lists.append(word_list)
+        print 'len of wordlist {}: {}'.format(f, len(word_list))
+else:
+    word_lists = None
+
+fuzzy_word_lists = []
+
+if args.fuzzy_word_list is not None and len(args.fuzzy_word_list) > 0:
+    fuzzy_word_list = set()
 
     for f in args.word_list:
         with io.open(f, encoding='utf-8') as fh:
             for l in fh:
                 words_in_wordlist = l.lstrip().strip().split()
                 # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
-                word_list.update(words_in_wordlist)
-    word_lists.append(word_list)
+                fuzzy_word_list.update(words_in_wordlist)
+    fuzzy_word_lists.append(fuzzy_word_list)
 else:
-    word_lists = None
+    fuzzy_word_lists = None
 
 if args.brown_filename is not None and len(args.brown_filename) > 0:
     brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
@@ -167,12 +193,25 @@ for word in word_set:
         features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
     if word_lists is not None:
         fired_wl = []
-        for idx, word_list in enumerate(word_lists):
-            word_list_feature = get_dict_features(word, word_list, dict_name=u'in_provided_wl_{}'.format(idx))
+        for idx, w_list in enumerate(word_lists):
+            w_list_feature = get_dict_features(word, w_list, dict_name=u'in_provided_wl_{}'.format(idx))
+            if len(w_list_feature) > 0:
+                fired_wl.append(idx)
+            features.update(w_list_feature)
+        if len(fired_wl) > 1:
+            # print 'word: {} length: {}'.format(word, len(fired_wl))
+            features.update({u'wl_{}_fired'.format(u','.join([unicode(x) for x in fired_wl])): 1})
+
+    if fuzzy_word_lists is not None:
+        fired_wl = []
+        for idx, word_list in enumerate(fuzzy_word_lists):
+            word_list_feature = get_fuzzy_dict_features(word, word_list, dict_name=u'in_provided_fuzzy_wl_{}'.format(idx), distance=3)
             if len(word_list_feature) > 0:
                 fired_wl.append(idx)
             features.update(word_list_feature)
-        features.update({u'wl_{}_fired'.format(u','.join(fired_wl)): 1})
+        if len(fired_wl) > 1:
+            features.update({u'fuzzy_wl_{}_fired'.format(u','.join([unicode(x) for x in fired_wl])): 1})
+
 
     page = ord(word[0]) / 100
     features[u'unicode-page-{}'.format(page)] = 1
