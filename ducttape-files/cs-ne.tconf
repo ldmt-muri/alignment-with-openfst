@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-cs/ne-semi"
+    ducttape_output="/usr2/home/wammar/crf-auto-cs/ne"
 
     # general
     cores=30
@@ -14,12 +14,12 @@ global {
 
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels.tsv"
     
-    unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.sd_0"
-    unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.labels_0"
-    unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/ne/ne.labels.tsv_0"
+    unlabeled_test_text="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.sd_0"
+    unlabeled_test_labels="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.labels_0"
+    unlabeled_test_tsv="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.labels.tsv_0"
 
-    embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model_cjk" no="")
-    word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
+    embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
+    word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.en.no_punc /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.english_diff_romanized /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.romanized_diff_english  /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ne.word" no="")
     dict_list=""
 
     brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
@@ -33,16 +33,16 @@ global {
     lbfgs_itercount=100
 
     arabic_morph=""
-    phrase_list=""
+    phrase_list="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.phrase"
 
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: one_point_one) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0)
 }
 
 plan submission {
-    reach GenerateForSubmission via (Model: crfsuite) * (Fold: test)
+    reach GenerateForSubmission via (Model: autoencoder) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: test) 
 }
 
 plan crfsuite {

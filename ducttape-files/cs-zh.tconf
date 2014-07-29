@@ -1,33 +1,36 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/zh"
+    ducttape_output="/usr2/home/wammar/crf-auto-cs/zh"
 
     # general
-    cores=20
+    cores=30
 
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/training_zh.sd"
     labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/unlabeled"
+    unlabeled_train_text="/usr0/home/wammar/empty"
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/training_zh.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.labels"
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/zh-en/test_zh.labels.tsv"
+
     unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.sd_0"
     unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.labels_0"
     unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.labels.tsv_0"
     
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model_cjk" no="")
     word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
+    dict_list=""
+    phrase_list=""
 
     brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
-    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
+    wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=1
-
+    supervised=""
+  
     labels_count=6
-    lbfgs_itercount=200
+    lbfgs_itercount=100
 
     arabic_morph=""
 }
@@ -37,11 +40,11 @@ plan testWordFeats {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0)
 }
 
 plan submission {
-    reach GenerateForSubmission via (Model: crfsuite) * (Fold: test)
+    reach GenerateForSubmission via (Model: autoencoder) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: test) 
 }
 
 plan crfsuite {
