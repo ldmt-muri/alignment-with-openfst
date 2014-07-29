@@ -21,7 +21,7 @@ global {
   test_with_crf_only=true
   optimize_lambdas_first=false
   min_relative_diff=(MinRelativeDiff: point_o_o_one=0.001 point_o_o_o_one=0.0001 zero=0.0)
-  prefix="cs-wammar2"
+  prefix="cs-wammar5"
   fire_precomputed_features_for_xim2=(XIM2: no="" yes=yes)
   fire_precomputed_features_for_xim1=(XIM1: no="" yes=yes)
   fire_precomputed_features_for_xip1=(XIP1: no="" yes=yes)
@@ -361,7 +361,13 @@ task AutoencoderPosInduction
   echo "autoencoder test size is $test_size"  
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
-  tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels
+
+  if [[ $supervised ]]; then
+    tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels    
+  else
+    tail -n $actual_test_size $prefix.final.labels > $auto_test_labels    
+  fi
+ 
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
   
   #echo "best hmm vs. latent crf:"
