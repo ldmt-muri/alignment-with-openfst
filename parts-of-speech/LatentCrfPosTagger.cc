@@ -289,7 +289,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
 							  vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) {
 
   boost::mpi::broadcast<int>(*learningInfo.mpiWorld, learningInfo.hackK, 0);
-  if(learningInfo.hackK % 10 == 0 &&				\
+  if(false && learningInfo.hackK % 10 == 0 &&				\
      learningInfo.endOfKIterationsCallbackFunction != 0) {
     learningInfo.hackK++;
     // call the call back function

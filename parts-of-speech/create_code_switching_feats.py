@@ -190,7 +190,8 @@ for word in word_set:
         features[u'{}_analyzable_{}'.format(word, analyzed[word])] = 1
 
     if l1_words is not None:
-        features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
+        #features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
+        pass
     if word_lists is not None:
         fired_wl = []
         for idx, w_list in enumerate(word_lists):
