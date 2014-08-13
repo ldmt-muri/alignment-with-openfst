@@ -1,0 +1,17 @@
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/wammar/crf-auto-pos/english4k-temp"
+
+    # general
+    cores=10
+
+    # data
+    data_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k"
+    gold_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k"
+    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+}
+
+plan Full {
+    reach Evaluate via (Model: featurized_hmm) * (L2Strength: zero point_one point_three one three ten thirty) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes)
+}
+

@@ -1,0 +1,28 @@
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/wammar/crf-auto-pos/arabic-final"
+
+    # general
+    cores=10
+
+    labels_count=12
+    test_size=0
+
+    # data
+    labeled_train_text=""
+    labeled_train_labels=""
+    unlabeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/touched"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.tok.novowel"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.pos"
+    
+    data_file=""
+    gold_file=""
+    #tag_dict_file="/usr1/home/wammar/pos-data/wiktionary-defs-20131002-all/tag-dic/arabic.autoencoder.dict"
+
+    supervised=""
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one) * (DirichletAlpha: o_nine) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes)
+}
+

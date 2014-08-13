@@ -27,7 +27,7 @@ global {
     alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=""
+    supervised=(Supervised: yes:1 no:"")
 
     labels_count=6
     lbfgs_itercount=100
