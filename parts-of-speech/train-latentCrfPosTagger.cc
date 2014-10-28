@@ -47,6 +47,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     MAX_ITER_COUNT = "max-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
+    SUPERVISED_MAX_LBFGS_ITER_COUNT = "supervised-max-lbfgs-iter-count",
     //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
@@ -86,6 +87,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
+    (SUPERVISED_MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.supervisedMaxLbfgsIterCount)->default_value(50), "(int) quit LBFGS optimization (for the supervised objective only) after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
@@ -217,6 +219,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
   if(vm.count(OPTIMIZER.c_str())) {
     if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
+    } else if(vm[OPTIMIZER.c_str()].as<string>() == "lbfgs") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
     } else {
       cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
       assert(false);
@@ -270,6 +274,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << endl;
     cerr << GOLD_LABELS_FILENAME << "=" << goldLabelsFilename << endl;
     cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
+    cerr << TGT_WORD_CLASSES_FILENAME << "=" << learningInfo.tgtWordClassesFilename << endl;
     cerr << endl << "=====================" << endl;
   }
     
@@ -435,7 +440,7 @@ bool AssertEnabled() {
 }
 
 int main(int argc, char **argv) {  
-  // feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+  //feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
 
   assert(AssertEnabled());
 
@@ -529,7 +534,7 @@ int main(int argc, char **argv) {
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
   LatentCrfPosTagger &tagger = * ( (LatentCrfPosTagger*) model );
   
-  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0 && learningInfo.goldFilename.size() == 0) {
+  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0 && model->goldLabelSequences.size() == 0) {
     // hmm initialization
     unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
     model->BroadcastTheta(bestRank);
@@ -544,7 +549,7 @@ int main(int argc, char **argv) {
   }
 
   // use gold labels to do supervised training
-  if(goldLabelsFilename.size() > 0) {
+  if(model->goldLabelSequences.size() > 0) {
     bool fitLambdas = true, fitThetas = false;
     model->SupervisedTrain(fitLambdas, fitThetas);
     if(learningInfo.mpiWorld->rank() == 0) {

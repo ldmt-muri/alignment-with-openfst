@@ -3,7 +3,7 @@ global {
     ducttape_output="/usr2/home/wammar/crf-auto-pos/arabic-final"
 
     # general
-    cores=10
+    cores=16
 
     labels_count=12
     test_size=0

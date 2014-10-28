@@ -132,26 +132,28 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
       }
       goldLabelSequences.push_back(goldLabelSequence);
     }
-    if(yDomainIter != yDomain.end() && learningInfo.mpiWorld->rank() == 0) {
-      cerr << "The unique gold labels are fewer than the possible values in yDomain. Therefore, we will remove the unused elements in yDomain. " << endl;
-    }
-    while(yDomainIter != yDomain.end()) {
-      yDomainIter = yDomain.erase(yDomainIter);
-    }
-    if(learningInfo.mpiWorld->rank() == 0) {
-      cerr << "now, |yDomain| = " << yDomain.size() << endl;
-      cerr << "the mapping between string labels and yDomain elements is as follows: " << endl;
-      for(auto labelIntToStringIter = labelIntToString.begin();
-          labelIntToStringIter != labelIntToString.end();
-          ++labelIntToStringIter) {
-        cerr << labelIntToStringIter->first << " -> " << labelIntToStringIter->second << endl;
+    if(goldLabelSequences.size() > 0) {
+      if(yDomainIter != yDomain.end() && learningInfo.mpiWorld->rank() == 0) {
+        cerr << "The unique gold labels are fewer than the possible values in yDomain. Therefore, we will remove the unused elements in yDomain. " << endl;
       }
-      for(auto labelStringToIntIter = labelStringToInt.begin();
-          labelStringToIntIter != labelStringToInt.end();
-          ++labelStringToIntIter) {
-        cerr << labelStringToIntIter->first << " -> " << labelStringToIntIter->second << endl;
+      while(yDomainIter != yDomain.end()) {
+        yDomainIter = yDomain.erase(yDomainIter);
       }
-      cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
+      if(learningInfo.mpiWorld->rank() == 0) {
+        cerr << "now, |yDomain| = " << yDomain.size() << endl;
+        cerr << "the mapping between string labels and yDomain elements is as follows: " << endl;
+        for(auto labelIntToStringIter = labelIntToString.begin();
+            labelIntToStringIter != labelIntToString.end();
+            ++labelIntToStringIter) {
+          cerr << labelIntToStringIter->first << " -> " << labelIntToStringIter->second << endl;
+        }
+        for(auto labelStringToIntIter = labelStringToInt.begin();
+            labelStringToIntIter != labelStringToInt.end();
+            ++labelStringToIntIter) {
+          cerr << labelStringToIntIter->first << " -> " << labelStringToIntIter->second << endl;
+        }
+        cerr << goldLabelSequences.size() << " gold label sequences read." << endl;
+      }
     }
   }
   

@@ -135,6 +135,9 @@ double LatentCrfModel::ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc
 
 // builds an FST to compute Z(x) = \sum_y \prod_i \exp \lambda h(y_i, y_{i-1}, x, i), but doesn't not compute the potentials
 void LatentCrfModel::BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<double> *derivativeWRTLambda, double *objective) {
+
+  //cerr << "Inside BuildLambdaFst(sentId=" << sentId << "...)" << endl;
+
   PrepareExample(sentId);
 
   const vector<int64_t> &x = GetObservableSequence(sentId);
@@ -744,7 +747,6 @@ void LatentCrfModel::SupervisedTrain(bool fitLambdas, bool fitThetas) {
       int dummy = 0;
       bool supervised=true;
       lbfgs_parameter_t lbfgsParams = SetLbfgsConfig(supervised);
-      lbfgsParams.max_iterations;
       if(learningInfo.mpiWorld->rank() == 0) {
         PrintLbfgsConfig(lbfgsParams);
       }
@@ -1105,7 +1107,10 @@ double LatentCrfModel::LbfgsCallbackEvalZGivenXLambdaGradient(void *dummy,
   // for semi-supervised learning, we need to also collect the gradient from labeled data
   // note this is supposed to *add to the gradient of the unsupervised objective*, but only 
   // return *the value of the supervised objective*
-  double SupervisedNllPiece = model.ComputeNllYGivenXAndLambdaGradient(gradientPiece, supervisedFromSentId, supervisedToSentId);
+  double SupervisedNllPiece = 
+    supervisedFromSentId < supervisedToSentId?
+    model.ComputeNllYGivenXAndLambdaGradient(gradientPiece, supervisedFromSentId, supervisedToSentId):
+    0.0;
   
   // now, the master aggregates gradient pieces computed by the slaves
   mpi::reduce< vector<double> >(*model.learningInfo.mpiWorld, gradientPiece, reducedGradient, AggregateVectors2(), 0);
@@ -1423,9 +1428,9 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig(bool supervised) {
   lbfgs_parameter_init(&lbfgsParams);
   assert(learningInfo.optimizationMethod.subOptMethod != 0);
   if(supervised) {
-    lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
+    lbfgsParams.max_iterations = learningInfo.supervisedMaxLbfgsIterCount;
   } else {
-    lbfgsParams.max_iterations = 2;
+    lbfgsParams.max_iterations = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations;
   }
   lbfgsParams.m = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer;
   //lbfgsParams.xtol = learningInfo.optimizationMethod.subOptMethod->lbfgsParams.precision;
@@ -1507,7 +1512,9 @@ void LatentCrfModel::BlockCoordinateDescent() {
   // set lbfgs configurations
   bool supervised=false;
   lbfgs_parameter_t lbfgsParams = SetLbfgsConfig(supervised);
-  PrintLbfgsConfig(lbfgsParams);
+  if(learningInfo.mpiWorld->rank() == 0) {
+    PrintLbfgsConfig(lbfgsParams);
+  }
   
   // variables used for adagrad
   vector<double> gradient(lambda->GetParamsCount());
@@ -1794,7 +1801,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
             // for semi-supervised learning, we need to also collect the gradient from labeled data
             // note this is supposed to *add to the gradient of the unsupervised objective*, but only 
             // return *the value of the supervised objective*
-            double SupervisedNllPiece = ComputeNllYGivenXAndLambdaGradient(gradientPiece, supervisedFromSentId, supervisedToSentId);
+            double SupervisedNllPiece = 
+              supervisedFromSentId < supervisedToSentId?
+              ComputeNllYGivenXAndLambdaGradient(gradientPiece, supervisedFromSentId, supervisedToSentId):
+              0.0;
             
             // merge your gradient with other slaves
             mpi::reduce< vector<double> >(*learningInfo.mpiWorld, gradientPiece, dummy, 

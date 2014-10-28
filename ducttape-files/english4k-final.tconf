@@ -1,17 +1,21 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-pos/english4k-temp"
+    ducttape_output="/usr3/home/wammar/crf-auto-pos/english4k-final"
 
     # general
-    cores=10
+    cores=30
 
     # data
-    data_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k"
-    gold_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k"
-    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    labeled_train_text="/usr0/home/wammar/empty"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k"
+    unlabeled_train_text="/usr0/home/wammar/empty"
+    labeled_train_labels="/usr0/home/wammar/empty"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k"
+
+    # use labeled data exclusively for training?
+    supervised=""
 }
 
 plan Full {
-    reach Evaluate via (Model: featurized_hmm) * (L2Strength: zero point_one point_three one three ten thirty) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: one_point_o_one) * (FeatureSet: full) * (EmIterCount: two) * (CoordItercount: hundred) * (Prefix: other)
 }
-

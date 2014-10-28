@@ -1325,14 +1325,15 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         break;
 
     case FeatureTemplate::BOUNDARY_LABELS:
-      if(i <= 0 || i >= x.size() - 1) {
+      if(i == 0 || i == x.size() - 1) {
         featureId.type = FeatureTemplate::BOUNDARY_LABELS;
-        featureId.boundaryLabel.position = i < 2? i : i - x.size(); 
+        featureId.boundaryLabel.position = i == 0? 0 : -1;
         featureId.boundaryLabel.label = yI;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
+
     case FeatureTemplate::PHRASE:
             {
                 // cerr << "phrase fired\n";

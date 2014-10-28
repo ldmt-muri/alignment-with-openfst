@@ -1,18 +1,24 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-pos/danish-final"
+    ducttape_output="/usr3/home/wammar/crf-auto-pos/danish-final"
 
     # general
-    cores=10
+    cores=20
 
     # data
-    data_file="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/danish-ddt-2006.tok"
-    gold_file="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/danish-ddt-2006.pos"
-    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/da-wik-20120320.dic"
+    labeled_train_text="/usr0/home/wammar/empty"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/danish-ddt-2006.tok"
+    unlabeled_train_text="/usr0/home/wammar/empty"
+    labeled_train_labels="/usr0/home/wammar/empty"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/danish-ddt-2006.pos"
+
+    # tag dictionary
+    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/da-wik-20120320.dic"
+
+    # use labeled data exclusively for training?
+    supervised=""
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one) * (DirichletAlpha: o_nine) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one) * (DirichletAlpha: point_nine) * (FeatureSet: full) * (LbfgsItercount: two) * (CoordItercount: hundred) * (EmIterCount: two) * (Prefix: pos)
 }
-
-

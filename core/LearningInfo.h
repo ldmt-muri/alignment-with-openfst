@@ -262,6 +262,9 @@ class LearningInfo {
   vector< float > logLikelihood;
   vector< float > validationLogLikelihood;  
 
+  // max lbfgs iterations count for supervised training
+  int supervisedMaxLbfgsIterCount;
+
   // distribution used to model p(a,T|S)
   Distribution::Distribution distATGivenS;
   IAlignmentSampler *customDistribution;
