@@ -79,7 +79,7 @@ for line in brown_file:
   # word string
   min_lowercased_frequency = 11
   if frequency >= min_lowercased_frequency:
-    features[u'lower_{}'.format(word.lower()).replace(u'=', u'eq')] = 1
+    features[u'{}'.format(word.lower()).replace(u'=', u'eq')] = 1
   if args.haghighi_klein:
     features[word.replace(u'=', u'eq')] = 1
 

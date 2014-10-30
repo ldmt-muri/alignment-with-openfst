@@ -3,7 +3,7 @@ global {
     ducttape_output="/usr3/home/wammar/crf-auto-pos/english4k-final"
 
     # general
-    cores=30
+    cores=32
 
     # data
     labeled_train_text="/usr0/home/wammar/empty"
@@ -17,5 +17,5 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: one_point_o_one) * (FeatureSet: full) * (EmIterCount: two) * (CoordItercount: hundred) * (Prefix: other)
+    reach Evaluate via (Model: autoencoder hmm) * (L2Strength: point_three) * (DirichletAlpha: one) * (FeatureSet: hk) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: thousand) * (Prefix: other)
 }

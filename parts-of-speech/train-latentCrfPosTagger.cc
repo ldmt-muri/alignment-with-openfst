@@ -59,7 +59,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     DIRICHLET_ALPHA = "dirichlet-alpha",
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
-    REVERSE = "reverse",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     PHRASE_LIST_FILENAMES = "phrase-list-filenames",
@@ -259,7 +258,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
     cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
     cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
-    cerr << REVERSE << "=" << learningInfo.reverse << endl;
     cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
     cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
@@ -557,7 +555,7 @@ int main(int argc, char **argv) {
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda.humane", true);
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda", false);
     }
-
+    
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".supervised.labels";
     //model->Label(textFilename, labelsFilename);

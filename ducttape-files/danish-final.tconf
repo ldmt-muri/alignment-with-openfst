@@ -3,7 +3,7 @@ global {
     ducttape_output="/usr3/home/wammar/crf-auto-pos/danish-final"
 
     # general
-    cores=20
+    cores=32
 
     # data
     labeled_train_text="/usr0/home/wammar/empty"
@@ -13,12 +13,12 @@ global {
     labeled_test_labels="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/danish-ddt-2006.pos"
 
     # tag dictionary
-    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/da-wik-20120320.dic"
+    tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/da-wik-20120320.dic"
 
     # use labeled data exclusively for training?
     supervised=""
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one) * (DirichletAlpha: point_nine) * (FeatureSet: full) * (LbfgsItercount: two) * (CoordItercount: hundred) * (EmIterCount: two) * (Prefix: pos)
+    reach Evaluate via (Model: autoencoder hmm) * (L2Strength: ten) * (DirichletAlpha: point_one) * (FeatureSet: hk) * (LbfgsIterCount: one) * (CoordIterCount: hundred) * (EmIterCount: one) * (Prefix: pos)
 }

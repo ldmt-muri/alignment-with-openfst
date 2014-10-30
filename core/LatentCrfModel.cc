@@ -636,9 +636,9 @@ void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<int64_t> 
         }
 
         // also, if this observation appears in a tag dictionary, we only allow the corresponding word classes
-        if(tagDict.count(x[i]) > 0 && tagDict[x[i]].count(yI) == 0) {
-          continue;
-        }
+        //if(tagDict.count(x[i]) > 0 && tagDict[x[i]].count(yI) == 0) {
+        //  continue;
+        //}
 
       	// compute h(y_i, y_{i-1}, x, i)
         FastSparseVector<double> h;

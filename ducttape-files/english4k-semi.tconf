@@ -1,0 +1,22 @@
+global {
+    # Output directory:
+    ducttape_output="/usr3/home/wammar/crf-auto-pos/english4k-final-semi2"
+
+    # general
+    cores=16
+
+    # data
+    labeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k-18k"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k"
+    unlabeled_train_text="/usr0/home/wammar/empty"
+    labeled_train_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k-18k"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k"
+
+    # use labeled data exclusively for training?
+    supervised=""
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: hundred) * (DirichletAlpha: one) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes) * (OptimizeLambdasFirst: no)
+}
+

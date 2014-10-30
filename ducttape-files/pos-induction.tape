@@ -10,21 +10,21 @@ global {
   alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
-  tag_dict_file=""
+  #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
 
   # autoencoder hyperparams
   l2_strength=(L2Strength: zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1 point_three=0.3 one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
-  lbfgs_itercount=(LbfgsItercount: one=1 two=2 four=4)
+  lbfgs_itercount=(LbfgsIterCount: one=1 two=2 four=4)
   em_itercount=(EmIterCount: one=1 two=2 four=4)
-  coord_itercount=(CoordItercount: normal=50 hundred=100 zero=0 ten=10)
+  coord_itercount=(CoordIterCount: normal=50 fifty=50 hundred=100 thousand=1000 zero=0 ten=10)
   test_with_crf_only=""
   optimize_lambdas_first=true
   min_relative_diff=0.001
   prefix=(Prefix: pos=pos3 other=other other2=other2)
   fire_precomputed_features_for_xim1=(FeatureSet: full=yes hk="")
   fire_precomputed_features_for_xip1=""
-  reconstruct_brown_clusters=(FeatureSet: full=true hk="")
+  reconstruct_brown_clusters=(FeatureSet: full=yes hk="")
   labels_count=12
   feature_set=(FeatureSet: full="full" hk="hk")
 
@@ -157,12 +157,13 @@ task AutoencoderPosInduction
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
-    # > hmm_labels 
+    > hmm_labels 
     > autoencoder_labels 
     > out_err 
     > autoencoder_ll
     # > hmm_ll
     > auto_test_labels
+    > hmm_test_labels
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
   variational="true"
@@ -176,7 +177,7 @@ task AutoencoderPosInduction
   command="nice -10 mpirun -np $procs $executable 
   --output-prefix $prefix
   --train-data $data_file
-  --feat LABEL_BIGRAM --feat BOUNDARY_LABELS --feat PRECOMPUTED
+  --feat LABEL_BIGRAM --feat PRECOMPUTED
   --min-relative-diff $min_relative_diff
   --max-iter-count $coord_itercount
   --cache-feats false
@@ -257,9 +258,11 @@ task AutoencoderPosInduction
     tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels    
   else
     tail -n $actual_test_size $prefix.final.labels > $auto_test_labels    
+    tail -n $actual_test_size $prefix.hmm.labels > $hmm_test_labels    
   fi
  
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
+  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $hmm_test_labels $hmm_labels
   
   touch $autoencoder_ll
 }
@@ -270,12 +273,8 @@ task Evaluate
     :: labeled_test_labels=@
     < labels=(Model:
                 featurized_hmm=$labels@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_labels@AutoencoderPosInduction)
-                # hmm=$hmm_labels@AutoencoderPosInduction)
-#    < ll=(Model:
-#                featurized_hmm=$ll@FeaturizedHmmPosInduction
-#                autoencoder=$autoencoder_ll@AutoencoderPosInduction)
-#                hmm=$hmm_ll@AutoencoderPosInduction)
+                autoencoder=$autoencoder_labels@AutoencoderPosInduction
+                hmm=$hmm_labels@AutoencoderPosInduction)
     > gold_file
     > scores 
 {
