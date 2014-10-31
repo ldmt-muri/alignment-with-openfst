@@ -19,6 +19,7 @@ digit_regex = re.compile('\d')
 hyphen_regex = re.compile('-')
 
 suffix_counts = defaultdict(int)
+prefix_counts = defaultdict(int)
 counter = 0
 for line in brown_file:
   counter += 1
@@ -28,12 +29,13 @@ for line in brown_file:
     print splits
     assert False
   cluster, word, frequency = splits
-  for suffix_length in range(1,4):
+  for suffix_length in range(2,4):
     if len(word) > suffix_length:
       suffix_counts[word[-suffix_length:]] += 1
+      prefix_counts[word[0:suffix_length]] += 1
 
 ## This is the value "f" in Table 2 of Ammar et al. 2014
-min_suffix_count = 1 if args.haghighi_klein else 10
+min_affix_count = 1 if args.haghighi_klein else 10
 
 brown_file.close()
 brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
@@ -41,15 +43,14 @@ for line in brown_file:
   cluster, word, frequency = line.split('\t')
   frequency = int(frequency)
   
-  features = {
-#    u'cluster-{}'.format(cluster):1, 
-#    u'clus-{}'.format(cluster[0:4]):1
-    }
+  features = {}
   
-  # suffixes
-  for suffix_length in range(1,4):
-    if len(word) > suffix_length and suffix_counts[word[-suffix_length:]] > min_suffix_count:
+  # affixes
+  for suffix_length in range(2,4):
+    if len(word) > suffix_length and suffix_counts[word[-suffix_length:]] > min_affix_count:
       features[u'{}-suff-{}'.format(suffix_length, word[-suffix_length:])]=1
+    if len(word) > suffix_length and prefix_counts[word[0:suffix_length]] > min_affix_count:
+      features[u'{}-pref-{}'.format(suffix_length, word[0:suffix_length])]=1
 
   # hypthen
   if hyphen_regex.search(word):
@@ -76,13 +77,10 @@ for line in brown_file:
   elif word[0].isupper():
     features[u'upper-initial'] = 1
 
-  # word string
-  min_lowercased_frequency = 11
-  if frequency >= min_lowercased_frequency:
+  # lowercased word string
+  if word.lower() != word:
     features[u'{}'.format(word.lower()).replace(u'=', u'eq')] = 1
-  if args.haghighi_klein:
-    features[word.replace(u'=', u'eq')] = 1
-
+  
   # word shape
   if not args.haghighi_klein:
     shape=[u'^']
