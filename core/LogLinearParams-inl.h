@@ -9,15 +9,16 @@ public:
     unordered_map_featureId_double activeFeatures;
     FireFeatures(srcToken, prevSrcToken, tgtToken, srcPos, prevSrcPos, tgtPos, srcSentLength, tgtSentLength, activeFeatures);
     // compute log prob
-    double result = DotProduct(activeFeatures);    
+    double result = DotProduct(activeFeatures);
     return result;
   }
   
   // update a single parameter's value (adds the parameter if necessary)
   inline void UpdateParam(const FeatureId &paramId, const double newValue) {
+    assert(weightsMultiplier > 0.0);
     assert(sealed);
-    if(!AddParam(paramId, newValue)) {
-      (*paramWeightsPtr)[paramIndexes[paramId]] = newValue;
+    if(!AddParam(paramId, newValue / weightsMultiplier)) {
+      (*paramWeightsPtr)[paramIndexes[paramId]] = newValue / weightsMultiplier;
     }
   }
 
@@ -25,11 +26,10 @@ public:
   // assumptions:
   // - there's a parameter with such index
   inline void UpdateParam(const unsigned paramIndex, const double newValue) {
+    assert(weightsMultiplier > 0.0);
     assert(sealed);
-    if(paramWeightsPtr->size() <= paramIndex) {
-      assert(false);
-    }
-    (*paramWeightsPtr)[paramIndex] = newValue;
+    if(paramWeightsPtr->size() <= paramIndex) assert(false);
+    (*paramWeightsPtr)[paramIndex] = newValue / weightsMultiplier;
   }
 
   // checks whether a parameter exists
@@ -59,14 +59,14 @@ public:
   inline double GetParamWeight(const FeatureId &paramId) {
     assert(sealed);
     AddParam(paramId);
-    return (*paramWeightsPtr)[paramIndexes[paramId]];
+    return (*paramWeightsPtr)[paramIndexes[paramId]] * weightsMultiplier;
   }
   
   // returns the current weight of this param (adds the parameter if necessary)
   inline double GetParamWeight(unsigned &paramIndex) {
     assert(sealed);
     assert(paramIndex < paramWeightsPtr->size());
-    return (*paramWeightsPtr)[paramIndex];
+    return (*paramWeightsPtr)[paramIndex] * weightsMultiplier;
   }
   
   inline unsigned GetParamsCount() {
@@ -81,6 +81,7 @@ public:
   }
 
   // returns a pointer to the array of parameter weights
+  // note: in order to get the correct weight values, multiply this array by weightsMultiplier.
   inline double* GetParamWeightsArray() { 
      assert(sealed);
      return paramWeightsPtr->data(); 

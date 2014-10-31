@@ -818,6 +818,27 @@ class LogLinearParams {
 
   bool LogLinearParamsIsIdentical(const LogLinearParams &otherParams);
 
+  void UpdateWeightsMultiplier(double weightsMultiplier) {
+    this->weightsMultiplier = weightsMultiplier;
+  }
+
+  double GetWeightsMultiplier() const {
+    return weightsMultiplier;
+  }
+
+  void ScaleWeights() {
+    if(sealed) {
+      for(auto& weight : *paramWeightsPtr) {
+        weight *= weightsMultiplier;
+      }
+    } else {
+      for(auto& weight : paramWeightsTemp) {
+        weight *= weightsMultiplier;
+      }
+    }
+    weightsMultiplier = 1.0;
+  }
+  
  public:
   // the actual parameters 
   unordered_map_featureId_int paramIndexes;
@@ -857,6 +878,7 @@ class LogLinearParams {
 
  private:
   bool sealed;
+  double weightsMultiplier;
   
 };
 

@@ -334,7 +334,7 @@ double LatentCrfPosTagger::ComputeNllYGivenXAndLambdaGradient(
     // build the FSTs
     fst::VectorFst<FstUtils::LogArc> lambdaFst;
     vector<FstUtils::LogWeight> lambdaAlphas, lambdaBetas;
-    BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas, &derivativeWRTLambda, &objective);
+    BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
     
     // compute the F map fro this sentence
     FastSparseVector<double> FOverZSparseVector;

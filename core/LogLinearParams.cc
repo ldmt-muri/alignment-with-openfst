@@ -195,6 +195,7 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   sealed = false;
   paramIdsPtr = 0;
   paramWeightsPtr = 0;
+  weightsMultiplier = 1.0;
 }
 
 bool LogLinearParams::IsSealed() const {
@@ -685,7 +686,7 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramIdsTemp.push_back(paramId);
-    paramWeightsTemp.push_back(paramWeight);
+    paramWeightsTemp.push_back(paramWeight / weightsMultiplier);
     returnValue = true;
   } else {
     returnValue = false;
@@ -1453,7 +1454,7 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
 void LogLinearParams::PrintFirstNParams(unsigned n) {
   assert(sealed);
   for (auto paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
-    cerr << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] << " at " << paramsIter->second << endl;
+    cerr << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] * weightsMultiplier << " at " << paramsIter->second << endl;
   }
 }
 
@@ -1490,6 +1491,7 @@ void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradien
 }
 
 // override the member weights vector with this array
+// note: only copies the core values, completely weightsMultiplier-agnostic.
 void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
   assert(sealed);
   cerr << "##################" << endl;
@@ -1533,6 +1535,7 @@ double LogLinearParams::ComputeL2Norm() {
       (*paramWeightsPtr)[i] - featureGaussianMeans[ (*paramIdsPtr)[i] ];
     l2 += distance * distance;
   } 
+  l2 *= weightsMultiplier * weightsMultiplier;
   return l2/2; 
 }
 
@@ -1598,6 +1601,7 @@ double LogLinearParams::DotProduct(const unordered_map_featureId_double& values)
       assert(false);
     }
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
 
@@ -1611,6 +1615,7 @@ double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const
     assert(ParamExists(valuesIter->first));
     dotProduct += valuesIter->second * weights[valuesIter->first];
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
 
@@ -1631,6 +1636,7 @@ double LogLinearParams::DotProduct(const std::vector<double>& values, const Shme
   for(unsigned i = 0; i < values.size(); i++) {
     dotProduct += values[i] * weights[i];
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
   

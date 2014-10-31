@@ -220,6 +220,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
     } else if(vm[OPTIMIZER.c_str()].as<string>() == "lbfgs") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+    } else if(vm[OPTIMIZER.c_str()].as<string>() == "str") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::STOCHASTIC_GRADIENT_DESCENT;
     } else {
       cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
       assert(false);

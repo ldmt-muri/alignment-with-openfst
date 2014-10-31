@@ -46,6 +46,8 @@
 #include "LogLinearParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
 
+typedef std::mt19937 rng;
+
 namespace boost {
 namespace serialization{
 
@@ -155,6 +157,15 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   void BlockCoordinateDescent();
 
+  void OptimizeLambdasWithSgd(double& optimizedMiniBatchNll);
+  void OptimizeLambdasWithLbfgs(double& optimizedMiniBatchNll, lbfgs_parameter_t& lbfgsParams);
+  void OptimizeLambdasWithAdagrad(double& optimizedMiniBatchNll, 
+                                  double& miniBatchDevSetNll, 
+                                  vector<double>& gradient, 
+                                  vector<double>& u, vector<double>& h, 
+                                  int& adagradIter);
+  void ShuffleElements(vector<int>& elements);
+  
   // analyze
   void Analyze(std::string &inputFilename, std::string &outputFilename);
 
@@ -271,15 +282,20 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
          std::vector<FstUtils::LogWeight>& betas);
 
   // build an FST to compute Z(x)
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<double> *derivativeWRTLambda=0, double *objective=0);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
 
   // build an FST to compute Z(x). also computes potentials
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda=0, double *objective=0);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
   virtual double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
   virtual double ComputeNllYGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId);
 
+  virtual bool ComputeNllZGivenXAndLambdaGradientPerSentence(bool ignoreThetaTerms, 
+                                                             int sentId,
+                                                             double& sentNll,
+                                                             FastSparseVector<double>& sentNllGradient);
+  
 
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
@@ -371,6 +387,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   std::tr1::unordered_map<int64_t, std::tr1::unordered_set<int> > tagDict;
   // this maps the vocab id of a POS tag (e.g. "NOUN") to the word class id used internally to represent it
   std::tr1::unordered_map<int64_t, int> posTagVocabIdToClassId;
+
+  // random generator
+  rng random_generator; 
 };
 
 #endif
