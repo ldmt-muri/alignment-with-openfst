@@ -36,44 +36,38 @@ class UnsupervisedSequenceTaggingModel {
     Label(tokensInt, labels);
   }
 
-  void Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels, bool parallelize=true) {
-    cerr << "Unsupervised...::Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels, parallelize=" << parallelize << ")" << endl;
+  void Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
     for(unsigned i = 0; i < tokens.size(); i++) {
-      if(parallelize && learningInfo.mpiWorld->rank() % learningInfo.mpiWorld->size() != i) continue;
+      if(learningInfo.mpiWorld->rank() % learningInfo.mpiWorld->size() != i) continue;
       Label(tokens[i], labels[i]);
     }
-    if(parallelize) {
-      for(unsigned i = 0; i < tokens.size(); i++) {
-        mpi::broadcast< vector<int> >(*learningInfo.mpiWorld, labels[i], i % learningInfo.mpiWorld->size());
-      }
+    for(unsigned i = 0; i < tokens.size(); i++) {
+      mpi::broadcast< vector<int> >(*learningInfo.mpiWorld, labels[i], i % learningInfo.mpiWorld->size());
     }
   }
 
-  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels, bool parallelize=true) {
+  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
     cerr << "inside UnsupervisedSequenceTaggingModel::Label(vector<vector<string> > &tokens, vector<vector<int> > &labels)" << endl;
     assert(labels.size() == 0);
     labels.resize(tokens.size());
     for(unsigned i = 0 ; i <tokens.size(); i++) {
-      if(parallelize && learningInfo.mpiWorld->rank() % learningInfo.mpiWorld->size() != i) continue;
+      if(learningInfo.mpiWorld->rank() % learningInfo.mpiWorld->size() != i) continue;
       Label(tokens[i], labels[i]);
     }
-    if(parallelize) {
-      for(unsigned i = 0; i < tokens.size(); i++) {
-        mpi::broadcast< vector<int> >(*learningInfo.mpiWorld, labels[i], i % learningInfo.mpiWorld->size());
-      }
+    for(unsigned i = 0; i < tokens.size(); i++) {
+      mpi::broadcast< vector<int> >(*learningInfo.mpiWorld, labels[i], i % learningInfo.mpiWorld->size());
     }
   }
 
-  virtual void Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
+  virtual void Label(string &inputFilename, string &outputFilename) {
     cerr << "inside UnsupervisedSequenceTaggingModel::Label(string &inputFilename, string &outputFilename) " << endl;
     std::vector<std::vector<std::string> > tokens;
     StringUtils::ReadTokens(inputFilename, tokens);
     vector<vector<int> > labels;
-    Label(tokens, labels, parallelize);
-    if(!parallelize ||
-       parallelize && learningInfo.mpiWorld->rank() == 0) {
+    Label(tokens, labels);
+    if(learningInfo.mpiWorld->rank() == 0) {
       StringUtils::WriteTokens(outputFilename, labels);
     }
   }

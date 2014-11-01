@@ -52,7 +52,7 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   void Label(const string &labelsFilename);
   
-  void Label(string &inputFilename, string &outputFilename, bool parallelize) override;
+  void Label(string &inputFilename, string &outputFilename) override;
 
   double ComputeNllYGivenXAndLambdaGradient(vector<double> &derivativeWRTLambda, int fromSentId, int toSentId) override;
   

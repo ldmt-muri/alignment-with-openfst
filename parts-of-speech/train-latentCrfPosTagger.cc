@@ -349,23 +349,21 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
     localEqualsGlobal = (bestRank == world.rank());
     
     // the process which found the best HMM parameters will do some work now
-    if(localEqualsGlobal) {
-      // persist hmm params
-      if(persistHmmParams) {
-        string finalParamsPrefix = outputFilenamePrefix + ".final";
-        hmmModel.PersistParams(finalParamsPrefix);
-      }
-
-      // viterbi
-      string labelsFilename = outputFilenamePrefix + ".labels";
-      cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
-      bool parallelize=false;
-      hmmModel.Label(textFilename, labelsFilename, parallelize);
-      if(hmmModel.learningInfo->mpiWorld->rank() == 0) {
-        cerr << "automatic labels can be found at " << labelsFilename << endl;
-      }
+    // persist hmm params
+    if(persistHmmParams) {
+      string finalParamsPrefix = outputFilenamePrefix + ".final";
+      hmmModel.PersistParams(finalParamsPrefix);
     }
-
+    
+    // viterbi
+    string labelsFilename = outputFilenamePrefix + ".labels";
+    cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
+    hmmModel.Label(textFilename, labelsFilename);
+    if(hmmModel.learningInfo->mpiWorld->rank() == 0) {
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+    }
+  
+  
     // first, initialize the latentCrfPosTagger's theta parameters to zeros
     for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
         contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
@@ -424,13 +422,11 @@ void endOfKIterationsCallbackFunction() {
   stringstream labelsFilenameSs;
   labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount << "." << tagger.learningInfo.hackK;
   string labelsFilename = labelsFilenameSs.str();
+  
   //tagger.Label(labelsFilename);
+  tagger.Label(tagger.dataFilename, labelsFilename);
   if(tagger.learningInfo.mpiWorld->rank() == 0) {
-    bool parallelize=false;
-    tagger.Label(tagger.dataFilename, labelsFilename, false);
-    if(tagger.learningInfo.mpiWorld->rank() == 0) {
-      cerr << "automatic labels can be found at " << labelsFilename << endl;
-    }
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
   }
 }
 

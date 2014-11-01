@@ -178,7 +178,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
   void Label(std::vector<std::vector<int64_t> > &tokens, std::vector<std::vector<int> > &lables);
   void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
-  void Label(std::string &inputFilename, std::string &outputFilename);
+  virtual void Label(std::string &inputFilename, std::string &outputFilename);
   virtual void Label(std::vector<int64_t> &tokens, std::vector<int> &labels) = 0;
 
   // CONVENIENCE MPI OPERATIONS

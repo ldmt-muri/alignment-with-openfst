@@ -443,13 +443,25 @@ void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
   }
 }
 
-void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename, bool parallelize=true) {
+void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename) {
+  // read data
   std::vector<std::vector<std::string> > tokens;
   StringUtils::ReadTokens(inputFilename, tokens);
-  vector<vector<int> > labels;
-  Label(tokens, labels, parallelize);
-  if(!parallelize ||
-     parallelize && learningInfo.mpiWorld->rank() == 0) {
+  // make room for labels
+  vector<vector<int> > labels(tokens.size());
+  assert(labels.size() == tokens.size());
+  // label my share
+  for(uint i = 0; 
+      i < tokens.size() && i % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank(); 
+      ++i) {
+    Label(tokens[i], labels[i]);
+  }
+  // sync 
+  for(uint i = 0; i < tokens.size(); ++i) {
+    mpi::broadcast<vector<int>>(*learningInfo.mpiWorld, labels[i], (i % learningInfo.mpiWorld->size()));
+  }
+  // write to disk
+      if(learningInfo.mpiWorld->rank() == 0) {
     if(labelIntToString.size() > 0) {
       StringUtils::WriteTokens(outputFilename, labels, labelIntToString);
     } else {

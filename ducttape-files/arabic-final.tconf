@@ -1,28 +1,29 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-pos/arabic-final"
+    ducttape_output="/usr3/home/wammar/crf-auto-pos/arabic-final"
 
     # general
-    cores=16
-
-    labels_count=12
-    test_size=0
+    cores=32
 
     # data
-    labeled_train_text=""
-    labeled_train_labels=""
-    unlabeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/touched"
+    labeled_train_text="/usr0/home/wammar/empty"
     labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.tok.novowel"
+    unlabeled_train_text="/usr0/home/wammar/empty"
+    labeled_train_labels="/usr0/home/wammar/empty"
     labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.pos"
-    
-    data_file=""
-    gold_file=""
-    #tag_dict_file="/usr1/home/wammar/pos-data/wiktionary-defs-20131002-all/tag-dic/arabic.autoencoder.dict"
 
+    # precomputed brown clusters' paths file
+    precomputed_brown_clusters="/usr0/home/wammar/git/brown-cluster/arabic-padt-2007.tok-c100-p1.out/paths"
+    
+    # use labeled data exclusively for training?
     supervised=""
+    tag_dict_file=""
+
+    # reconstruct brown clusters or not?
+    reconstruct_brown_clusters=true
+
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one) * (DirichletAlpha: o_nine) * (FirePrecomputedFeaturesForXIM1: yes) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: yes)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: one_point_one) * (FeatureSet: full) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: fifty) * (Prefix: exp)
 }
-
