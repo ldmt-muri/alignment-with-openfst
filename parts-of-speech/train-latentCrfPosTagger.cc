@@ -306,7 +306,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 1;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
