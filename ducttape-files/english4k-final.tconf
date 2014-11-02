@@ -1,19 +1,19 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-pos/english4k-final"
+    ducttape_output="/usr3/home/wammar/crf-auto-pos/english4k-final"
 
     # general
     cores=32
 
     # data
     labeled_train_text="/usr0/home/wammar/empty"
-    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.head50"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.4k"
     unlabeled_train_text="/usr0/home/wammar/empty"
     labeled_train_labels="/usr0/home/wammar/empty"
-    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.head50"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.4k"
 
     # precomputed brown clusters' paths file
-    precomputed_brown_clusters="/usr0/home/wammar/git/brown-cluster/arabic-padt-2007.tok-c100-p1.out/paths"
+    precomputed_brown_clusters="/usr3/home/wammar/brown-clusters/english.newscommentaryv8_penntreebank-c100-p1.out/paths"
     
     # use labeled data exclusively for training?
     supervised=""
@@ -24,5 +24,5 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: zero) * (DirichletAlpha: one) * (FeatureSet: hk) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: fifty) * (Prefix: exp)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: three_thousand) * (DirichletAlpha: one) * (FeatureSet: full) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: twenty) * (Prefix: exp)
 }

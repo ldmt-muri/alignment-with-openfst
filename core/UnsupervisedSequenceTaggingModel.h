@@ -36,7 +36,7 @@ class UnsupervisedSequenceTaggingModel {
     Label(tokensInt, labels);
   }
 
-  void Label(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
+  virtual void LabelInParallel(vector<vector<int64_t> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
     for(unsigned i = 0; i < tokens.size(); i++) {
@@ -48,8 +48,7 @@ class UnsupervisedSequenceTaggingModel {
     }
   }
 
-  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
-    cerr << "inside UnsupervisedSequenceTaggingModel::Label(vector<vector<string> > &tokens, vector<vector<int> > &labels)" << endl;
+  void LabelInParallel(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
     assert(labels.size() == 0);
     labels.resize(tokens.size());
     for(unsigned i = 0 ; i <tokens.size(); i++) {
@@ -61,15 +60,20 @@ class UnsupervisedSequenceTaggingModel {
     }
   }
 
+  void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels) {
+    assert(labels.size() == 0);
+    labels.resize(tokens.size());
+    for(unsigned i = 0 ; i <tokens.size(); i++) {
+      Label(tokens[i], labels[i]);
+    }
+  }
+
   virtual void Label(string &inputFilename, string &outputFilename) {
-    cerr << "inside UnsupervisedSequenceTaggingModel::Label(string &inputFilename, string &outputFilename) " << endl;
     std::vector<std::vector<std::string> > tokens;
     StringUtils::ReadTokens(inputFilename, tokens);
     vector<vector<int> > labels;
     Label(tokens, labels);
-    if(learningInfo.mpiWorld->rank() == 0) {
-      StringUtils::WriteTokens(outputFilename, labels);
-    }
+    StringUtils::WriteTokens(outputFilename, labels);
   }
   
   // evaluate

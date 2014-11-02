@@ -79,7 +79,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
     (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
      // deen=150 // czen=515 // fren=447;
-    (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
@@ -236,10 +235,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
     //cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
     cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
-    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
     cerr << FEAT << "=";
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
       cerr << *featIter << " ";
     }
     cerr << endl;
@@ -358,12 +356,11 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".labels";
     cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
-    hmmModel.Label(textFilename, labelsFilename);
-    if(hmmModel.learningInfo->mpiWorld->rank() == 0) {
+    if(localEqualsGlobal) {
+      hmmModel.Label(textFilename, labelsFilename);
       cerr << "automatic labels can be found at " << labelsFilename << endl;
     }
-  
-  
+    
     // first, initialize the latentCrfPosTagger's theta parameters to zeros
     for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
         contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
@@ -423,8 +420,7 @@ void endOfKIterationsCallbackFunction() {
   labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount << "." << tagger.learningInfo.hackK;
   string labelsFilename = labelsFilenameSs.str();
   
-  //tagger.Label(labelsFilename);
-  tagger.Label(tagger.dataFilename, labelsFilename);
+  tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
   if(tagger.learningInfo.mpiWorld->rank() == 0) {
     cerr << "automatic labels can be found at " << labelsFilename << endl;
   }
@@ -556,12 +552,7 @@ int main(int argc, char **argv) {
     
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".supervised.labels";
-    //model->Label(textFilename, labelsFilename);
-    tagger.Label(labelsFilename);
-    if(tagger.learningInfo.mpiWorld->rank() == 0) {
-      cerr << "automatic labels can be found at " << labelsFilename << endl;
-    }
-    
+    tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
   } 
 
   if(learningInfo.supervisedTraining) {
@@ -602,8 +593,7 @@ int main(int argc, char **argv) {
 
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".final.labels";
-    //model->Label(textFilename, labelsFilename);
-    tagger.Label(labelsFilename);
+    tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
     if(tagger.learningInfo.mpiWorld->rank() == 0) {
       cerr << "automatic labels can be found at " << labelsFilename << endl;
     }

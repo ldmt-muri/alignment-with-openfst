@@ -443,7 +443,7 @@ void LatentCrfPosTagger::SetTestExample(vector<int64_t> &tokens) {
   }
 }
 
-void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename) {
+void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFilename) {
   // read data
   std::vector<std::vector<std::string> > tokens;
   StringUtils::ReadTokens(inputFilename, tokens);
@@ -452,13 +452,17 @@ void LatentCrfPosTagger::Label(string &inputFilename, string &outputFilename) {
   assert(labels.size() == tokens.size());
   // label my share
   for(uint i = 0; 
-      i < tokens.size() && i % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank(); 
+      i < tokens.size(); 
       ++i) {
+    if(i % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) continue;
+    assert(tokens[i].size() > 0);
     Label(tokens[i], labels[i]);
+    assert(labels[i].size() > 0);
   }
   // sync 
   for(uint i = 0; i < tokens.size(); ++i) {
     mpi::broadcast<vector<int>>(*learningInfo.mpiWorld, labels[i], (i % learningInfo.mpiWorld->size()));
+    assert(labels[i].size() > 0);
   }
   // write to disk
       if(learningInfo.mpiWorld->rank() == 0) {
@@ -497,52 +501,44 @@ void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   testingMode = false;
 }
 
-void LatentCrfPosTagger::Label(const string &labelsFilename) {
-  // run viterbi (and write the classes to file)
-  ofstream labelsFile(labelsFilename.c_str());
-  if(learningInfo.firstKExamplesToLabel == 0) {
-    learningInfo.firstKExamplesToLabel = examplesCount;
-  }
-  if(learningInfo.firstKExamplesToLabel > examplesCount) {
-    cerr << "here's the situation: examplesCount = " << examplesCount << ", firstKExamplesToLabel = " << learningInfo.firstKExamplesToLabel << endl;
-  }
-  assert(learningInfo.firstKExamplesToLabel <= examplesCount);
-  for(unsigned exampleId = 0; exampleId < learningInfo.firstKExamplesToLabel; ++exampleId) {
-    lambda->learningInfo->currentSentId = exampleId;
-    if(exampleId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
-      if(learningInfo.mpiWorld->rank() == 0){
-        string labelSequence;
-        learningInfo.mpiWorld->recv(exampleId % learningInfo.mpiWorld->size(), 0, labelSequence);
-        labelsFile << labelSequence;
-      }
-      continue;
-    }
-
-    //std::vector<int64_t> &srcSent = GetObservableContext(exampleId);
+void LatentCrfPosTagger::LabelInParallel(const string &labelsFilename) {
+  // put sentences in a vector
+  vector<vector<int64_t> > sents;
+  for(uint exampleId = 0; 
+      exampleId < learningInfo.firstKExamplesToLabel && exampleId < examplesCount;
+      ++exampleId) {
     std::vector<int64_t> &tokens = GetObservableSequence(exampleId);
-    std::vector<int> labels;
-    // run viterbi
-    Label(tokens, labels);
-
-    stringstream ss;
-    if(labelIntToString.size()>0) {
-      for(unsigned i = 0; i < labels.size(); ++i) {
-        ss << labelIntToString[labels[i]] << " ";
-      }
-    } else {
-      for(unsigned i = 0; i < labels.size(); ++i){
-        ss << labels[i] << " ";
-      }
-    }
-    ss << endl;
-    if(learningInfo.mpiWorld->rank() == 0){
-      labelsFile << ss.str();
-    }else{
-      learningInfo.mpiWorld->send(0, 0, ss.str());
-    }
-    
+    sents.push_back(tokens);
   }
-  labelsFile.close();
+  
+  // label the vector in parallel
+  vector<vector<int> > labels;
+  UnsupervisedSequenceTaggingModel::LabelInParallel(sents, labels);
+  
+  // master writes everything
+  if(learningInfo.mpiWorld->rank() == 0) {
+    ofstream labelsFile(labelsFilename.c_str());
+    for(uint exampleId = 0; exampleId < sents.size(); ++exampleId) {
+      stringstream ss;
+      if(labelIntToString.size()>0) {
+        for(unsigned i = 0; i < labels[exampleId].size(); ++i) {
+          ss << labelIntToString[labels[exampleId][i]] << " ";
+        }
+      } else {
+        for(unsigned i = 0; i < labels[exampleId].size(); ++i){
+          ss << labels[exampleId][i] << " ";
+        }
+      }
+      ss << endl;
+      labelsFile << ss.str();
+    }
+    labelsFile.close();
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
+  }
+
+  // sync
+  double dummy = 1.0;
+  mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy, dummy, std::plus<double>());
 }
 
 void LatentCrfPosTagger::FireFeatures(int yI, int yIM1, unsigned sentId, int i, 

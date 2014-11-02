@@ -37,7 +37,7 @@ for line in brown_file:
       prefix_counts[word[0:suffix_length]] += 1
 
 ## This is the value "f" in Table 2 of Ammar et al. 2014
-min_affix_count = counter / 1000.0
+min_affix_count = counter / 500.0
 
 brown_file.close()
 brown_file = io.open(args.brown_filename, encoding='utf8', mode='r')
@@ -56,9 +56,9 @@ for line in brown_file:
     features[u'contain_digit'] = 1
 
   # affixes
-  for affix_length in range(1,4):
-    if len(word) > affix_length and suffix_counts[word[-affix_length:]] > min_affix_count and prefix_counts[word[0:affix_length]] > min_affix_count:
-      features[u'{}-pref-{}-suff-{}'.format(affix_length, word[-affix_length:], word[0:affix_length])]=1
+  for affix_length in range(2,4):
+    #if len(word) > affix_length and suffix_counts[word[-affix_length:]] > min_affix_count and prefix_counts[word[0:affix_length]] > min_affix_count:
+    #  features[u'{}-pref-{}-suff-{}'.format(affix_length, word[-affix_length:], word[0:affix_length])]=1
     if len(word) > affix_length and suffix_counts[word[-affix_length:]] > min_affix_count:
       features[u'{}-suff-{}'.format(affix_length, word[-affix_length:])]=1
     if len(word) > affix_length and prefix_counts[word[0:affix_length]] > min_affix_count:

@@ -11,11 +11,11 @@ global {
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
   # autoencoder hyperparams
-  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
+  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
   lbfgs_itercount=(LbfgsIterCount: one=1 two=2 four=4)
   em_itercount=(EmIterCount: one=1 two=2 four=4)
-  coord_itercount=(CoordIterCount: fifty=50 normal=50 hundred=100 thousand=1000 zero=0 ten=10)
+  coord_itercount=(CoordIterCount: fifty=50 twenty=20 hundred=100 thousand=1000 zero=0 ten=10)
   test_with_crf_only=""
   optimize_lambdas_first=true
   min_relative_diff=0.0001
@@ -101,10 +101,12 @@ task GenerateWordpairFeats
     > paths
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
+  $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=temp_paths
   if [[ $precomputed_brown_clusters ]]; then
+    python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
     cp $precomputed_brown_clusters $paths
   else
-    $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
+    mv temp_paths $paths
   fi
 
   ## the precomputed features depend on the feature set 
@@ -190,8 +192,7 @@ task AutoencoderPosInduction
   #--optimizer sgd
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
-  --gold-labels-filename $gold_file
-  --test-size $test_size "
+  --gold-labels-filename $gold_file"
 
   # USE THIS OPTION TO RESUME WITH SOME PARAMETER DUMP IN CASE OF FAILURE
   #   --init-theta xxx/other.38.theta

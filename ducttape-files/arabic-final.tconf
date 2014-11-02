@@ -13,7 +13,7 @@ global {
     labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.pos"
 
     # precomputed brown clusters' paths file
-    precomputed_brown_clusters="/usr0/home/wammar/git/brown-cluster/arabic-padt-2007.tok-c100-p1.out/paths"
+    precomputed_brown_clusters=""
     
     # use labeled data exclusively for training?
     supervised=""
@@ -25,5 +25,5 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: one_point_one) * (FeatureSet: full) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: fifty) * (Prefix: exp)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_one point_three one) * (DirichletAlpha: point_nine one one_point_one) * (FeatureSet: full) * (EmIterCount: one) * (LbfgsIterCount: one) * (CoordIterCount: fifty) * (Prefix: exp)
 }
