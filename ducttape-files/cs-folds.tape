@@ -152,12 +152,14 @@ task GenerateWordpairFeats
     :: word_list=@
     :: dict_list=@
     :: arabic_morph=@
+    :: normalize=(Normalize: no="" yes="1")
     > wordpair_feats_file 
     > paths
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
-  command="python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels"
+  command="python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -o $wordpair_feats_file -s $data_file"
+  # command="python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -o $wordpair_feats_file -s $data_file -t $labeled_train_text -l $labeled_train_labels"
 
   if [[ $paths ]]; then
     command="$command -b $paths";
@@ -179,6 +181,10 @@ task GenerateWordpairFeats
     command="$command -d $dict_list";
   fi
 
+  if [[ $normalize ]]; then
+    command="$command --normalize"
+  fi
+
   echo "$command" > command
   $command
 } 
@@ -190,23 +196,35 @@ task GenerateCRFSuiteInput
 < labeled_test_text=$labeled_test_text_f@PickFold
 < labeled_test_labels=$labeled_test_labels_f@PickFold
 :: cs_sharedtask_dir=@
+:: phrase_list=@
 > train
 > crfsuite_test
 {
   other_pred_arg="--other-predictors"
   python $cs_sharedtask_dir/get_ldig.py $labeled_train_text ldig 
   python $cs_sharedtask_dir/get_cld2.py $labeled_test_text cld2 
-  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $train --pre 2 --post 2 $other_pred_arg ldig cld2
-  python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2 $other_pred_arg ldig cld2
+  command_train="python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_train_text $labeled_train_labels $wordpair_feats_file $train --pre 2 --post 2 $other_pred_arg ldig cld2"
+  if [[ $phrase_list ]]; then
+    command_train="$command_train --phrase-lists $phrase_list"
+  fi
+  command_test="python $cs_sharedtask_dir/converters/autoencoder_to_crfsuite.py $labeled_test_text $labeled_test_labels $wordpair_feats_file $crfsuite_test --pre 2 --post 2 $other_pred_arg ldig cld2"
+  if [[ $phrase_list ]]; then
+    command_test="$command_test --phrase-lists $phrase_list"
+  fi
+  echo $command_train > command_train
+  echo $command_test > command_test
+  $command_train
+  $command_test
 }
 
 task TrainCRFSuite
 < labeled_train_text=$labeled_train_text_f@PickFold
 < w=$train@GenerateCRFSuiteInput
 > model
+:: l2_strength=(crfStrength: one=1.0 point_three=0.3 three=3.0 ten=10.0 point_one=0.1 point_o_three=0.03 )
 {
   # touch model
-  crfsuite learn -m $model $w
+  crfsuite learn -m $model -a lbfgs -p c1=$l2_strength -p max_iterations=600 $w
 }
 
 task BuildLatentCrfPosTagger

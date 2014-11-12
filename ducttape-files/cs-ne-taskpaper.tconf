@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/semi-ne-2nd"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ne-taskpaper-compute-b"
 
     # general
     cores=30
@@ -8,7 +8,7 @@ global {
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.sd"
     labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/resources/users/nepali_training/nepali_training_test.sd"
+    unlabeled_train_text=(Other: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/users/nepali_training/nepali_training_test.sd" no="/usr0/home/chuchenl/git/cs-shared-task/splits/ar/unlabeled") 
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/training_ne.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ne-en/test_ne.labels"
 
@@ -20,7 +20,7 @@ global {
 
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.en.no_punc /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.english_diff_romanized /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.romanized_diff_english  /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ne.word /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_ne_titles /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_hi_titles" no="")
-    fuzzy_word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_ne_titles /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_hi_titles" no="")
+    fuzzy_word_list=(Fuzzy: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_ne_titles /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_hi_titles" no="")
     # fuzzy_word_list=""
 
     dict_list=""
@@ -30,7 +30,7 @@ global {
     alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=""
+    supervised=(Semi: yes="" no="1")
 
     labels_count=6
     lbfgs_itercount=100
@@ -41,7 +41,23 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0 test) * (DirichletAlpha: o_one)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes no) * (Fold: 0) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Fuzzy: no) * (Semi: yes) * (Other: no)
+}
+
+plan Fuzzy {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes no) * (Fold: 0) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Fuzzy: yes no) * (Semi: yes) * (Other: no)
+}
+
+plan Semi {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 0) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Fuzzy: yes) * (Semi: yes no) * (Other: no)
+}
+
+plan Other {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 0) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Fuzzy: yes no) * (Semi: yes) * (Other: yes no)
+}
+
+plan Baseline {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: no) * (Fold: 0) * (UseEmbeddings: no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Fuzzy: no) * (Semi: no) * (Other: no)
 }
 
 plan submission {

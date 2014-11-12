@@ -1,20 +1,25 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/semi-ar"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/meta-ar"
 
     # general
     cores=30
 
     # data files
-    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd"
-    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/resources/users/arabic_training/arabic_training_stripped"
-    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels"
-    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels"
-    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv"
+    labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/training_sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/test_sd"
+    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/resources/tweets/arabic_training"
+    unlabeled_train_sents="/usr0/home/chuchenl/git/cs-shared-task/resources/tweets/arabic_training.meta"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/training_labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/test_labels"
+    labeled_train_sents="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/training_sent"
+    labeled_test_sents="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/test_sent"
+    tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/test_labels.tsv"
     unlabeled_test_text="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.sd_0"
     unlabeled_test_labels="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.labels_0"
     unlabeled_test_tsv="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.labels.tsv_0"
+    # FIXME placeholder below!
+    unlabeled_test_sents="/usr0/home/chuchenl/git/cs-shared-task/splits/ar-loc/test_sent"
     
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ar.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.egyptian_diff_msa+ /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.msa /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.msa+_diff_egyptian" no="")
@@ -34,7 +39,7 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 2) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 2) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes) 
 }
 
 plan submission {

@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/crf-auto-cs/zh"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/zh-taskpaper-compute-b"
 
     # general
     cores=30
@@ -18,20 +18,15 @@ global {
     unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/zh/zh.labels.tsv_0"
     
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model_cjk" no="")
-<<<<<<< Updated upstream
-    word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlist/egyptian" no="")
-    dict_list=""
-    phrase_list=""
-=======
-    word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/wordlists/entities.u.word /mal2/corpora/wikipedia/dumps/en/titles" no="")
->>>>>>> Stashed changes
+    word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.en.no_punc" no="")
+    fuzzy_word_list=""
 
     brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-    wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
-    alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
+    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=""
+    supervised=(Semi: yes="" no="1")
   
     labels_count=6
     lbfgs_itercount=100
@@ -47,7 +42,15 @@ plan testWordFeats {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes no) * (Fold: 0) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Semi: yes)
+}
+
+plan Semi {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_one point_three one) * (DirichletAlpha: o_one o_three one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 0) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Semi: yes no)
+}
+
+plan Baseline {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: no) * (Fold: 0) * (UseEmbeddings: no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Semi: no)
 }
 
 plan submission {

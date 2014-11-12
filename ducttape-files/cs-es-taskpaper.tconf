@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/es_2nd-2"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/es-taskpaper-neu-2"
 
     # general
     cores=30
@@ -8,7 +8,7 @@ global {
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.sd"
     labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/resources/users/spanish_training/spanish_training_test.sd"
+    unlabeled_train_text=(Other: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/users/spanish_training/spanish_training_test.sd" no="/usr0/home/chuchenl/git/cs-shared-task/splits/ar/unlabeled") 
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/training_es.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels"
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/test_es.labels.tsv"
@@ -30,14 +30,31 @@ global {
     alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=""
+    supervised=(Semi: yes="" no="1")
+    neural=(Neural: yes="1" no="")
 
     labels_count=6
     lbfgs_itercount=100
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0 test) * (DirichletAlpha: o_three) * (UseWL: yes) *  (UseEmbeddings: yes)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0) * (DirichletAlpha: o_one) * (UseWL: yes no) *  (UseEmbeddings: yes no) * (Semi: yes) * (Other: no)
+}
+
+plan Semi {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0) * (DirichletAlpha: o_one) * (UseWL: yes) *  (UseEmbeddings: yes) * (Semi: yes no) * (Other: no)
+}
+
+plan Neural {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0) * (DirichletAlpha: o_one) * (UseWL: yes) *  (UseEmbeddings: yes) * (Semi: yes) * (Other: no) * (Neural: yes)
+}
+
+plan Other {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 0) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Semi: yes) * (Other: yes no)
+}
+
+plan Baseline {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: no) * (Fold: 0) * (UseEmbeddings: no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (Semi: no) * (Other: no)
 }
 
 plan submission {

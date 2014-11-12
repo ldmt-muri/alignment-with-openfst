@@ -1,6 +1,6 @@
 global {
     # Output directory:
-    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/semi-ar"
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/ar-taskpaper-compute-b"
 
     # general
     cores=30
@@ -8,16 +8,17 @@ global {
     # data files
     labeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.sd"
     labeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.sd"
-    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/resources/users/arabic_training/arabic_training_stripped"
+    unlabeled_train_text=(Other: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/users/arabic_training/arabic_training_stripped" no="/usr0/home/chuchenl/git/cs-shared-task/splits/ar/unlabeled")
     labeled_train_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/training_ar.labels"
     labeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels"
     tsv_template="/usr0/home/chuchenl/git/cs-shared-task/splits/fixed-ar-all/test_ar.labels.tsv"
-    unlabeled_test_text="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.sd_0"
-    unlabeled_test_labels="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.labels_0"
-    unlabeled_test_tsv="/usr0/home/wammar/git/cs-shared-task/tests/ar-merged/ar.labels.tsv_0"
+    unlabeled_test_text="/usr0/home/chuchenl/git/cs-shared-task/tests/ar-2-retry/ar.sd_0"
+    unlabeled_test_labels="/usr0/home/chuchenl/git/cs-shared-task/tests/ar-2-retry/ar.labels_0"
+    unlabeled_test_tsv="/usr0/home/chuchenl/git/cs-shared-task/tests/ar-2-retry/ar.labels.tsv_0"
     
     embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
     word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ar.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.egyptian_diff_msa+ /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.msa /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ar.msa+_diff_egyptian" no="")
+    fuzzy_word_list=""
     arabic_morph=(ArabicMorph: yes="1" no="")
     dict_list=""
     phrase_list="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ar.phrase /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.phrase"
@@ -27,14 +28,26 @@ global {
     alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
 
     #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
-    supervised=""
+    supervised=(Semi: yes="" no="1")
 
     labels_count=6
     lbfgs_itercount=100
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 2) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes)
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes no) * (Fold: 2) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes) * (Semi: yes) * (Other: no)
+}
+
+plan Semi {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 2) * (UseEmbeddings: yes) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes) * (Semi: yes no) * (Other: no)
+}
+
+plan Other {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: yes) * (Fold: 2) * (UseEmbeddings: yes no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes) * (Semi: yes) * (Other: yes no)
+}
+
+plan Baseline {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (ReconstructBrownClusters: no) * (UseWL: no) * (Fold: 2) * (UseEmbeddings: no) * (XIM1: no) * (XIM2: no) * (XIP1: no) * (XIP2: no) * (ArabicMorph: yes) * (Semi: no) * (Other: no)
 }
 
 plan submission {

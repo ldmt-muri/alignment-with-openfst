@@ -197,12 +197,12 @@ def get_embedding_feats_dict(word, model, normalize=False):
 
     if word in model:
         vec = model[word]
-        if normalize:
-            n = LA.norm(vec)
-        else:
-            n = 1.
         for i in range(dim):
-            to_return[u'embedding_dim_{}'.format(i)] = vec[i]/n
+            if normalize:
+                n = LA.norm(vec)
+                to_return[u'embedding_dim_{}'.format(i)] = vec[i]/n
+            else:
+                to_return[u'embedding_dim_{}'.format(i)] = vec[i]
     else:
         to_return[u'no_embedding_{}'.format(word)] = 1
 

@@ -1,0 +1,56 @@
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/chuchenl/crf-auto-cs/south_africa"
+
+    # general
+    cores=30
+
+    # data files
+    labeled_train_text="/usr0/home/chuchenl/git/cs-african/training.sd"
+    labeled_test_text="/usr0/home/chuchenl/git/cs-african/DSS00005.sd"
+    unlabeled_train_text="/usr0/home/chuchenl/git/cs-shared-task/splits/en-es/unlabeled"
+    labeled_train_labels="/usr0/home/chuchenl/git/cs-african/training.labels"
+    labeled_test_labels="/usr0/home/chuchenl/git/cs-african/DSS00005.labels"
+
+    
+    unlabeled_test_text="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.sd_0"
+    unlabeled_test_labels="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.labels_0"
+    unlabeled_test_tsv="/usr0/home/wammar/git/cs-shared-task/tests/ne-merged/ne.labels.tsv_0"
+
+    embeddings_file=(UseEmbeddings: yes="/usr0/home/chuchenl/git/tweet-embedding/w2v_model" no="")
+    word_list=(UseWL: yes="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.word /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.en.no_punc /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.english_diff_romanized /usr0/home/wammar/git/cs-shared-task/resources/wordlists/vocab.ne.romanized_diff_english  /usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.ne.word /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_ne_titles /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_hi_titles" no="")
+    # fuzzy_word_list=(UseWL: yes="/usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_ne_titles /usr0/home/chuchenl/git/cs-shared-task/resources/nepali/wikipedia_hi_titles" no="")
+    fuzzy_word_list=""
+
+    dict_list=""
+
+    brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
+    wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+    alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst"
+
+    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    supervised=(Semi: yes="" no="1")
+
+    labels_count=6
+    lbfgs_itercount=100
+
+    arabic_morph=""
+    phrase_list="/usr0/home/wammar/git/cs-shared-task/resources/wordlists/entities.u.phrase"
+
+}
+
+plan auto {
+    reach AutoencoderPosInduction via (Model: autoencoder) * (DirichletAlpha: one_point_one o_three o_one) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (UseEmbeddings: yes no) * (UseWL: yes no) * (Semi: yes no)
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: 0) * (UseEmbeddings: yes no) * (UseWL: yes no)
+}
+
+plan submission {
+    reach GenerateForSubmission via (Model: autoencoder) * (L2Strength: point_three) * (ReconstructBrownClusters: no) * (Fold: test) 
+}
+
+plan crfsuite {
+    reach Evaluate via (Model: crfsuite ) * (UseEmbeddings: yes) * (UseWL: yes) * (Fold: 0 1 2 test) * (crfStrength: point_three)
+}
