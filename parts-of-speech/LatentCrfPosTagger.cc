@@ -35,6 +35,11 @@ vector<int64_t>& LatentCrfPosTagger::GetObservableSequence(int exampleId) {
   }
 }
 
+const vector<Eigen::VectorNeural>& LatentCrfPosTagger::GetNeuralSequence(int exampleId) {
+    assert(exampleId < neuralRep.size());
+    return neuralRep[exampleId];
+}
+
 // singleton
 LatentCrfModel* LatentCrfPosTagger::GetInstance(const string &textFilename, 
                                                 const string &outputPrefix, 
@@ -171,6 +176,21 @@ LatentCrfPosTagger::LatentCrfPosTagger(const string &textFilename,
   vocabEncoder.Read(textFilename, data);
   examplesCount = data.size();
   
+  if(!learningInfo.neuralRepFilename.empty()) {
+      neuralRep.clear();
+      readNeuralRep(learningInfo.neuralRepFilename, neuralRep);      
+      assert(examplesCount==neuralRep.size());
+      for(auto sentence:neuralRep) {
+          cerr << "sen length:\t" << sentence.size() << endl;
+          for(auto emb:sentence) {
+              cerr << emb.mean() << " ";
+          }
+          cerr << endl;
+      }
+  }
+  
+  
+  
   // read and encode tagging dictionary
   vector<vector<int64_t> > rawTagDict;
   int wordClassCounter = FIRST_ALLOWED_LABEL_VALUE;
@@ -270,6 +290,16 @@ void LatentCrfPosTagger::InitTheta() {
     for(auto wordTypeIter = wordTypes.begin(); wordTypeIter != wordTypes.end(); ++wordTypeIter) {
       nLogThetaGivenOneLabel.params[*yDomainIter][*wordTypeIter] = abs(gaussianSampler.Draw());
     }
+  }
+  
+  if(!learningInfo.neuralRepFilename.empty()) {
+      assert(neuralMean.size()==0);
+      assert(neuralVar.size()==0);
+      for(auto y: yDomain) {
+          neuralMean[y].setRandom(Eigen::NEURAL_SIZE,1);
+          neuralVar[y].setIdentity();
+      }
+      cerr << "initialized neural means\n";
   }
   
   // then normalize them
@@ -470,9 +500,11 @@ void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   vector<FstUtils::LogWeight> alphas, betas;
   if(learningInfo.testWithCrfOnly) {
     BuildLambdaFst(sentId, fst, alphas, betas);
-  } else {
+  } else if (learningInfo.neuralRepFilename.empty()){
     BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), fst, alphas, betas);
-  }  
+  } else {
+    BuildThetaLambdaFst(sentId, GetNeuralSequence(sentId), fst, alphas, betas);
+  }
   fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
   fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
   fst::ShortestPath(fst2, &shortestPath);

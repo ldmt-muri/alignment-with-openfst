@@ -378,6 +378,9 @@ class LearningInfo {
   
   // phrase list filenames
   vector< string > phraseListFilenames;
+  
+  // metadata filenames
+  vector<string> metadataFilenames;
 
   // the id of the sentence pair currently being processed
   int currentSentId;
@@ -387,6 +390,8 @@ class LearningInfo {
   string outputFilenamePrefix;
 
   string goldFilename;
+  
+  string neuralRepFilename;
  
   string tagDictFilename;
 

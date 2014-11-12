@@ -21,12 +21,17 @@ def load_dict(gzipped_pickle):
         return (words, ne)
 
 
-def get_fuzzy_dict_features(w, s, dict_name=u'fuzzy', distance=5):
+def get_fuzzy_dict_features(w, s, dict_name=u'fuzzy', distance=10):
     import jellyfish
     to_return = dict()
     for cand in s:
-        if jellyfish.levenshtein_distance(w.lower(), cand) < distance:
-            to_return[u'wordlist-{}'.format(dict_name)] = 1
+        g = w.lower().encode('utf-8')
+        c = cand.lower().encode('utf-8')
+        dist = jellyfish.levenshtein_distance(g, c)
+        if dist < distance:
+            for i in range(dist):
+                to_return[u'wordlist-{}_more_than_{}'.format(dict_name, i)] = 1
+            to_return[u'wordlist-{}_equals_'.format(dict_name, dist)] = 1
         return to_return
 
 
@@ -47,7 +52,7 @@ def get_words(sd_filename, building=None):
         to_return = building
     with open(sd_filename, encoding='utf-8') as fh:
         for l in fh:
-            words = [x.lower() for x in l.strip().split()]
+            words = [x for x in l.strip().split()]
             to_return.update(words)
     return to_return
 
@@ -108,15 +113,16 @@ else:
 fuzzy_word_lists = []
 
 if args.fuzzy_word_list is not None and len(args.fuzzy_word_list) > 0:
-    fuzzy_word_list = set()
 
-    for f in args.word_list:
+    for f in args.fuzzy_word_list:
         with io.open(f, encoding='utf-8') as fh:
+            fuzzy_word_list = set()
             for l in fh:
                 words_in_wordlist = l.lstrip().strip().split()
                 # print 'words: {}'.format(words_in_wordlist[0].encode('utf-8'))
                 fuzzy_word_list.update(words_in_wordlist)
-    fuzzy_word_lists.append(fuzzy_word_list)
+        print 'len of fuzzy wordlist {}: {}'.format(f, len(fuzzy_word_list))
+        fuzzy_word_lists.append(fuzzy_word_list)
 else:
     fuzzy_word_lists = None
 
@@ -181,6 +187,15 @@ for word in word_set:
         # u'cluster-{}'.format(cluster):1,
         # u'clus-{}'.format(cluster[0:4]):1
     }
+
+    # case
+    if word.islower():
+        features[u'lower'] = 1
+    elif word.isupper():
+        features[u'upper'] = 1
+    elif word[0].isupper():
+        features[u'upper-initial'] = 1
+
     if embedding_model is not None:
         features.update(util.get_embedding_feats_dict(word, embedding_model, normalize=args.normalize))
     features.update(get_dict_features(word, words, dict_name=u'words'))
@@ -190,8 +205,7 @@ for word in word_set:
         features[u'{}_analyzable_{}'.format(word, analyzed[word])] = 1
 
     if l1_words is not None:
-        #features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
-        pass
+        features.update(get_dict_features(word, l1_words, dict_name=u'in_labeled_data'))
     if word_lists is not None:
         fired_wl = []
         for idx, w_list in enumerate(word_lists):
@@ -205,11 +219,13 @@ for word in word_set:
 
     if fuzzy_word_lists is not None:
         fired_wl = []
+        # print '# of fuzzy: {}'.format(len(fuzzy_word_lists))
         for idx, word_list in enumerate(fuzzy_word_lists):
             word_list_feature = get_fuzzy_dict_features(word, word_list, dict_name=u'in_provided_fuzzy_wl_{}'.format(idx), distance=3)
             if len(word_list_feature) > 0:
                 fired_wl.append(idx)
             features.update(word_list_feature)
+        # print 'fuzzy: {}'.format(len(fired_wl))
         if len(fired_wl) > 1:
             features.update({u'fuzzy_wl_{}_fired'.format(u','.join([unicode(x) for x in fired_wl])): 1})
 
@@ -246,14 +262,6 @@ for word in word_set:
         features[u'alphanumeric'] = 1
     else:
         features[u'nonalphanumeric'] = 1
-
-    # case
-    if word.islower():
-        features[u'lower'] = 1
-    elif word.isupper():
-        features[u'upper'] = 1
-    elif word[0].isupper():
-        features[u'upper-initial'] = 1
 
     # word string
     # if brown_freq[word] > 10 or brown_freq[word.lower()] > 10:

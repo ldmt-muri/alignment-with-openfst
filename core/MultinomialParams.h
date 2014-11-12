@@ -291,6 +291,43 @@ namespace MultinomialParams {
     return pTotal;
   }
 
+  /* FIXME does not belong here! */
+  template <typename K, typename V>
+  static boost::unordered_map<K, V> Accumulate(const boost::unordered_map<K, V> & m1,
+          const boost::unordered_map<K,V> & m2) {
+      boost::unordered_map<K,V> to_return(m1);
+      for(const auto& p:m2) {
+          to_return[p.first] += p.second;
+      }
+      return to_return;
+  }
+
+  /* FIXME also doesn't belong here! */
+  template <typename K, typename V>
+  static boost::unordered_map<K, V>& AccumulateInPlace(boost::unordered_map<K, V> & m1,
+          const boost::unordered_map<K,V> & m2) {
+      auto& to_return = m1;
+      for(const auto& p:m2) {
+          to_return[p.first] += p.second;
+      }
+      return to_return;
+  }
+  
+  /* FIXME does not belong here! */
+  template <typename V>
+  static boost::unordered_map<int64_t, std::vector<V>> Concatenate(const boost::unordered_map<int64_t, std::vector<V>> & m1,
+          const boost::unordered_map<int64_t,std::vector<V>> & m2) {
+      cerr << "in Concatenate; m1.size()==" << m1.size() << "\tm2.size()==" << m2.size() <<endl;
+      boost::unordered_map<int64_t,std::vector<V>> to_return;
+      for(typename boost::unordered_map<int64_t, std::vector<V>>::const_iterator p=m1.begin();p!=m1.end();p++) {
+          to_return[p->first].insert(to_return[p->first].end(),p->second.begin(),p->second.end());
+      }
+      for(typename boost::unordered_map<int64_t, std::vector<V>>::const_iterator p=m2.begin();p!=m2.end();p++) {
+          to_return[p->first].insert(to_return[p->first].end(),p->second.begin(),p->second.end());
+      }
+      return to_return;
+  }
+    
   template <typename ContextType>
   static boost::unordered_map<ContextType, MultinomialParam> AccumulateConditionalMultinomials(const boost::unordered_map<ContextType, MultinomialParam>& p1,
 										    const boost::unordered_map<ContextType, MultinomialParam>& p2) {

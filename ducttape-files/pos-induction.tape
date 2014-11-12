@@ -37,11 +37,14 @@ task PreprocessData
     :: unlabeled_train_text=@
     :: labeled_train_labels=@
     :: labeled_test_labels=@
+    :: unlabeled_train_labels=@
     > autoencoder_text
     > autoencoder_labels
+    > oracle_labels
     > autoencoder_test_size
 {
   cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
+  cat $labeled_train_labels $labeled_test_labels $unlabeled_train_labels > $oracle_labels
   cp $labeled_train_labels $autoencoder_labels
   cat $labeled_train_text $labeled_test_text | wc -l |awk -F" " '{print $1}' > $autoencoder_test_size
 }
@@ -129,6 +132,7 @@ task AutoencoderPosInduction
     :: alignment_with_openfst_dir=@
     :: procs=$cores
     < data_file=$autoencoder_text@PreprocessData
+    < oracle_labels=$oracle_labels@PreprocessData
     < gold_file=$autoencoder_labels@PreprocessData
     :: l2_strength=@
     #:: l1_strength=@
@@ -161,6 +165,7 @@ task AutoencoderPosInduction
   python $alignment_with_openfst_dir/parts-of-speech/augment_tag_dict_with_case.py -i $tag_dict_file -o tag_dict_file.cased -t $data_file
   fi 
 
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
   test_size=$(cat $autoencoder_test_size)
 
   command="mpirun -np $procs $executable 
@@ -175,6 +180,7 @@ task AutoencoderPosInduction
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
   --gold-labels-filename $gold_file
+  --neural-filename neural
   --test-size $test_size "
 
   # hide  

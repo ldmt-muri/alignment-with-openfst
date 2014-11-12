@@ -237,6 +237,7 @@ class VocabEncoder {
 
       cerr << "exception thrown inside Encode() with token " << token << " and process #" << learningInfo.mpiWorld->rank() << ". details: " << ex.what() << endl;
       assert(false);
+      exit(-1);
 
     }
   }
@@ -398,7 +399,7 @@ class VocabEncoder {
     assert( data[data.size()-1].size() > 0 );
     countFrequencies = false;
   }
-  
+
   // read each line in the text file, encodes each sentence into vector<int> and appends it into 'data'
   // assumptions: data is empty
   void Read(const std::string &textFilename, vector<vector<int64_t> > &data) {
@@ -427,8 +428,8 @@ class VocabEncoder {
       data.resize(lineNumber+1);
       Encode(splits, data[lineNumber]);    
     }
-  }
-  
+  }  
+
   void PersistVocab(string filename) {
     std::ofstream vocabFile(filename.c_str(), std::ios::out);
     for(auto intToTokenIter = intToToken->begin(); intToTokenIter != intToToken->end(); intToTokenIter++) {
@@ -510,6 +511,7 @@ class VocabEncoder {
       }
     } else {
       assert(false);
+      exit(-1);
     }
 
   }

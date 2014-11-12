@@ -166,6 +166,9 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
     os << "OTHER_POS";
     os << "|" << obj.otherPos.posId << "|" << obj.otherPos.label << "|" << obj.otherPos.pred_hash;
     break;
+    case FeatureTemplate::SEQUENCE_METADATA:
+        os << "SEQUENCE_METADATA" << "|" << obj.sequenceMetadata.metaId << "|" << obj.sequenceMetadata.value << "|" << obj.sequenceMetadata.label;
+        break;
   case FeatureTemplate::NULL_ALIGNMENT:
     os << "NULL_ALIGNMENT";
     break;
@@ -498,6 +501,7 @@ void LogLinearParams::LoadPrecomputedFeaturesWith2Inputs(const string &wordPairF
 void LogLinearParams::SetLearningInfo(LearningInfo &learningInfo, bool otherForPos) {
     this->learningInfo = &learningInfo;
     LoadPhrases();
+    LoadMetadata();
     if (otherForPos) {
         LoadPosOutput();
     } else {
@@ -540,6 +544,28 @@ void LogLinearParams::LoadPhrases() {
         
     }
 }
+
+void LogLinearParams::LoadMetadata() {
+    std::hash<string> hash_fn;
+    if (learningInfo->metadataFilenames.size() > 0) {
+        for (auto filenameIter = learningInfo->metadataFilenames.begin();
+                filenameIter != learningInfo->metadataFilenames.end();
+                ++filenameIter) {
+            cerr << "metadata filename: " << *filenameIter << endl;
+            auto thisMetadata = new vector< size_t >();
+            std::ifstream infile(filenameIter->c_str());
+            std::string line;
+            while (std::getline(infile, line)) {
+                auto m = hash_fn(line);
+                thisMetadata->push_back(m);
+            }
+            metadata.push_back(thisMetadata);
+        }
+    }
+    return;
+}
+
+
 
 void LogLinearParams::LoadPosOutput() {
     set<string> keys;
@@ -1323,7 +1349,19 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         }
 
         break;
-
+    case FeatureTemplate::SEQUENCE_METADATA:
+        for (unsigned metaId = 0; metaId < metadata.size(); metaId++) {
+            assert(metadata[metaId]->size() > sentId);
+            auto metadataValue = (*metadata[metaId])[sentId];
+            featureId.type = FeatureTemplate::SEQUENCE_METADATA;
+            featureId.sequenceMetadata.value = metadataValue;
+            featureId.sequenceMetadata.metaId = metaId;
+            featureId.sequenceMetadata.label = yI;
+            AddParam(featureId);
+            activeFeatures[paramIndexes[featureId]] += (1.0 / double(x.size()));
+        }
+        break;
+                
     case FeatureTemplate::BOUNDARY_LABELS:
       if(i <= 0 || i >= x.size() - 1) {
         featureId.type = FeatureTemplate::BOUNDARY_LABELS;
