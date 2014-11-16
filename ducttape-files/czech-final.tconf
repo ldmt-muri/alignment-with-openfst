@@ -1,0 +1,18 @@
+global {
+    # Output directory:
+    ducttape_output="/usr1/home/wammar/pos-runs/czech-final"
+
+    # general
+    cores=28
+
+    # data
+    data_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/czech-pdt-2007.tok"
+    gold_file="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/czech-pdt-2007.pos"
+    tag_dict_file="/usr1/home/wammar/pos-data/li-et-al-2012/autoencoder-format/-wik-20120320.dic"  
+  
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder hmm) * (L2Strength: one ) * (L1Strength:  zero ) * (DirichletAlpha: point_nine) * (OptimizeLambdasFirst: yes) * (EmItercount: one) * (LbfgsItercount: one) * (TestWithCrfOnly: yes) * (MinRelativeDiff: point_o_o_one) 
+}
+

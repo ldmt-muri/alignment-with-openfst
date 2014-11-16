@@ -54,6 +54,7 @@ public:
   union {
     int64_t wordBias;
     struct { int displacement; int64_t word; int label; } emission;
+    struct { int displacement; int64_t word; int64_t other_word; int label; } precomputedPair;
     struct { unsigned current, previous; } bigram;
     int alignmentJump;
     struct { int alignmentJump; int64_t wordBias; } biasedAlignmentJump;
@@ -93,6 +94,7 @@ public:
       temp == "HEAD_CHILD_TOKEN_SET"? FeatureTemplate::HEAD_CHILD_TOKEN_SET:
       temp == "HEAD_CHILD_POS_SET"? FeatureTemplate::HEAD_CHILD_POS_SET:
       temp == "PRECOMPUTED"? FeatureTemplate::PRECOMPUTED:
+      temp == "PRECOMPUTED_PAIR"? FeatureTemplate::PRECOMPUTED_PAIR:
       temp == "DIAGONAL_DEVIATION"? FeatureTemplate::DIAGONAL_DEVIATION:
       temp == "SRC_WORD_BIAS"? FeatureTemplate::SRC_WORD_BIAS:
       temp == "CHILD_POS"? FeatureTemplate::CHILD_POS:
@@ -129,6 +131,11 @@ public:
       tempSS.str(splits[2]); tempSS >> obj.emission.label;
       obj.emission.word = FeatureId::vocabEncoder->Encode(splits[3]);
       break;
+    case FeatureTemplate::PRECOMPUTED_PAIR:
+      tempSS.str(splits[1]); tempSS >> obj.precomputedPair.displacement;
+      obj.precomputedPair.word = FeatureId::vocabEncoder->Encode(splits[2]);
+      obj.precomputedPair.other_word = FeatureId::vocabEncoder->Encode(splits[3]);
+      tempSS.str(splits[4]); tempSS >> obj.precomputedPair.label;
     case FeatureTemplate::LABEL_BIGRAM:
       tempSS.str(splits[1]); tempSS >> obj.bigram.previous;
       tempSS.str(splits[2]); tempSS >> obj.bigram.current;
@@ -245,6 +252,12 @@ public:
       ar & emission.label;
       ar & emission.word;
       break;
+    case FeatureTemplate::PRECOMPUTED_PAIR:
+      ar & precomputedPair.displacement;
+      ar & precomputedPair.word;
+      ar & precomputedPair.other_word;
+      ar & precomputedPair.label;
+      break;
     case FeatureTemplate::LABEL_BIGRAM:
     case FeatureTemplate::SRC_BIGRAM:
       ar & bigram.previous;
@@ -305,6 +318,19 @@ public:
       return boundaryLabel.position < rhs.boundaryLabel.position || \
         (boundaryLabel.position == rhs.boundaryLabel.position && boundaryLabel.label < rhs.boundaryLabel.label);
       break;
+      case FeatureTemplate::PRECOMPUTED_PAIR:
+        if(precomputedPair.displacement != rhs.precomputedPair.displacement) {
+          return precomputedPair.displacement < rhs.precomputedPair.displacement;
+        } else if(precomputedPair.word != rhs.precomputedPair.word) {
+          return precomputedPair.word < rhs.precomputedPair.word;
+        } else if(precomputedPair.other_word != rhs.precomputedPair.other_word) {
+          return precomputedPair.other_word < rhs.precomputedPair.other_word;
+        } else if(precomputedPair.label != rhs.precomputedPair.label) {
+          return precomputedPair.label < rhs.precomputedPair.label;
+        } else {
+          return false;
+        }
+        break;
       case FeatureTemplate::EMISSION:
         if(emission.displacement != rhs.emission.displacement) {
           return emission.displacement < rhs.emission.displacement;
@@ -400,6 +426,12 @@ public:
         emission.label != rhs.emission.label ||                     \
         emission.word != rhs.emission.word;
       break;
+    case FeatureTemplate::PRECOMPUTED_PAIR:
+      return precomputedPair.displacement != rhs.precomputedPair.displacement ||  \
+        precomputedPair.word != rhs.precomputedPair.word ||                         \
+        precomputedPair.other_word != rhs.precomputedPair.other_word ||                         \
+        precomputedPair.label != rhs.precomputedPair.label;
+      break;
     case FeatureTemplate::LABEL_BIGRAM:
     case FeatureTemplate::SRC_BIGRAM:
       return bigram.current != rhs.bigram.current || bigram.previous != rhs.bigram.previous;
@@ -483,9 +515,15 @@ public:
           boost::hash_combine(seed, x.emission.label);
           boost::hash_combine(seed, x.emission.word);
           break;
-        case FeatureTemplate::LABEL_BIGRAM:
-        case FeatureTemplate::SRC_BIGRAM:
-          boost::hash_combine(seed, x.bigram.current);
+      case FeatureTemplate::PRECOMPUTED_PAIR:
+          boost::hash_combine(seed, x.precomputedPair.displacement);
+          boost::hash_combine(seed, x.precomputedPair.word);
+          boost::hash_combine(seed, x.precomputedPair.other_word);
+          boost::hash_combine(seed, x.precomputedPair.label);
+          break;
+      case FeatureTemplate::LABEL_BIGRAM:
+      case FeatureTemplate::SRC_BIGRAM:
+        boost::hash_combine(seed, x.bigram.current);
           boost::hash_combine(seed, x.bigram.previous);
           break;
         case FeatureTemplate::ALIGNMENT_JUMP:
@@ -570,12 +608,18 @@ public:
           left.emission.label == right.emission.label &&                \
           left.emission.word == right.emission.word;
         break;
+      case FeatureTemplate::PRECOMPUTED_PAIR:
+        return left.precomputedPair.displacement == right.precomputedPair.displacement && \
+          left.precomputedPair.word == right.precomputedPair.word &&    \
+          left.precomputedPair.other_word == right.precomputedPair.other_word && \
+          left.precomputedPair.label == right.precomputedPair.label;
+        break;
       case FeatureTemplate::LABEL_BIGRAM:
       case FeatureTemplate::SRC_BIGRAM:
         return left.bigram.current == right.bigram.current && left.bigram.previous == right.bigram.previous;
-          break;
-        case FeatureTemplate::ALIGNMENT_JUMP:
-        case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
+        break;
+      case FeatureTemplate::ALIGNMENT_JUMP:
+      case FeatureTemplate::ALIGNMENT_JUMP_IS_ZERO:
           return left.alignmentJump == right.alignmentJump;
           break;
         case FeatureTemplate::LOG_ALIGNMENT_JUMP:
@@ -818,6 +862,27 @@ class LogLinearParams {
 
   bool LogLinearParamsIsIdentical(const LogLinearParams &otherParams);
 
+  void UpdateWeightsMultiplier(double weightsMultiplier) {
+    this->weightsMultiplier = weightsMultiplier;
+  }
+
+  double GetWeightsMultiplier() const {
+    return weightsMultiplier;
+  }
+
+  void ScaleWeights() {
+    if(sealed) {
+      for(auto& weight : *paramWeightsPtr) {
+        weight *= weightsMultiplier;
+      }
+    } else {
+      for(auto& weight : paramWeightsTemp) {
+        weight *= weightsMultiplier;
+      }
+    }
+    weightsMultiplier = 1.0;
+  }
+  
  public:
   // the actual parameters 
   unordered_map_featureId_int paramIndexes;
@@ -857,6 +922,7 @@ class LogLinearParams {
 
  private:
   bool sealed;
+  double weightsMultiplier;
   
 };
 

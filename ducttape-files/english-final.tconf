@@ -23,6 +23,6 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: autoencoder ) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no) 
 }
 
