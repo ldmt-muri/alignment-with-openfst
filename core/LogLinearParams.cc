@@ -181,6 +181,13 @@ std::ostream& operator<<(std::ostream& os, const FeatureId& obj)
        << obj.phraseListFeature.label << '|' 
        << obj.phraseListFeature.phraseListId;
     break;
+  case FeatureTemplate::PRECOMPUTED_PAIR:
+    os << "PRECOMPUTED_PAIR" 
+       << "|" << obj.precomputedPair.displacement
+       << "|" << FeatureId::vocabEncoder->Decode(obj.precomputedPair.word)
+       << "|" << FeatureId::vocabEncoder->Decode(obj.precomputedPair.other_word)
+       << "|" << obj.precomputedPair.label;
+    break;
   default:
     assert(false);
   }
@@ -198,6 +205,7 @@ LogLinearParams::LogLinearParams(VocabEncoder &types,
   sealed = false;
   paramIdsPtr = 0;
   paramWeightsPtr = 0;
+  weightsMultiplier = 1.0;
 }
 
 bool LogLinearParams::IsSealed() const {
@@ -711,7 +719,7 @@ bool LogLinearParams::AddParam(const FeatureId &paramId, double paramWeight) {
     int newParamIndex = paramIndexes.size();
     paramIndexes[paramId] = newParamIndex;
     paramIdsTemp.push_back(paramId);
-    paramWeightsTemp.push_back(paramWeight);
+    paramWeightsTemp.push_back(paramWeight / weightsMultiplier);
     returnValue = true;
   } else {
     returnValue = false;
@@ -1245,11 +1253,6 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
     switch(featureId.type) {
 
     case FeatureTemplate::PRECOMPUTED:
-      // override the feature type because we need to conjoin the precomputed feature with label id in pos tagging
-      featureId.type = FeatureTemplate::EMISSION;
-      // set the conjoined label
-      featureId.emission.label = yI;
-      
       // a moving window of tokens y[i]:Precomputed(x[i+k])
       kValues.clear();
       if(learningInfo->firePrecomputedFeaturesForXIM2) { kValues.push_back(-2); }
@@ -1273,20 +1276,44 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         for(auto precomputedIter = precomputedFeatures->begin();
             precomputedIter != precomputedFeatures->end();
             precomputedIter++) {
-          // now set the emission.word field to the precomputed feature. 
+          // now set all fields of the precomputed feature. 
           // TODO-REFACTOR: this is a misuse of the field names.
+          // override the feature type because we need to conjoin the precomputed feature with label id in pos tagging
+          featureId.type = FeatureTemplate::EMISSION;
+          featureId.emission.label = yI;
           featureId.emission.word = precomputedIter->first.precomputed;
           // now, all necessary fields of this featureId has been set
-          try {
-            AddParam(featureId);
-          } catch(LogLinearParamsException &ex) {
-            cerr << "been here"<< endl;
-            throw;
-          }
+          try { AddParam(featureId); } catch(LogLinearParamsException &ex) { throw; }
+          // fire
           activeFeatures[paramIndexes[featureId]] += precomputedIter->second;
+          
+          // if k != 0, consider also conjoining with the precomputed features at k=0
+          bool conjoin_multiple_precomputed = true;
+          if(conjoin_multiple_precomputed && k != 0 && learningInfo->firePrecomputedFeaturesForXI) {
+            // first, get the feature map for k=0
+            std::pair<int64_t, int64_t> xIWordPair(xI, xI);
+            if(xIWordPair.first == -1) { continue; }
+            auto xIPrecomputedFeatures = MapWordPairFeaturesToSharedMemory(false, xIWordPair);
+            if(!xIPrecomputedFeatures) { continue; }
+            // for each precomputed feature in this map
+            for(auto xIPrecomputedIter = xIPrecomputedFeatures->begin();
+                xIPrecomputedIter != xIPrecomputedFeatures->end();
+                xIPrecomputedIter++) {
+              // now populate a feature id of type wordtriple
+              featureId.type = FeatureTemplate::PRECOMPUTED_PAIR;
+              featureId.precomputedPair.displacement = k;
+              featureId.precomputedPair.word = xIPrecomputedIter->first.precomputed;
+              featureId.precomputedPair.other_word = precomputedIter->first.precomputed;
+              featureId.precomputedPair.label = yI;
+              // now, all necessary fields of this featureId has been set
+              try { AddParam(featureId); } catch(LogLinearParamsException &ex) { throw; }
+              // fire
+              activeFeatures[paramIndexes[featureId]] += precomputedIter->second;
+            }
+          }
         }
       }
-    
+      
       break;
 
       case FeatureTemplate::LABEL_BIGRAM:
@@ -1363,54 +1390,55 @@ void LogLinearParams::FireFeatures(int yI, int yIM1, int sentId, const vector<in
         break;
                 
     case FeatureTemplate::BOUNDARY_LABELS:
-      if(i <= 0 || i >= x.size() - 1) {
+      if(i == 0 || i == x.size() - 1) {
         featureId.type = FeatureTemplate::BOUNDARY_LABELS;
-        featureId.boundaryLabel.position = i < 2? i : i - x.size(); 
+        featureId.boundaryLabel.position = i == 0? 0 : -1;
         featureId.boundaryLabel.label = yI;
         AddParam(featureId);
         activeFeatures[paramIndexes[featureId]] += 1.0;
       }
       break;
-    case FeatureTemplate::PHRASE:
-            {
-                // cerr << "phrase fired\n";
-                size_t bigram_hash_init;
-                size_t bigram_hash;
-                if (this->concatMap.count(std::make_pair(-1, x[i])) == 0) {
-                    const string init = "^";
-                    auto combined_init = string(init + FeatureId::vocabEncoder->Decode(x[i]));
-                    boost::algorithm::to_lower(combined_init);
-                    this->concatMap.insert(std::make_pair(std::make_pair(-1, x[i]), hash_fn(combined_init)));
-                }
-                bigram_hash_init = this->concatMap.at(std::make_pair(-1, x[i]));
 
-                if (i > 0) {
-                    if (this->concatMap.count(std::make_pair(x[i - 1], x[i])) == 0) {
-                        auto combined = FeatureId::vocabEncoder->Decode(x[i - 1]) + "_" + FeatureId::vocabEncoder->Decode(x[i]);
-                        boost::algorithm::to_lower(combined);
-                        this->concatMap.insert(std::make_pair(std::make_pair(x[i - 1], x[i]), hash_fn(combined)));
-                    }
-                    bigram_hash = this->concatMap.at(std::make_pair(x[i - 1], x[i]));
-                } else {
-                    bigram_hash = 0;
+    case FeatureTemplate::PHRASE:
+      {
+        // cerr << "phrase fired\n";
+        size_t bigram_hash_init;
+        size_t bigram_hash;
+        if (this->concatMap.count(std::make_pair(-1, x[i])) == 0) {
+          const string init = "^";
+          auto combined_init = string(init + FeatureId::vocabEncoder->Decode(x[i]));
+          boost::algorithm::to_lower(combined_init);
+          this->concatMap.insert(std::make_pair(std::make_pair(-1, x[i]), hash_fn(combined_init)));
+        }
+        bigram_hash_init = this->concatMap.at(std::make_pair(-1, x[i]));
+        
+        if (i > 0) {
+          if (this->concatMap.count(std::make_pair(x[i - 1], x[i])) == 0) {
+            auto combined = FeatureId::vocabEncoder->Decode(x[i - 1]) + "_" + FeatureId::vocabEncoder->Decode(x[i]);
+            boost::algorithm::to_lower(combined);
+            this->concatMap.insert(std::make_pair(std::make_pair(x[i - 1], x[i]), hash_fn(combined)));
+          }
+          bigram_hash = this->concatMap.at(std::make_pair(x[i - 1], x[i]));
+        } else {
+          bigram_hash = 0;
+        }
+        for (unsigned listId = 0; listId < phraseBigrams.size(); listId++) {
+          featureId.type = FeatureTemplate::PHRASE;
+          featureId.phraseListFeature.phraseListId = listId;
+          featureId.phraseListFeature.label = yI;
+          featureId.phraseListFeature.imLabel = yIM1;
+          if (phraseBigrams[listId]->find(bigram_hash) != phraseBigrams[listId]->end() \
+              || phraseBigrams[listId]->find(bigram_hash_init) != phraseBigrams[listId]->end()) {
+            featureId.phraseListFeature.bigramInContext = true;
+          } else {
+            featureId.phraseListFeature.bigramInContext = false;
+          }
+          AddParam(featureId);
+          activeFeatures[paramIndexes[featureId]] += 1.0;
                 }
-                for (unsigned listId = 0; listId < phraseBigrams.size(); listId++) {
-                    featureId.type = FeatureTemplate::PHRASE;
-                    featureId.phraseListFeature.phraseListId = listId;
-                    featureId.phraseListFeature.label = yI;
-                    featureId.phraseListFeature.imLabel = yIM1;
-                    if (phraseBigrams[listId]->find(bigram_hash) != phraseBigrams[listId]->end() \
-                || phraseBigrams[listId]->find(bigram_hash_init) != phraseBigrams[listId]->end()) {
-                        featureId.phraseListFeature.bigramInContext = true;
-                    } else {
-                        featureId.phraseListFeature.bigramInContext = false;
-                    }
-                    AddParam(featureId);
-                    activeFeatures[paramIndexes[featureId]] += 1.0;
-                }
-                // cerr << "ended phrase fired\n";
-                break;
-            }
+        // cerr << "ended phrase fired\n";
+        break;
+      }
     default:
       assert(false);
       
@@ -1490,7 +1518,7 @@ void LogLinearParams::LoadParams(const string &inputFilename) {
 void LogLinearParams::PrintFirstNParams(unsigned n) {
   assert(sealed);
   for (auto paramsIter = paramIndexes.begin(); n-- > 0 && paramsIter != paramIndexes.end(); paramsIter++) {
-    cerr << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] << " at " << paramsIter->second << endl;
+    cerr << paramsIter->first << " " << (*paramWeightsPtr)[paramsIter->second] * weightsMultiplier << " at " << paramsIter->second << endl;
   }
 }
 
@@ -1527,6 +1555,7 @@ void LogLinearParams::UpdateParams(const unordered_map_featureId_double &gradien
 }
 
 // override the member weights vector with this array
+// note: only copies the core values, completely weightsMultiplier-agnostic.
 void LogLinearParams::UpdateParams(const double* array, const int arrayLength) {
   assert(sealed);
   cerr << "##################" << endl;
@@ -1570,6 +1599,7 @@ double LogLinearParams::ComputeL2Norm() {
       (*paramWeightsPtr)[i] - featureGaussianMeans[ (*paramIdsPtr)[i] ];
     l2 += distance * distance;
   } 
+  l2 *= weightsMultiplier * weightsMultiplier;
   return l2/2; 
 }
 
@@ -1635,6 +1665,7 @@ double LogLinearParams::DotProduct(const unordered_map_featureId_double& values)
       assert(false);
     }
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
 
@@ -1648,6 +1679,7 @@ double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const
     assert(ParamExists(valuesIter->first));
     dotProduct += valuesIter->second * weights[valuesIter->first];
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
 
@@ -1668,6 +1700,7 @@ double LogLinearParams::DotProduct(const std::vector<double>& values, const Shme
   for(unsigned i = 0; i < values.size(); i++) {
     dotProduct += values[i] * weights[i];
   }
+  dotProduct *= weightsMultiplier;
   return dotProduct;
 }
   

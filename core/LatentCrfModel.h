@@ -76,30 +76,30 @@ namespace Eigen {
   typedef Eigen::Matrix<double, NEURAL_SIZE, NEURAL_SIZE> MatrixNeural;
 }
 
+typedef std::mt19937 rng;
+
 namespace boost {
-    namespace serialization {
+namespace serialization{
 
-        template<class Archive, typename T, typename H, typename P, typename A>
-        void save(Archive &ar,
-                const std::tr1::unordered_set<T, H, P, A> &s, const unsigned int) {
-            vector<T> vec(s.begin(), s.end());
-            ar << vec;
-        }
+template<class Archive, typename T, typename H, typename P, typename A>
+void save(Archive &ar,
+          const std::tr1::unordered_set<T,H,P,A> &s, const unsigned int) {
+    vector<T> vec(s.begin(),s.end());   
+    ar<<vec;    
+}
+template<class Archive, typename T, typename H, typename P, typename A>
+void load(Archive &ar,
+          std::tr1::unordered_set<T,H,P,A> &s, const unsigned int) {
+    vector<T> vec;  
+    ar>>vec;   
+    std::copy(vec.begin(),vec.end(),    
+              std::inserter(s,s.begin()));  
+}
 
-        template<class Archive, typename T, typename H, typename P, typename A>
-        void load(Archive &ar,
-                std::tr1::unordered_set<T, H, P, A> &s, const unsigned int) {
-            vector<T> vec;
-            ar>>vec;
-            std::copy(vec.begin(), vec.end(),
-                    std::inserter(s, s.begin()));
-        }
-
-        template<class Archive, typename T, typename H, typename P, typename A>
-        void serialize(Archive &ar,
-                std::tr1::unordered_set<T, H, P, A> &s, const unsigned int version) {
-            boost::serialization::split_free(ar, s, version);
-        }
+template<class Archive, typename T, typename H, typename P, typename A>
+void serialize(Archive &ar,
+               std::tr1::unordered_set<T,H,P,A> &s, const unsigned int version) {
+    boost::serialization::split_free(ar,s,version);
 //
 //        template<class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
 //        inline void serialize(
@@ -109,16 +109,14 @@ namespace boost {
 //                ) {
 //            for (size_t i = 0; i < t.size(); i++)
 //                ar & t.data()[i];
-//        }
-
+//        }        
+    }
         template<class Archive>
         void serialize(Archive &ar,
                 LogVal<double> &s, const unsigned int version) {
             ar & s.v_;
         }
-
-        
-    }
+}
 }
 
 using unordered_set_featureId = std::tr1::unordered_set<FeatureId, FeatureId::FeatureIdHash, FeatureId::FeatureIdEqual>;
@@ -203,6 +201,15 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   void BlockCoordinateDescent();
 
+  void OptimizeLambdasWithSgd(double& optimizedMiniBatchNll);
+  void OptimizeLambdasWithLbfgs(double& optimizedMiniBatchNll, lbfgs_parameter_t& lbfgsParams);
+  void OptimizeLambdasWithAdagrad(double& optimizedMiniBatchNll, 
+                                  double& miniBatchDevSetNll, 
+                                  vector<double>& gradient, 
+                                  vector<double>& u, vector<double>& h, 
+                                  int& adagradIter);
+  void ShuffleElements(vector<int>& elements);
+  
   // analyze
   void Analyze(std::string &inputFilename, std::string &outputFilename);
 
@@ -215,7 +222,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void Label(std::vector<std::string> &tokens, std::vector<int> &labels);
   void Label(std::vector<std::vector<int64_t> > &tokens, std::vector<std::vector<int> > &lables);
   void Label(std::vector<std::vector<std::string> > &tokens, std::vector<std::vector<int> > &labels);
-  void Label(std::string &inputFilename, std::string &outputFilename);
+  virtual void Label(std::string &inputFilename, std::string &outputFilename);
   virtual void Label(std::vector<int64_t> &tokens, std::vector<int> &labels) = 0;
 
   // CONVENIENCE MPI OPERATIONS
@@ -341,15 +348,20 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
          std::vector<FstUtils::LogWeight>& betas);
   
   // build an FST to compute Z(x)
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<double> *derivativeWRTLambda=0, double *objective=0);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
 
   // build an FST to compute Z(x). also computes potentials
-  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas, vector<double> *derivativeWRTLambda=0, double *objective=0);
+  void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight> &alphas, std::vector<FstUtils::LogWeight> &betas);
 
   // iterates over training examples, accumulates p(z|x) according to the current model and also accumulates its derivative w.r.t lambda
   virtual double ComputeNllZGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId, double *devSetNll);
   virtual double ComputeNllYGivenXAndLambdaGradient(vector<double> &gradient, int fromSentId, int toSentId);
 
+  virtual bool ComputeNllZGivenXAndLambdaGradientPerSentence(bool ignoreThetaTerms, 
+                                                             int sentId,
+                                                             double& sentNll,
+                                                             FastSparseVector<double>& sentNllGradient);
+  
 
   // compute the partition function Z_\lambda(x)
   double ComputeNLogZ_lambda(const fst::VectorFst<FstUtils::LogArc> &fst, const std::vector<FstUtils::LogWeight> &betas); // much faster
@@ -546,6 +558,10 @@ private:
     boost::unordered_map<int64_t, Eigen::MatrixNeural> varInverse;
     boost::unordered_map<int64_t, double> varDet;
   
+
+
+  // random generator
+  rng random_generator; 
 };
 
 #endif

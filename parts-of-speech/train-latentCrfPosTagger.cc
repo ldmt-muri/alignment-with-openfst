@@ -47,6 +47,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     MAX_ITER_COUNT = "max-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
     MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
+    SUPERVISED_MAX_LBFGS_ITER_COUNT = "supervised-max-lbfgs-iter-count",
     //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
@@ -58,7 +59,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     DIRICHLET_ALPHA = "dirichlet-alpha",
     VARIATIONAL_INFERENCE = "variational-inference",
     TEST_WITH_CRF_ONLY = "test-with-crf-only",
-    REVERSE = "reverse",
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     PHRASE_LIST_FILENAMES = "phrase-list-filenames",
@@ -81,13 +81,13 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
     (OUTPUT_PREFIX.c_str(), po::value<string>(&outputFilenamePrefix), "(filename prefix) all filenames written by this program will have this prefix")
      // deen=150 // czen=515 // fren=447;
-    (TEST_SIZE.c_str(), po::value<unsigned int>(&learningInfo.firstKExamplesToLabel), "(int) specifies the number of sentence pairs in train-data to eventually generate alignments for") 
     (FEAT.c_str(), po::value< vector< string > >(), "(multiple strings) specifies feature templates to be fired")
     (L2_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(1.0), "(double) strength of an l2 regularizer")
     (L1_STRENGTH.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->regularizationStrength)->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
     (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
+    (SUPERVISED_MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.supervisedMaxLbfgsIterCount)->default_value(50), "(int) quit LBFGS optimization (for the supervised objective only) after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
@@ -224,6 +224,10 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
       cerr << "setting subOptMethod=ADAGRAD\n";
+    } else if(vm[OPTIMIZER.c_str()].as<string>() == "lbfgs") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+    } else if(vm[OPTIMIZER.c_str()].as<string>() == "str") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::STOCHASTIC_GRADIENT_DESCENT;
     } else {
       cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
       assert(false);
@@ -241,10 +245,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << INIT_THETA << "=" << initialThetaParamsFilename << endl;
     //cerr << WORDPAIR_FEATS << "=" << wordPairFeaturesFilename << endl;
     cerr << OUTPUT_PREFIX << "=" << outputFilenamePrefix << endl;
-    cerr << TEST_SIZE << "=" << learningInfo.firstKExamplesToLabel << endl;
     cerr << FEAT << "=";
     for (auto featIter = vm[FEAT.c_str()].as<vector<string> >().begin();
-	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
+         featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
       cerr << *featIter << " ";
     }
     cerr << endl;
@@ -265,7 +268,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << DIRICHLET_ALPHA << "=" << learningInfo.multinomialSymmetricDirichletAlpha << endl;
     cerr << VARIATIONAL_INFERENCE << "=" << learningInfo.variationalInferenceOfMultinomials << endl;
     cerr << TEST_WITH_CRF_ONLY << "=" << learningInfo.testWithCrfOnly << endl;
-    cerr << REVERSE << "=" << learningInfo.reverse << endl;
     cerr << OPTIMIZE_LAMBDAS_FIRST << "=" << learningInfo.optimizeLambdasFirst << endl;
     cerr << OTHER_ALIGNERS_OUTPUT_FILENAMES << "=";
     for(auto filename = learningInfo.otherAlignersOutputFilenames.begin();
@@ -280,6 +282,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     cerr << endl;
     cerr << GOLD_LABELS_FILENAME << "=" << goldLabelsFilename << endl;
     cerr << SUPERVISED << "=" << learningInfo.supervisedTraining << endl;
+    cerr << TGT_WORD_CLASSES_FILENAME << "=" << learningInfo.tgtWordClassesFilename << endl;
     cerr << endl << "=====================" << endl;
   }
     
@@ -311,7 +314,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 1;
+  learningInfo.maxIterationsCount = 10;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
@@ -354,23 +357,20 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
     localEqualsGlobal = (bestRank == world.rank());
     
     // the process which found the best HMM parameters will do some work now
-    if(localEqualsGlobal) {
-      // persist hmm params
-      if(persistHmmParams) {
-        string finalParamsPrefix = outputFilenamePrefix + ".final";
-        hmmModel.PersistParams(finalParamsPrefix);
-      }
-
-      // viterbi
-      string labelsFilename = outputFilenamePrefix + ".labels";
-      cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
-      bool parallelize=false;
-      hmmModel.Label(textFilename, labelsFilename, parallelize);
-      if(hmmModel.learningInfo->mpiWorld->rank() == 0) {
-        cerr << "automatic labels can be found at " << labelsFilename << endl;
-      }
+    // persist hmm params
+    if(persistHmmParams) {
+      string finalParamsPrefix = outputFilenamePrefix + ".final";
+      hmmModel.PersistParams(finalParamsPrefix);
     }
-
+    
+    // viterbi
+    string labelsFilename = outputFilenamePrefix + ".labels";
+    cerr << "now calling hmmModel.Label(textFilename=" << textFilename << ", labelsFilename=" << labelsFilename << ").." << endl;
+    if(localEqualsGlobal) {
+      hmmModel.Label(textFilename, labelsFilename);
+      cerr << "automatic labels can be found at " << labelsFilename << endl;
+    }
+    
     // first, initialize the latentCrfPosTagger's theta parameters to zeros
     for(auto contextIter = latentCrfPosTagger.nLogThetaGivenOneLabel.params.begin(); 
         contextIter != latentCrfPosTagger.nLogThetaGivenOneLabel.params.end();
@@ -429,13 +429,10 @@ void endOfKIterationsCallbackFunction() {
   stringstream labelsFilenameSs;
   labelsFilenameSs << tagger.outputPrefix << ".labels.iter" << tagger.learningInfo.iterationsCount << "." << tagger.learningInfo.hackK;
   string labelsFilename = labelsFilenameSs.str();
-  //tagger.Label(labelsFilename);
+  
+  tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
   if(tagger.learningInfo.mpiWorld->rank() == 0) {
-    bool parallelize=false;
-    tagger.Label(tagger.dataFilename, labelsFilename, false);
-    if(tagger.learningInfo.mpiWorld->rank() == 0) {
-      cerr << "automatic labels can be found at " << labelsFilename << endl;
-    }
+    cerr << "automatic labels can be found at " << labelsFilename << endl;
   }
 }
 
@@ -445,7 +442,7 @@ bool AssertEnabled() {
 }
 
 int main(int argc, char **argv) {  
-  // feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
+  //feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
 
   assert(AssertEnabled());
 
@@ -539,7 +536,7 @@ int main(int argc, char **argv) {
   LatentCrfModel* model = LatentCrfPosTagger::GetInstance(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID, wordPairFeaturesFilename, initLambdaFilename, initThetaFilename);
   LatentCrfPosTagger &tagger = * ( (LatentCrfPosTagger*) model );
   
-  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0 && learningInfo.goldFilename.size() == 0) {
+  if(initLambdaFilename.size() == 0 && initThetaFilename.size() == 0 && model->goldLabelSequences.size() == 0) {
     // hmm initialization
     unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
     model->BroadcastTheta(bestRank);
@@ -554,7 +551,7 @@ int main(int argc, char **argv) {
   }
 
   // use gold labels to do supervised training
-  if(goldLabelsFilename.size() > 0) {
+  if(model->goldLabelSequences.size() > 0) {
     bool fitLambdas = true, fitThetas = false;
     model->SupervisedTrain(fitLambdas, fitThetas);
     if(learningInfo.mpiWorld->rank() == 0) {
@@ -562,15 +559,10 @@ int main(int argc, char **argv) {
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda.humane", true);
       model->lambda->PersistParams(outputFilenamePrefix + ".supervised.lambda", false);
     }
-
+    
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".supervised.labels";
-    //model->Label(textFilename, labelsFilename);
-    tagger.Label(labelsFilename);
-    if(tagger.learningInfo.mpiWorld->rank() == 0) {
-      cerr << "automatic labels can be found at " << labelsFilename << endl;
-    }
-    
+    tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
   } 
 
   if(learningInfo.supervisedTraining) {
@@ -611,8 +603,7 @@ int main(int argc, char **argv) {
 
     // viterbi
     string labelsFilename = outputFilenamePrefix + ".final.labels";
-    //model->Label(textFilename, labelsFilename);
-    tagger.Label(labelsFilename);
+    tagger.LabelInParallel(tagger.dataFilename, labelsFilename);
     if(tagger.learningInfo.mpiWorld->rank() == 0) {
       cerr << "automatic labels can be found at " << labelsFilename << endl;
     }

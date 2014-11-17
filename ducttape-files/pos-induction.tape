@@ -5,28 +5,24 @@ global {
   ducttape_experimental_imports=enable
       
   # tool paths
-  brown_clusters_dir="/usr0/home/chuchenl/git/brown-cluster/"
-  wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
-  alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
+  brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
+  wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
+  alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
-  tag_dict_file=""
-
   # autoencoder hyperparams
-  l2_strength=(L2Strength: zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1 point_three=0.3 one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 )
-  dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_o_one=1.01 one=1.0 o_ninety_nine=0.99 o_nine=0.9 o_five=0.5 o_three=0.3 o_one=0.1 o_o_three=0.03 o_o_one=0.01 o_o_o_one=0.001 o_o_o_o_one=0.0001 )
-  lbfgs_itercount=1
-  em_itercount=1
-  #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
-  test_with_crf_only=false
+  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
+  dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
+  lbfgs_itercount=(LbfgsIterCount: one=1 two=2 four=4)
+  em_itercount=(EmIterCount: one=1 two=2 four=4)
+  coord_itercount=(CoordIterCount: fifty=50 twenty=20 hundred=100 thousand=1000 zero=0 ten=10)
+  test_with_crf_only=""
   optimize_lambdas_first=true
-  min_relative_diff=(MinRelativeDiff: point_o_o_o_one=0.0001 point_o_o_one=0.001 zero=0.0)
-  prefix=(Prefix: pos=pos-1 other=other other2=other2)
-  #fire_precomputed_features_for_xim2=(FirePrecomputedFeaturesForXIM2: no="" yes=yes)
-  fire_precomputed_features_for_xim1=(FirePrecomputedFeaturesForXIM1: no="" yes=yes)
-  fire_precomputed_features_for_xip1=(FirePrecomputedFeaturesForXIP1: no="" yes=yes)
-  #fire_precomputed_features_for_xip2=(FirePrecomputedFeaturesForXIP2: no="" yes=yes)
-  reconstruct_brown_clusters=(ReconstructBrownClusters: yes=1 no="")
+  min_relative_diff=0.0001
+  prefix=(Prefix: pos=pos3 other=other other2=other2 exp=exp)
+  labels_count=12
+  feature_set=(FeatureSet: full="full" hk="hk" basic="basic")
+
 }
 
 #import ../submitters.tape
@@ -99,16 +95,38 @@ task FeaturizedHmmPosInduction
 }
 
 task GenerateWordpairFeats 
-    < data_file=$autoencoder_text@PreprocessData 
+    :: precomputed_brown_clusters=@
+    < data_file=$autoencoder_text@PreprocessData
     :: brown_clusters_dir=@
     :: alignment_with_openfst_dir=@
+    :: feature_set=@
     > wordpair_feats_file 
     > paths
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal 
 {
-  $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=$paths
-  python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
-  #python $alignment_with_openfst_dir/parts-of-speech/create_code_switching_feats.py -b $paths -o $wordpair_feats_file -e $embeddings_file -s $data_file
+  $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=temp_paths
+  if [[ $precomputed_brown_clusters ]]; then
+    python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
+    cp $precomputed_brown_clusters $paths
+  else
+    mv temp_paths $paths
+  fi
+
+  ## the precomputed features depend on the feature set 
+  ## "hk" is the feature set used in Haghighi & Klein 2006
+  if [[ $feature_set == "hk" ]]; then
+    python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file -hk
+  fi
+
+  ## full = the full feature set used in Ammar et al. 2014
+  if [[ $feature_set == "full" ]]; then
+    python $alignment_with_openfst_dir/parts-of-speech/create_pos_word_feats.py -b $paths -o $wordpair_feats_file
+  fi
+
+  ## basic = emissions and transitions only. don't generate anything here
+  if [[ $feature_set == "basic" ]]; then
+    touch $wordpair_feats_file
+  fi
 } 
 
 task BuildLatentCrfPosTagger
@@ -135,7 +153,6 @@ task AutoencoderPosInduction
     < oracle_labels=$oracle_labels@PreprocessData
     < gold_file=$autoencoder_labels@PreprocessData
     :: l2_strength=@
-    #:: l1_strength=@
     :: dirichlet_alpha=@
     :: test_with_crf_only=@
     :: lbfgs_itercount=@
@@ -143,20 +160,20 @@ task AutoencoderPosInduction
     :: optimize_lambdas_first=@
     :: min_relative_diff=@
     :: prefix=@
-    #:: fire_precomputed_features_for_xim2=@
-    :: fire_precomputed_features_for_xim1=@
-    :: fire_precomputed_features_for_xip1=@
-    #:: fire_precomputed_features_for_xip2=@
     :: tag_dict_file=@
     :: labeled_test_text=@
+    :: feature_set=@
+    :: coord_itercount=@
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
-    # > hmm_labels 
+    > hmm_labels 
     > autoencoder_labels 
     > out_err 
     > autoencoder_ll
     # > hmm_ll
+    > auto_test_labels
+    > hmm_test_labels
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=64g .q=normal 
 {
   variational="true"
@@ -168,45 +185,40 @@ task AutoencoderPosInduction
   python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
   test_size=$(cat $autoencoder_test_size)
 
-  command="mpirun -np $procs $executable 
+  command="nice -10 mpirun -np $procs $executable 
   --output-prefix $prefix
   --train-data $data_file
-  --feat LABEL_BIGRAM --feat PRECOMPUTED --feat EMISSION
+  --feat LABEL_BIGRAM
   --min-relative-diff $min_relative_diff
-  --max-iter-count 30
+  --max-iter-count $coord_itercount
   --cache-feats false
-  --check-gradient true
-  --optimizer adagrad --minibatch-size 8000
+  --check-gradient false
+  --optimizer lbfgs --minibatch-size 100000
+  #--optimizer sgd
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
   --gold-labels-filename $gold_file
   --neural-filename neural
   --test-size $test_size "
 
-  # hide  
-  #   --init-theta /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.ze ro+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.theta
-  #  --init-lambda /usr1/home/wammar/pos-runs/italian-newcriterion/AutoencoderPosInduction/L2Strength.one+MinRelativeDiff.zero+OptimizeLambdasFirst.yes+Prefix.other+TestWithCrfOnly.yes-first/other.38.lambda
-  # hide  --feat BOUNDARY_LABELS 
+  # USE THIS OPTION TO RESUME WITH SOME PARAMETER DUMP IN CASE OF FAILURE
+  #   --init-theta xxx/other.38.theta
+  #   --init-lambda xxx/other.38.lambda
+
+  # specify feature templates in each feature set.
+  if [[ $feature_set == "basic" ]]; then
+    command="$command --feat EMISSION"
+  fi
+  if [[ $feature_set == "hk" ]]; then
+    command="$command --feat EMISSION --feat PRECOMPUTED"
+  fi
+  if [[ $feature_set == "full" ]]; then
+    command="$command --feat PRECOMPUTED --feat PRECOMPUTED_XIM1  --feat PRECOMPUTED_XIP1"
+  fi
 
   if [[ $supervised ]]; then
     command="$command --supervised true"
   fi
- 
-  #if [[ $fire_precomputed_features_for_xim2 ]]; then
-  #  command="$command --feat PRECOMPUTED_XIM2"
-  #fi
- 
-  if [[ $fire_precomputed_features_for_xim1 ]]; then
-    command="$command --feat PRECOMPUTED_XIM1"
-  fi
- 
-  if [[ $fire_precomputed_features_for_xip1 ]]; then
-    command="$command --feat PRECOMPUTED_XIP1"
-  fi
- 
-  #if [[ $fire_precomputed_features_for_xip2 ]]; then
-  #  command="$command --feat PRECOMPUTED_XIP2"
-  #fi
  
   if [[ $tgt_brown_clusters && $reconstruct_brown_clusters ]]; then
     command="$command --tgt-word-classes-filename $tgt_brown_clusters"
@@ -215,10 +227,6 @@ task AutoencoderPosInduction
   if [[ $l2_strength ]]; then
     command="$command --l2-strength $l2_strength"
   fi
-
-  #if [[ $l1_strength ]]; then
-  #  command="$command --l1-strength $l1_strength"
-  #fi
 
   if [[ $dirichlet_alpha ]]; then
     command="$command --dirichlet-alpha $dirichlet_alpha"
@@ -256,38 +264,34 @@ task AutoencoderPosInduction
   echo "autoencoder test size is $test_size"  
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
-  # head -n $test_size $prefix.hmm.labels > $prefix.hmm.labels.$test_size
-  tail -n $actual_test_size $prefix.labels > auto_test_labels
-  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test auto_test_labels $autoencoder_labels
-  # python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $prefix.hmm.labels.$test_size $hmm_labels
 
-  #echo "best hmm vs. latent crf:"
-  #cat out_err | grep "variation of information"
-  #cat out_err | grep "many-to-one"
-  # cat out_err | grep "Nll" | tail -n 1 > $autoencoder_ll 
+  if [[ $supervised ]]; then
+    tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels    
+  else
+    tail -n $actual_test_size $prefix.final.labels > $auto_test_labels    
+    tail -n $actual_test_size $prefix.hmm.labels > $hmm_test_labels    
+  fi
+ 
+  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels
+  python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $hmm_test_labels $hmm_labels
+  
   touch $autoencoder_ll
-  # cat out_err | grep "global max loglikelihood is" | tail -n 1 > $hmm_ll
 }
 
 task Evaluate
-    :: test_size=@
     :: wammar_utils_dir=@
     :: labeled_test_text=@
     :: labeled_test_labels=@
     < labels=(Model:
+                autoencoder=$autoencoder_labels@AutoencoderPosInduction
                 featurized_hmm=$labels@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_labels@AutoencoderPosInduction)
-                # hmm=$hmm_labels@AutoencoderPosInduction)
-    < ll=(Model:
-                featurized_hmm=$ll@FeaturizedHmmPosInduction
-                autoencoder=$autoencoder_ll@AutoencoderPosInduction)
-                # hmm=$hmm_ll@AutoencoderPosInduction)
-    > gold_file2
+                hmm=$hmm_labels@AutoencoderPosInduction)
+    > gold_file
     > scores 
 {
   # convert tokens and gold labels to token/label format
-  python $wammar_utils_dir/combine-token-label-in-one-file.py $labeled_test_text $labeled_test_labels $gold_file2
-  python $wammar_utils_dir/score-classes.py $gold_file2 $labels 2> $scores
-  python $wammar_utils_dir/score-vm.py $gold_file2 $labels 2>> $scores
-  cat $ll >> $scores
+  python $wammar_utils_dir/combine-token-label-in-one-file.py $labeled_test_text $labeled_test_labels $gold_file
+  python $wammar_utils_dir/score-classes.py $gold_file $labels 2> $scores
+  python $wammar_utils_dir/score-vm.py $gold_file $labels 2>> $scores
+  #cat $ll >> $scores
 }
