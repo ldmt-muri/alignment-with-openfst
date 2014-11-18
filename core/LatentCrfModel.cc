@@ -463,7 +463,7 @@ void LatentCrfModel::ComputeExpectedMean(unsigned sentId,
 
                     auto nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
                     meanPerLabel[yI].push_back(zI);
-                    nNormalizingConstant[yI].push_back(LogVal<double>(nLogMarginal - nLogC, init_lnx()));
+                    nNormalizingConstant[yI].push_back(LogVal<double>(-(nLogMarginal - nLogC), init_lnx()));
                 }
                 // prepare the schedule for visiting states in the next timestep
                 iP1States.insert(toState);
@@ -1630,7 +1630,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         const auto& this_iter = historyNeuralMean[historyNeuralMean.size()-1];
         const auto& prev_iter = historyNeuralMean[historyNeuralMean.size()-2];
         for(auto y:yDomain) {
-            cerr << "diff " << y << ":\n";
+            cerr << "\ndiff " << y << ":\n";
             cerr << this_iter.at(y) - prev_iter.at(y);
         }
     }
@@ -1685,16 +1685,16 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         }
     }
     
-#ifdef DEBUG
+
     for(auto y: yDomain) {
-        cerr << "mean " << y << ": " << neuralMean[y];
-        cerr << endl;
+        // cerr << "mean " << y << ": " << neuralMean[y];
+        // cerr << endl;
         cerr << "mean of mean: " << y << ": " << neuralMean[y].mean() << endl;
         // cerr << "var " << y << ": " << neuralVar[y];
         cerr << endl;
-        cerr << "var " << y << " determinant: " << neuralVar[y].determinant();
+        // cerr << "var " << y << " determinant: " << neuralVar[y].determinant();
     }
-#endif
+
     
     clearVarCache();
 }
@@ -1916,7 +1916,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
         lambda->GetParamsCount();
         // skip EM updates of the first block-coord-descent iteration
         //if(learningInfo.iterationsCount == 0) {
-        //  break;
+        //  break;  
         //}
         
         // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
@@ -2023,6 +2023,12 @@ void LatentCrfModel::BlockCoordinateDescent() {
             }
         }
 
+
+
+        if(learningInfo.mpiWorld->rank() == 0) {
+          cerr << "ending EM iteration #" << emIter <<  " at " << time(0) << endl;    
+        }
+        
         if (learningInfo.neuralRepFilename.empty()) {
             // update nLogTheta on slaves
             BroadcastTheta(0);
@@ -2030,15 +2036,6 @@ void LatentCrfModel::BlockCoordinateDescent() {
             
             BroadcastMeans(0);
         }
-
-
-        if(learningInfo.mpiWorld->rank() == 0) {
-          cerr << "ending EM iteration #" << emIter <<  " at " << time(0) << endl;    
-        }
-
-
-        // update nLogTheta on slaves
-        BroadcastTheta(0);
       } // end of EM iterations
 
       // for debugging
