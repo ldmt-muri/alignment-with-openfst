@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 export wammar_utils_dir="/usr0/home/wammar/wammar-utils/"
-export labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.0k-1k"
-export labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.0k-1k"
-export labels_dir="/usr3/home/wammar/crf-auto-pos/english1k-final/AutoencoderPosInduction/CoordIterCount.twenty+DirichletAlpha.one+L2Strength.three_thousand+Prefix.exp/"
-for out_labels in "$labels_dir"/*labels* ; do        
+export labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.tok.novowel"
+export labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/arabic-padt-2007.pos"
+export labels_dir="/usr3/home/wammar/crf-auto-pos/nov2014/AutoencoderPosInduction/DirichletAlpha.point_one+L2Strength.two_point_five+Language.arabic+Prefix.other"
+for out_labels in "$labels_dir"/*labels* ; do
     echo "=========================================="
     echo "evaluating $out_labels"
     echo "=========================================="
