@@ -6,22 +6,30 @@ global {
       
   # tool paths
   brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-  wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
-  alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
+  wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+  alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
   # autoencoder hyperparams
-  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 three=3.0 ten=10.0 thirty=30.0 hundred=100.0 three_hundred=300.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
+  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 two_point_five=2.5)
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
-  lbfgs_itercount=(LbfgsIterCount: one=1 two=2 four=4)
-  em_itercount=(EmIterCount: one=1 two=2 four=4)
-  coord_itercount=(CoordIterCount: fifty=50 twenty=20 hundred=100 thousand=1000 zero=0 ten=10)
+  lbfgs_itercount=1
+  em_itercount=1
+  coord_itercount=(CoordIterCount: fifty=50 seventy=70 twenty=20 hundred=100 thousand=1000 zero=0 ten=10)
   test_with_crf_only=""
   optimize_lambdas_first=true
   min_relative_diff=0.0001
-  prefix=(Prefix: pos=pos3 other=other other2=other2 exp=exp)
+  prefix=(Prefix: pos=pos3cc other=othercc other2=other2cc exp=expcc)
   labels_count=12
   feature_set=(FeatureSet: full="full" hk="hk" basic="basic")
+  effective_unlabeled_lines=(EffectiveUnlabeledLines:
+                infinity=10000000
+                0k=0
+                1k=1000
+                2k=2000
+                4k=4000
+                8k=8000
+                16k=16000)
 
 }
 
@@ -31,24 +39,36 @@ task PreprocessData
     :: labeled_train_text=@
     :: labeled_test_text=@
     :: unlabeled_train_text=@
+    :: effective_unlabeled_lines=@
     :: labeled_train_labels=@
     :: labeled_test_labels=@
-    :: unlabeled_train_labels=@
+   # :: unlabeled_train_labels=@
     > autoencoder_text
     > autoencoder_labels
-    > oracle_labels
+#    > oracle_labels
     > autoencoder_test_size
+    > fhmm_text
+    > fhmm_labels
+    > fhmm_test_size    
 {
-  cat $labeled_train_text $labeled_test_text $unlabeled_train_text > $autoencoder_text
-  cat $labeled_train_labels $labeled_test_labels $unlabeled_train_labels > $oracle_labels
+  head -n $effective_unlabeled_lines $unlabeled_train_text > effective_unlabeled_train_text
+
+  # prepare input for CRF autoencoder.
+  cat $labeled_train_text $labeled_test_text effective_unlabeled_train_text > $autoencoder_text
   cp $labeled_train_labels $autoencoder_labels
   cat $labeled_train_text $labeled_test_text | wc -l |awk -F" " '{print $1}' > $autoencoder_test_size
+
+  # prepare input for feature rich HMM. 
+  cat $labeled_test_text effective_unlabeled_train_text > $fhmm_text
+  cat $labeled_test_labels effective_unlabeled_train_text > $fhmm_labels
+  cat $labeled_test_text | wc -l |awk -F" " '{print $1}' > $fhmm_test_size
 }
 
 task FeaturizedHmmPosInduction
     :: wammar_utils_dir=@
-    < data_file=$autoencoder_text@PreprocessData
-    < gold_file=$autoencoder_labels@PreprocessData
+    < data_file=$fhmm_text@PreprocessData
+    < gold_file=$fhmm_labels@PreprocessData
+    < test_size=$fhmm_test_size@PreprocessData
     :: featurized_hmm_pos_inducer_dir=@
     :: l2_strength=@
     > base_conf
@@ -57,7 +77,7 @@ task FeaturizedHmmPosInduction
     > ll
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared 
 {
-  echo "WARNING: THIS NEEDS TO BE FIXED LATER. combine-token-label-in-mrg-file.py needs to create random labels for the mrg file when the gold labels are not provided."
+  echo "WARNING: THIS NEEDS TO BE FIXED. combine-token-label-in-mrg-file.py needs to create random labels for the mrg file when the gold labels are not provided."
   python $wammar_utils_dir/combine-token-label-in-mrg-file.py $data_file $gold_file $mrg_file
   echo "treeBank	$mrg_file" > $base_conf
   echo "numSentences	10000000" >> $base_conf
@@ -89,8 +109,14 @@ task FeaturizedHmmPosInduction
   
   # run
   java -cp $featurized_hmm_pos_inducer_dir/bin pos_tagging.POSInducerTester ++$base_conf 
-  
-  python $wammar_utils_dir/split-berg-kirkpatrick-pos-output-into-gold-vs-pred.py TMP/0.exec/guess500 gold_file_altformat $labels
+
+  # first, separate gold vs. predictions   
+  python $wammar_utils_dir/split-berg-kirkpatrick-pos-output-into-gold-vs-pred.py TMP/0.exec/guess500 gold_file_altformat all_labels
+
+  # then, all_labels consists of a number of test-set predictions followed by a number of unlabeled-train-set predictions. 
+  # we want to evaluate only the first part.
+  head -n "$(cat $test_size)" all_labels > $labels
+
   cat TMP/0.exec/log | grep "log marginal prob" | tail -n 1 > $ll 
 }
 
@@ -106,7 +132,8 @@ task GenerateWordpairFeats
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=temp_paths
   if [[ $precomputed_brown_clusters ]]; then
-    python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
+    # python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
+    python /usr0/home/wammar/alignment-with-openfst/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
     cp $precomputed_brown_clusters $paths
   else
     mv temp_paths $paths
@@ -142,6 +169,8 @@ task BuildLatentCrfPosTagger
 }
 
 task AutoencoderPosInduction
+    :: init_theta=@
+    :: init_lambda=@
     :: supervised=@
     < autoencoder_test_size=$autoencoder_test_size@PreprocessData
     :: labels_count=@
@@ -150,7 +179,7 @@ task AutoencoderPosInduction
     :: alignment_with_openfst_dir=@
     :: procs=$cores
     < data_file=$autoencoder_text@PreprocessData
-    < oracle_labels=$oracle_labels@PreprocessData
+    # < oracle_labels=$oracle_labels@PreprocessData
     < gold_file=$autoencoder_labels@PreprocessData
     :: l2_strength=@
     :: dirichlet_alpha=@
@@ -164,6 +193,8 @@ task AutoencoderPosInduction
     :: labeled_test_text=@
     :: feature_set=@
     :: coord_itercount=@
+    :: senna=(Senna: yes="1" no="")
+    :: neural=(Neural: yes="1" no="")
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
@@ -182,9 +213,16 @@ task AutoencoderPosInduction
   python $alignment_with_openfst_dir/parts-of-speech/augment_tag_dict_with_case.py -i $tag_dict_file -o tag_dict_file.cased -t $data_file
   fi 
 
-  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
+  # python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
+  if [[ $senna ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --senna $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --hapax $data_file
+  else
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr2/home/chuchenl/cs-data/w2v-10k-further-tuned --hapax $data_file
+  fi
   test_size=$(cat $autoencoder_test_size)
-
+  total_l2=$(echo "$l2_strength * $test_size" | bc -l)
+  echo "effective l2 strength = $total_l2"
+  
   command="nice -10 mpirun -np $procs $executable 
   --output-prefix $prefix
   --train-data $data_file
@@ -197,13 +235,24 @@ task AutoencoderPosInduction
   #--optimizer sgd
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
-  --gold-labels-filename $gold_file
-  --neural-filename neural
-  --test-size $test_size "
+  --gold-labels-filename $gold_file"
+  # --neural-filename neural"
+  # --test-size $test_size "
 
-  # USE THIS OPTION TO RESUME WITH SOME PARAMETER DUMP IN CASE OF FAILURE
-  #   --init-theta xxx/other.38.theta
-  #   --init-lambda xxx/other.38.lambda
+  # initial values of theta 
+  if [[ $init_theta ]]; then
+    command="$command --init-theta $init_theta"
+  fi
+
+  # neural
+  if [[ $neural ]]; then
+    command="$command --neural-filename neural"
+  fi
+
+  # initial values of lambda 
+  if [[ $init_lambda ]]; then
+    command="$command --init-lambda $init_lambda"
+  fi
 
   # specify feature templates in each feature set.
   if [[ $feature_set == "basic" ]]; then
@@ -225,7 +274,7 @@ task AutoencoderPosInduction
   fi
 
   if [[ $l2_strength ]]; then
-    command="$command --l2-strength $l2_strength"
+    command="$command --l2-strength $total_l2"
   fi
 
   if [[ $dirichlet_alpha ]]; then
@@ -265,11 +314,16 @@ task AutoencoderPosInduction
 
   head -n $test_size $data_file | tail -n $actual_test_size > data_file_test
 
+  if [[ $init_theta ]]; then
+    cp $prefix.final.labels $prefix.hmm.labels
+  fi
+
+
   if [[ $supervised ]]; then
     tail -n $actual_test_size $prefix.supervised.labels > $auto_test_labels    
   else
-    tail -n $actual_test_size $prefix.final.labels > $auto_test_labels    
-    tail -n $actual_test_size $prefix.hmm.labels > $hmm_test_labels    
+    head -n $test_size $prefix.final.labels | tail -n $actual_test_size > $auto_test_labels
+    head -n $test_size $prefix.hmm.labels   | tail -n $actual_test_size > $hmm_test_labels
   fi
  
   python $wammar_utils_dir/combine-token-label-in-one-file.py data_file_test $auto_test_labels $autoencoder_labels

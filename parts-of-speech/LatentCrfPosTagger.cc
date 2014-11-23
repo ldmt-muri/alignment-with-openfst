@@ -486,7 +486,16 @@ void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFi
       ++i) {
     if(i % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) continue;
     assert(tokens[i].size() > 0);
-    Label(tokens[i], labels[i]);
+    
+    // FIXME
+    // PLZ FIX ME!!! YOU ARE LOOKING AT AN IMPROPTU HACK IMPLEMENTED JUST BEFORE NAACL DEADLINE!!!
+    // when generating embeddings, assume that 
+    // the train idx == test idx and use the embeddings from the training data
+    if(!learningInfo.neuralRepFilename.empty()) {
+        Label(tokens[i], labels[i], i);
+    } else {
+        Label(tokens[i], labels[i]);
+    }
     assert(labels[i].size() > 0);
   }
   // sync 
@@ -502,6 +511,38 @@ void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFi
       StringUtils::WriteTokens(outputFilename, labels);
     }
   }
+}
+
+void LatentCrfPosTagger::Label(vector<string> &strTokens, vector<int> &labels,
+        uint idx) {
+    assert(labels.size() == 0); 
+    assert(tokens.size() > 0);
+    assert(!learningInfo.neuralRepFilename.empty());
+    vector<int64_t> tokens;
+    for(unsigned i = 0; i < strTokens.size(); i++) {
+      tokens.push_back(vocabEncoder.Encode(strTokens[i]));
+    }
+    
+    testingMode = true;
+    // hack to reuse the code that manipulates the fst
+    SetTestExample(tokens);
+    unsigned sentId = 0;
+    fst::VectorFst<FstUtils::LogArc> fst;
+    vector<FstUtils::LogWeight> alphas, betas;
+    if(learningInfo.testWithCrfOnly) {
+        BuildLambdaFst(sentId, fst, alphas, betas);
+    } else {
+        // idx != sentId && sentId==0
+        BuildThetaLambdaFst(sentId, GetNeuralSequence(idx), fst, alphas, betas);
+    }
+    fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
+    fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());
+    fst::ShortestPath(fst2, &shortestPath);
+    std::vector<int> dummy;
+    FstUtils::LinearFstToVector(shortestPath, dummy, labels);
+    assert(labels.size() == tokens.size());
+
+    testingMode = false;
 }
 
 void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
@@ -521,7 +562,7 @@ void LatentCrfPosTagger::Label(vector<int64_t> &tokens, vector<int> &labels) {
   } else if (learningInfo.neuralRepFilename.empty()){
     BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), fst, alphas, betas);
   } else {
-    BuildThetaLambdaFst(sentId, GetNeuralSequence(sentId), fst, alphas, betas);
+      assert(false);
   }
   fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
   fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());

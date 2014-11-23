@@ -542,6 +542,8 @@ int main(int argc, char **argv) {
     model->BroadcastTheta(bestRank);
   } 
   
+  cerr << "here\n";
+  
   // sync all processes
   bool dummy = true;
   if(learningInfo.mpiWorld->rank() == 0) {

@@ -70,10 +70,16 @@ namespace Eigen {
   typedef Eigen::Matrix<LogValD, Dynamic, Dynamic> MatrixXlogd;
   typedef Eigen::Matrix<LogValD, Dynamic, 1> VectorXlogd;
   
-  const int NEURAL_SIZE = 100;
+#ifndef NEURALCONST
+#define NEURALCONST 100
+#endif
+  const int NEURAL_SIZE = NEURALCONST;
   
   typedef Eigen::Matrix<double, NEURAL_SIZE, 1> VectorNeural;
   typedef Eigen::Matrix<double, NEURAL_SIZE, NEURAL_SIZE> MatrixNeural;
+  
+  const double NONE = 5566;
+  const Eigen::VectorNeural NONE_VEC = VectorNeural::Ones(NEURAL_SIZE,1) * NONE;
 }
 
 typedef std::mt19937 rng;
@@ -433,7 +439,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // read each line in the text file, encodes each sentence into vector<VectorNeural> and appends it into 'data'
   // assumptions: data is empty
   void readNeuralRep(const std::string &textFilename, std::vector<std::vector<Eigen::VectorNeural>> &data) {
-    
     assert(data.size() == 0);
     
     // open data file
@@ -464,6 +469,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
           word.setZero(Eigen::NEURAL_SIZE, 1);
           auto word_idx = i - data[lineNumber].begin();
           if(splits[word_idx] == "NONE") {
+              word = Eigen::NONE_VEC;
               continue;
           }
           std::vector<string> dims;
@@ -472,18 +478,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
           for(auto j=dims.begin(); j != dims.end(); j++) {
               auto dim_idx = j - dims.begin();
               double v = std::stod(*j);
-#ifdef DEBUG
-//              if(abs(v)>2) {
-//                  cerr << "ERROR: neural rep. must be <2 & >-2\n";
-//                  cerr << splits[word_idx] << endl;
-//                  assert(false);
-//              }
-#endif
               word(dim_idx) = v;
           }
-          
       }
-       
     }
   }
 

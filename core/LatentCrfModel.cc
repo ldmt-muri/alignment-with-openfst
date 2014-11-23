@@ -457,7 +457,7 @@ void LatentCrfModel::ComputeExpectedMean(unsigned sentId,
                     aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
                 FstUtils::LogArc arc = aiter.Value();
                 auto toState = arc.nextstate;
-                if (zI != zeros) {
+                if (!zI.isConstant(Eigen::NONE)) {
                     int64_t yI = arc.olabel;
                     double arcWeight = arc.weight.Value();
 
@@ -600,6 +600,12 @@ double LatentCrfModel::GetNLogTheta(int64_t context, int64_t event) {
 }
 
 double LatentCrfModel::getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi) {
+    // if zi is NONE, return -log(1) == 0
+    if(zi.isConstant(Eigen::NONE)) {
+        return 0;
+    }
+    
+    
     const auto zeros = Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE,1);
     // if(zi==zeros) {
     //     return 0;
@@ -1605,7 +1611,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         std::vector<boost::unordered_map< int64_t, std::vector<LogVal<double>>>>& allNNormalizingConstant) {
     assert(allMeans.size() == allNNormalizingConstant.size());
 
-    const auto pseudo = LogVal<double>(0.00000001);
+    // const auto pseudo = LogVal<double>(0.00000001);
     
     boost::unordered_map<int64_t, LogVal<double>> sum;
     // init
@@ -1613,7 +1619,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         sum[y] = LogVal<double>::Zero();
         
         // pseudo count
-        sum[y] += pseudo;
+        // sum[y] += pseudo;
     }
     
     // sum
@@ -1625,16 +1631,20 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
     }
     
     historyNeuralMean.push_back(neuralMean);
-    
+
+#ifdef DEBUG
     if(historyNeuralMean.size()>1) {
         const auto& this_iter = historyNeuralMean[historyNeuralMean.size()-1];
         const auto& prev_iter = historyNeuralMean[historyNeuralMean.size()-2];
+
         for(auto y:yDomain) {
             cerr << "\ndiff " << y << ":\n";
             cerr << this_iter.at(y) - prev_iter.at(y);
         }
+
     }
-    
+#endif  
+
     // clear
     for(auto y:yDomain) {
         neuralMean[y].setZero(Eigen::NEURAL_SIZE,1);
@@ -1643,7 +1653,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         // neuralVar[y].setZero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
         
         // pseudo
-        const auto pseudo_prob = (pseudo / sum[y]).as_float();
+        // const auto pseudo_prob = (pseudo / sum[y]).as_float();
         // neuralMean[y] += pseudo_prob * Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE,1);
     }
 
@@ -1658,13 +1668,15 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         }
     }
 
+/*
     for(auto y:yDomain) {
         // pseudo
         const auto pseudo_prob = (pseudo / sum[y]).as_float();
         const auto& diff = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
         // neuralVar[y] += pseudo_prob * diff;
     }
-    
+*/
+
     /*
     for (auto j=0; j < allMeans.size(); j++) {
         auto& means = allMeans[j];
@@ -1686,6 +1698,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
     }
     
 
+#ifdef DEBUG
     for(auto y: yDomain) {
         // cerr << "mean " << y << ": " << neuralMean[y];
         // cerr << endl;
@@ -1694,6 +1707,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
         cerr << endl;
         // cerr << "var " << y << " determinant: " << neuralVar[y].determinant();
     }
+#endif
 
     
     clearVarCache();
@@ -1970,10 +1984,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
               BuildLambdaFst(sentId,lambdaFst,lambdaAlphas,lambdaBetas);
               auto nLogC = ComputeNLogC(thetaLambdaFst,thetaLambdaBetas);
               auto nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+#ifdef DEBUG
               if(learningInfo.mpiWorld->rank()==0) {
                   cerr << "nLogC: " << nLogC << "\tnLogZ: " << nLogZ << endl;
               }
-              
+#endif
               sentLoglikelihood = nLogC - nLogZ;
               ComputeExpectedMean(sentId,z, thetaLambdaFst,thetaLambdaAlphas,thetaLambdaBetas, neuralPerLabel, weightPerLabel,nLogC);
           }
@@ -2023,8 +2038,36 @@ void LatentCrfModel::BlockCoordinateDescent() {
             }
         }
 
-
-
+        /**
+         * check optimized theta/neural means
+         */
+        if(!learningInfo.neuralRepFilename.empty()) {
+            double loglikelihoodAfter = 0.;
+            for(unsigned sentId = firstSentIdUsedForTraining; sentId < examplesCount; sentId++) {
+                if(sentId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
+                    continue;
+                }
+                auto& z = GetNeuralSequence(sentId);
+                fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
+                std::vector<FstUtils::LogWeight> thetaLambdaAlphas, thetaLambdaBetas, lambdaAlphas, lambdaBetas;
+                BuildThetaLambdaFst(sentId, GetNeuralSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+                BuildLambdaFst(sentId,lambdaFst,lambdaAlphas,lambdaBetas);
+                auto nLogC = ComputeNLogC(thetaLambdaFst,thetaLambdaBetas);
+                auto nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+                loglikelihoodAfter += nLogC - nLogZ;
+            }
+            mpi::all_reduce<double>(*learningInfo.mpiWorld, loglikelihoodAfter, loglikelihoodAfter, std::plus<double>());
+            double regularizedAfter = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
+                AddL2Term(loglikelihoodAfter):loglikelihoodAfter;
+            if(learningInfo.mpiWorld->rank() == 0) {
+                if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2 || 
+                    learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::WeightedL2) {
+                    cerr << "AFTER l2 reg. objective = " << regularizedAfter << " " << endl;
+                } else { 
+                    cerr << "AFTER unregularized objective = " << loglikelihoodAfter << " " << endl;
+                }
+            }
+        }
         if(learningInfo.mpiWorld->rank() == 0) {
           cerr << "ending EM iteration #" << emIter <<  " at " << time(0) << endl;    
         }
