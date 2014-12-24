@@ -477,9 +477,18 @@ void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFi
   // read data
   std::vector<std::vector<std::string> > tokens;
   StringUtils::ReadTokens(inputFilename, tokens);
+  
   // make room for labels
   vector<vector<int> > labels(tokens.size());
   assert(labels.size() == tokens.size());
+  
+  // FIXME super inefficient
+  // load embeddings
+  std::vector<std::vector<Eigen::VectorNeural>> neurals;
+  if (!learningInfo.neuralRepFilename.empty()) {
+      readNeuralRep(learningInfo.neuralRepFilename,neurals);
+  }
+  
   // label my share
   for(uint i = 0; 
       i < tokens.size(); 
@@ -492,7 +501,7 @@ void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFi
     // when generating embeddings, assume that 
     // the train idx == test idx and use the embeddings from the training data
     if(!learningInfo.neuralRepFilename.empty()) {
-        Label(tokens[i], labels[i], i);
+        Label(tokens[i], labels[i], neurals[i]);
     } else {
         Label(tokens[i], labels[i]);
     }
@@ -514,11 +523,11 @@ void LatentCrfPosTagger::LabelInParallel(string &inputFilename, string &outputFi
 }
 
 void LatentCrfPosTagger::Label(vector<string> &strTokens, vector<int> &labels,
-        uint idx) {
-    assert(labels.size() == 0); 
-    assert(tokens.size() > 0);
-    assert(!learningInfo.neuralRepFilename.empty());
+        vector<Eigen::VectorNeural>& neurals) {
     vector<int64_t> tokens;
+    assert(labels.size() == 0); 
+    assert(!learningInfo.neuralRepFilename.empty());
+    assert(neurals.size()==strTokens.size());
     for(unsigned i = 0; i < strTokens.size(); i++) {
       tokens.push_back(vocabEncoder.Encode(strTokens[i]));
     }
@@ -532,8 +541,7 @@ void LatentCrfPosTagger::Label(vector<string> &strTokens, vector<int> &labels,
     if(learningInfo.testWithCrfOnly) {
         BuildLambdaFst(sentId, fst, alphas, betas);
     } else {
-        // idx != sentId && sentId==0
-        BuildThetaLambdaFst(sentId, GetNeuralSequence(idx), fst, alphas, betas);
+        BuildThetaLambdaFst(sentId, neurals, fst, alphas, betas);
     }
     fst::VectorFst<FstUtils::StdArc> fst2, shortestPath;
     fst::ArcMap(fst, &fst2, FstUtils::LogToTropicalMapper());

@@ -69,7 +69,8 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     LABELS_COUNT = "labels-count",
     SUPERVISED = "supervised",
     CHECK_GRADIENT = "check-gradient",
-  NEURAL_FILENAME = "neural-filename";
+  NEURAL_FILENAME = "neural-filename",
+    HMM_ONLY = "hmm-only";
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -109,6 +110,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(flag) (defaults to false) when set, gold labels must also be provided, and supervised training is performed. When clear but gold labels are provided, semi-supervised training is performed. When clear and gold labels are not provided, unsupervised training is performed.")
     (CHECK_GRADIENT.c_str(), po::value<bool>(&learningInfo.checkGradient)->default_value(false), "(flag) (defaults to false) when set, gradient computation is checked numerically with the method of finite differences.")
     (NEURAL_FILENAME.c_str(), po::value< string >(&learningInfo.neuralRepFilename)->default_value(""), "(string) specifies the file which consists of neural representations of the corpus")
+    (HMM_ONLY.c_str(), po::value<bool>(&learningInfo.hmmOnly)->default_value(false), "(flag) (defaults to false) when set, run the HMM model and exit.")
     ;
 
   po::variables_map vm;
@@ -314,7 +316,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 30;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
@@ -322,6 +324,11 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
   learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
   learningInfo.tgtWordClassesFilename = latentCrfPosTagger.learningInfo.tgtWordClassesFilename;
+  if(latentCrfPosTagger.learningInfo.hmmOnly) {
+  learningInfo.neuralRepFilename = latentCrfPosTagger.learningInfo.neuralRepFilename;
+  } else {
+      learningInfo.neuralRepFilename = "";
+  }
 
   // initialize the model
   HmmModel2 hmmModel(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
@@ -540,9 +547,11 @@ int main(int argc, char **argv) {
     // hmm initialization
     unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
     model->BroadcastTheta(bestRank);
+    if(learningInfo.hmmOnly) {
+        cerr << "finished the HMM run. exiting.\n";
+        return 0;
+    }
   } 
-  
-  cerr << "here\n";
   
   // sync all processes
   bool dummy = true;

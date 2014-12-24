@@ -24,6 +24,7 @@
 #include "../wammar-utils/Samplers.h"
 #include "MultinomialParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
+#include "LatentCrfModel.h"
 
 class HmmModel2 : public UnsupervisedSequenceTaggingModel {
 
@@ -34,7 +35,7 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   void ClearFractionalCounts();
 
   // builds the lattice of all possible label sequences
-  void BuildThetaGammaFst(vector<int64_t> &x, fst::VectorFst<FstUtils::LogArc> &fst);
+  void BuildThetaGammaFst(vector<int64_t> &x, fst::VectorFst<FstUtils::LogArc> &fst, unsigned sentId);
   
   // builds the lattice of all possible label sequences, also computes potentials
   void BuildThetaGammaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst, vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas);
@@ -49,6 +50,19 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
  
   void InitParams();
   
+  double getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi);
+  const vector<Eigen::VectorNeural>& GetNeuralSequence(int exampleId);
+    void UpdateMle(const unsigned sentId,
+		 const fst::VectorFst<FstUtils::LogArc> &fst, 
+		 const vector<FstUtils::LogWeight> &alphas, 
+		 const vector<FstUtils::LogWeight> &betas, 
+        boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> > &meanPerLabel,
+        boost::unordered_map< int64_t, std::vector<LogVal<double >>> &nNormalizingConstant, 
+		 MultinomialParams::ConditionalMultinomialParam<int64_t> &gammaMle);
+  void NormalizeMleMeanAndUpdateMean(boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> >& means,
+        boost::unordered_map< int64_t, std::vector<LogVal<double>>>& nNormalizingConstant);
+      void Label(vector<vector<string> > &tokens, vector<vector<int> > &labels);
+      void Label(vector<int64_t> &tokens, vector<int> &labels);
  public:
   
   HmmModel2(const string &textFilename, 
@@ -61,8 +75,9 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   
   void Train();
   
-  using UnsupervisedSequenceTaggingModel::Label;
-  void Label(vector<int64_t> &tokens, vector<int> &labels);
+  // using UnsupervisedSequenceTaggingModel::Label;
+void Label(vector<int64_t> &tokens, vector<int> &labels, unsigned sentId);
+    void Label(string &inputFilename, string &outputFilename) override;
   
   // configurations
   LearningInfo *learningInfo;
@@ -75,6 +90,8 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
   // training data
   vector< vector<int64_t> > observations;
 
+
+  
   // gaussian sampler
   GaussianSampler gaussianSampler;
 
@@ -88,6 +105,11 @@ class HmmModel2 : public UnsupervisedSequenceTaggingModel {
  public:
   // model parameters theta = emission probabilities, alpha = transition prbailibities
   MultinomialParams::ConditionalMultinomialParam<int64_t> nlogTheta, nlogGamma;
+  
+  // neural representation
+  std::vector<std::vector<Eigen::VectorNeural>> neuralRep;
+  boost::unordered_map<int64_t, Eigen::VectorNeural> neuralMean;
+  boost::unordered_map<int64_t, Eigen::MatrixNeural> neuralVar;
     
 };
 

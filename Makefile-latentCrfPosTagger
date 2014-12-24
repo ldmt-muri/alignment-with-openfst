@@ -3,7 +3,7 @@ SINGLE=-c
 BEFORE=-x c++ -std=c++11
 LIBS=-lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
 #-llbfgs
-OPT=-O3 -DNDEBUG -DNEURALCONST=50
+OPT=-O3 -DDEBUG -DNEURALCONST=${NEURALCONST}
 # -g
 all: train-latentCrfPosTagger
 

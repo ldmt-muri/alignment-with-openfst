@@ -45,6 +45,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/QR>
+#include <Eigen/Cholesky>
 
 #define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
 
@@ -436,9 +437,95 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
   
     
+
+ public:
+  std::vector<std::vector<int64_t> > labels;
+  LearningInfo learningInfo;
+  LogLinearParams *lambda;
+  MultinomialParams::ConditionalMultinomialParam<int64_t> nLogThetaGivenOneLabel;
+  MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > nLogThetaGivenTwoLabels;
+  static int START_OF_SENTENCE_Y_VALUE;
+  static unsigned NULL_POSITION;
+  int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
+  unsigned examplesCount;
+  std::string textFilename, outputPrefix;
+ 
+ public:
+  std::vector< std::vector<int64_t> > classTgtSents, testClassTgtSents;
+  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
+  static LatentCrfModel *instance;
+  std::vector<int> yDomain;
+  GaussianSampler gaussianSampler;
+  // during training time, and by default, this should be set to false. 
+  // When we use the trained model to predict the labels, we set it to true
+  bool testingMode;
+  Task task;
+  // this is only set during training while optimizing loglinear parameters
+  bool optimizingLambda;
+  
+  // gold label sequences used for supervised and semi-supervised training only. 
+  // in unsupervised training, this should be empty.
+  std::vector<std::vector<int> > goldLabelSequences;
+
+  // tagging dictionary
+  // this maps a word to the possible word classes
+  std::tr1::unordered_map<int64_t, std::tr1::unordered_set<int> > tagDict;
+  // this maps the vocab id of a POS tag (e.g. "NOUN") to the word class id used internally to represent it
+  std::tr1::unordered_map<int64_t, int> posTagVocabIdToClassId;
+  
+  boost::unordered_map<int64_t, Eigen::VectorNeural> neuralMean;
+  boost::unordered_map<int64_t, Eigen::MatrixNeural> neuralVar;
+  
+  std::vector<boost::unordered_map<int64_t, Eigen::VectorNeural>> historyNeuralMean;
+  
+  void clearVarCache() {
+      varInverse.clear();
+      varDet.clear();
+      varCholesky.clear();
+  }
+  
+  const Eigen::MatrixNeural& getVarInverse(int64_t key) {
+      auto iter = varInverse.find(key);
+      if(iter==varInverse.end()) {
+          varInverse[key]=neuralVar[key].inverse();
+          return varInverse[key];
+      } else {
+          return iter->second;
+      }
+  }
+    
+  const double getVarDet(int64_t key) {
+      // FIXME identity matrix for now
+      return 0;
+      
+      auto iter = varDet.find(key);
+      if(iter==varDet.end()) {
+          Eigen::FullPivHouseholderQR<Eigen::MatrixNeural> qr = Eigen::FullPivHouseholderQR<Eigen::MatrixNeural>(neuralVar[key]);
+          const auto det = qr.logAbsDeterminant();
+          varDet[key]=det;
+          return det;
+      } else {
+          return iter->second;
+      }
+  }
+  
+  const double getXTSigmaX(const Eigen::VectorNeural& x, int64_t key) {
+      // FIXME identity matrix for now
+      return x.squaredNorm();
+      
+      auto iter = varCholesky.find(key);
+      if(iter==varCholesky.end()) {
+          const auto cholesky = neuralVar[key].llt();
+          varCholesky[key] = cholesky;
+      } else {
+          auto intermediate = varCholesky[key].solve(x);
+          return intermediate.transpose() * intermediate;
+      }
+  }
+  
   // read each line in the text file, encodes each sentence into vector<VectorNeural> and appends it into 'data'
   // assumptions: data is empty
-  void readNeuralRep(const std::string &textFilename, std::vector<std::vector<Eigen::VectorNeural>> &data) {
+  static void readNeuralRep(const std::string &textFilename, std::vector<std::vector<Eigen::VectorNeural>> &data) {
     assert(data.size() == 0);
     
     // open data file
@@ -484,76 +571,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
     }
   }
 
- public:
-  std::vector<std::vector<int64_t> > labels;
-  LearningInfo learningInfo;
-  LogLinearParams *lambda;
-  MultinomialParams::ConditionalMultinomialParam<int64_t> nLogThetaGivenOneLabel;
-  MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > nLogThetaGivenTwoLabels;
-  static int START_OF_SENTENCE_Y_VALUE;
-  static unsigned NULL_POSITION;
-  int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;
-  unsigned examplesCount;
-  std::string textFilename, outputPrefix;
- 
- public:
-  std::vector< std::vector<int64_t> > classTgtSents, testClassTgtSents;
-  boost::unordered_map<int64_t, int64_t> tgtWordToClass;
-  static LatentCrfModel *instance;
-  std::vector<int> yDomain;
-  GaussianSampler gaussianSampler;
-  // during training time, and by default, this should be set to false. 
-  // When we use the trained model to predict the labels, we set it to true
-  bool testingMode;
-  Task task;
-  // this is only set during training while optimizing loglinear parameters
-  bool optimizingLambda;
-  
-  // gold label sequences used for supervised and semi-supervised training only. 
-  // in unsupervised training, this should be empty.
-  std::vector<std::vector<int> > goldLabelSequences;
-
-  // tagging dictionary
-  // this maps a word to the possible word classes
-  std::tr1::unordered_map<int64_t, std::tr1::unordered_set<int> > tagDict;
-  // this maps the vocab id of a POS tag (e.g. "NOUN") to the word class id used internally to represent it
-  std::tr1::unordered_map<int64_t, int> posTagVocabIdToClassId;
-  
-  boost::unordered_map<int64_t, Eigen::VectorNeural> neuralMean;
-  boost::unordered_map<int64_t, Eigen::MatrixNeural> neuralVar;
-  
-  std::vector<boost::unordered_map<int64_t, Eigen::VectorNeural>> historyNeuralMean;
-  
-  void clearVarCache() {
-      varInverse.clear();
-      varDet.clear();
-  }
-  
-  const Eigen::MatrixNeural& getVarInverse(int64_t key) {
-      auto iter = varInverse.find(key);
-      if(iter==varInverse.end()) {
-          varInverse[key]=neuralVar[key].inverse();
-          return varInverse[key];
-      } else {
-          return iter->second;
-      }
-  }
-    
-  const double getVarDet(int64_t key) {
-      auto iter = varDet.find(key);
-      if(iter==varDet.end()) {
-          Eigen::FullPivHouseholderQR<Eigen::MatrixNeural> qr = Eigen::FullPivHouseholderQR<Eigen::MatrixNeural>(neuralVar[key]);
-          const auto det = qr.logAbsDeterminant();
-          varDet[key]=det;
-          return det;
-      } else {
-          return iter->second;
-      }
-  }
   
 private:
     boost::unordered_map<int64_t, Eigen::MatrixNeural> varInverse;
     boost::unordered_map<int64_t, double> varDet;
+    boost::unordered_map<int64_t, Eigen::LLT<Eigen::MatrixNeural>> varCholesky;
   
 
 

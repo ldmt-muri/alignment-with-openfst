@@ -402,6 +402,7 @@ namespace MultinomialParams {
     
     // if you get here, one of the following two things happened: \sum valueProb_i > 1 OR randomProb > 1
     assert(false);
+    return -1;
   }
 }
 

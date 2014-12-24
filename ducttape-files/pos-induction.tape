@@ -11,7 +11,7 @@ global {
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
   # autoencoder hyperparams
-  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 two_point_five=2.5)
+  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 two_point_five=2.5 point_o_o_one=0.001 point_o_o_three=0.003)
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
   lbfgs_itercount=1
   em_itercount=1
@@ -193,8 +193,14 @@ task AutoencoderPosInduction
     :: labeled_test_text=@
     :: feature_set=@
     :: coord_itercount=@
-    :: senna=(Senna: yes="1" no="")
+    :: scaled=(Scaled: ten="--ten-times" one="--one-time" five="--five-times" twenty="--twenty-times" two_point_five="--two-point-five-times" seven="--seven-times" fourteen="--fourteen-times" normalize="--normalize" no="")
+    :: senna=(EmbeddingType: senna="1" w2v="" manaal="" synEmb="")
+    :: w2v=(EmbeddingType: senna="" w2v="1" manaal="" synEmb="")
+    :: manaal=(EmbeddingType: senna="" w2v="" manaal="1" synEmb="")
+    :: synEmb=(EmbeddingType: senna="" w2v="" manaal="" synEmb="1")
     :: neural=(Neural: yes="1" no="")
+    :: hmmOnly=(HmmOnly: yes="1" no="")
+    :: embeddings=@
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
@@ -215,9 +221,13 @@ task AutoencoderPosInduction
 
   # python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
   if [[ $senna ]]; then
-  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --senna $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --hapax $data_file
-  else
-  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr2/home/chuchenl/cs-data/w2v-10k-further-tuned --hapax $data_file
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --senna $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $w2v ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $manaal ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --manaal $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $synEmb ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --manaal $data_file neural $embeddings --hapax $data_file $scaled
   fi
   test_size=$(cat $autoencoder_test_size)
   total_l2=$(echo "$l2_strength * $test_size" | bc -l)
@@ -247,6 +257,11 @@ task AutoencoderPosInduction
   # neural
   if [[ $neural ]]; then
     command="$command --neural-filename neural"
+  fi
+
+  # hmm only
+  if [[ $hmmOnly ]]; then
+    command="$command --hmm-only true"
   fi
 
   # initial values of lambda 

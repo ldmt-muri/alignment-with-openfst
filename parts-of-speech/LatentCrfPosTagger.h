@@ -53,7 +53,7 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   using UnsupervisedSequenceTaggingModel::Label;
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
-  void Label(std::vector<string> &tokens, std::vector<int> &labels, uint idx);
+  void Label(std::vector<string> &tokens, std::vector<int> &labels, std::vector<Eigen::VectorNeural> &neurals);
 
   void LabelInParallel(const string &labelsFilename); 
   

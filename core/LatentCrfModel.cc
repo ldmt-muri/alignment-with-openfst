@@ -605,27 +605,21 @@ double LatentCrfModel::getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi)
         return 0;
     }
     
-    
-    const auto zeros = Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE,1);
-    // if(zi==zeros) {
-    //     return 0;
-    // }
-    
     const auto c = -0.5 * Eigen::NEURAL_SIZE * log(2 * M_PI);
     const auto& mean = neuralMean[yi];
     // TODO hack -- must fix later!
     // const auto& var = neuralVar[yi];
     const auto& var = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
-    const auto& var_inverse = getVarInverse(yi);
+    // const auto& var_inverse = getVarInverse(yi);
     const auto& diff = zi - mean;
     // auto pdf = pow(2 * M_PI, Eigen::NEURAL_SIZE / -2.0) / sqrt(var.determinant()) * exp(-0.5 * diff.transpose() * var_inverse * diff);
-    // auto log_pdf = -0.5 * Eigen::NEURAL_SIZE * log(2 * M_PI) - 0.5 * log(var.determinant()) - 0.5 * diff.transpose() * var_inverse * diff;
+    //auto log_pdf = -0.5 * Eigen::NEURAL_SIZE * log(2 * M_PI) - 0.5 * log(var.determinant()) - 0.5 * diff.transpose() * var_inverse * diff;
     auto var_det = getVarDet(yi);
 #ifdef DEBUG
     
     // FIXME
     // identity cov in this case; var_det (which is actually log(det)) must be zero
-    assert(var_det==0);
+    // assert(var_det==0);
     
     if(learningInfo.mpiWorld->rank() == 0 && (std::isnan(var_det) || std::isinf(var_det))) {
         cerr << "something wrong! yi==" << yi << endl;
@@ -636,8 +630,11 @@ double LatentCrfModel::getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi)
         assert(false);
     }
 #endif
-    double inner_product = diff.transpose() *  var_inverse * diff;
+    //double inner_product = diff.transpose() *  var_inverse * diff;
+    double inner_product = getXTSigmaX(diff,yi);
     if(std::isinf(inner_product)) {
+        cerr << "inner product inf!\n";
+        assert(false);
         return 2.0e100;
     }
     double log_pdf = c - 0.5 * var_det - 0.5 * inner_product;
@@ -1610,16 +1607,11 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
 void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> >>& allMeans,
         std::vector<boost::unordered_map< int64_t, std::vector<LogVal<double>>>>& allNNormalizingConstant) {
     assert(allMeans.size() == allNNormalizingConstant.size());
-
-    // const auto pseudo = LogVal<double>(0.00000001);
     
     boost::unordered_map<int64_t, LogVal<double>> sum;
     // init
     for(auto y:yDomain) {
         sum[y] = LogVal<double>::Zero();
-        
-        // pseudo count
-        // sum[y] += pseudo;
     }
     
     // sum
@@ -1646,15 +1638,18 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
 #endif  
 
     // clear
+    double const pseudo = 0.01;
     for(auto y:yDomain) {
         neuralMean[y].setZero(Eigen::NEURAL_SIZE,1);
         
         // TODO fixing neuralVar for now; remember to uncomment
         // neuralVar[y].setZero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
         
+        // neuralVar[y] = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE) * pseudo;
         // pseudo
         // const auto pseudo_prob = (pseudo / sum[y]).as_float();
         // neuralMean[y] += pseudo_prob * Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE,1);
+        // sum[y] += pseudo;
     }
 
     for (auto j = 0; j < allMeans.size(); j++) {
@@ -1677,7 +1672,7 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
     }
 */
 
-    /*
+/*    
     for (auto j=0; j < allMeans.size(); j++) {
         auto& means = allMeans[j];
         auto& nNormalizingConstant = allNNormalizingConstant[j];        
@@ -1688,9 +1683,9 @@ void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_
             }
         }
     }
-     */
+*/    
     
-    const auto& zero = Eigen::MatrixNeural::Zero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+    const auto zero = Eigen::MatrixNeural::Zero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
     for(auto y: yDomain) {
         if(neuralVar[y] == zero) {
             neuralVar[y] = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
@@ -1955,7 +1950,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // init map
         for(auto y:yDomain) {
             neuralPerLabel[y] = std::vector<Eigen::VectorNeural>();
-                weightPerLabel[y] = std::vector<LogVal<double>>();
+            weightPerLabel[y] = std::vector<LogVal<double>>();
         }
         
         // update the mle for each sentence

@@ -23,6 +23,7 @@ class LearningInfo {
  LearningInfo(boost::mpi::communicator *mpiWorld, string outputFilenamePrefix) : 
   mpiWorld(mpiWorld), 
   outputFilenamePrefix(outputFilenamePrefix) {
+      hmmOnly=false;
     checkGradient = false;
     minTokenFrequency = 100;
     featureGaussianMeanFilename = "";
@@ -407,6 +408,7 @@ class LearningInfo {
   int minTokenFrequency;
 
   bool checkGradient;
+  bool hmmOnly;
 
   int hackK;
 };
