@@ -171,13 +171,13 @@ void LatentCrfAligner::InitTheta() {
 
 void LatentCrfAligner::PrepareExample(unsigned exampleId) {
   yDomain.clear();
-  this->yDomain.insert(LatentCrfAligner::START_OF_SENTENCE_Y_VALUE); // always insert the conceptual yValue of word at position -1 in a sentence
+  this->yDomain.push_back(LatentCrfAligner::START_OF_SENTENCE_Y_VALUE); // always insert the conceptual yValue of word at position -1 in a sentence
   // if null alignments are enabled, this length will include the null token that was inserted at the begging of all source sentences
   unsigned srcSentLength = testingMode? testSrcSents[exampleId].size() : srcSents[exampleId].size();
   // each position in the src sentence, including null, should have an entry in yDomain
   unsigned firstPossibleYValue = learningInfo.allowNullAlignments? NULL_POSITION : NULL_POSITION + 1;
   for(unsigned i = firstPossibleYValue; i < firstPossibleYValue + srcSentLength; ++i) {
-    yDomain.insert(i);
+    yDomain.push_back(i);
   }
 }
 
