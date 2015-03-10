@@ -1,20 +1,30 @@
-disclaimer: work in progress
+#disclaimer: 
+This is work in progress. If you encounter any problems while compiling or using it, it is likely our mistake not yours. Please contact wammar@cs.cmu.edu with questions, comments, and suggestions.
 
-description:
-============
-a scalable feature-rich word alignment tool
 
-dependencies:
-=============
-* boost 1.54
-* libLBFGS
-* MPI
-* openfst-1.3.2
-* python 2.7
+#description:
+This is an implementation of the CRF autoencoder framework for four tasks:
+* bitext word alignment
+* part-of-speech tagging
+* code switching
+* dependency parsing
 
-how to build (with compiler: gcc 4.6.3 or clang 3.1-8):
-==================================================
-* make -f Makefile-latentCrfAligner
+Our NIPS 2014 [paper](http://arxiv.org/pdf/1411.1147v2.pdf) describes the CRF autoencoder framework as well as the bitext word alignment and part-of-speech induction tasks in detail. Details on code-switching can be found in our EMNLP shared task [paper](http://www.aclweb.org/anthology/W14-3909).
+
+#dependencies:
+* [cdec](https://github.com/redpony/cdec)
+* [boost 1.54](http://www.boost.org/users/history/version_1_54_0.html) (or later "fingers crossed")
+* [libLBFGS-1.10](https://github.com/downloads/chokkan/liblbfgs/liblbfgs-1.10.tar.gz) (or later "fingers crossed")
+* [MPI-1.8](http://www.open-mpi.org/software/ompi/v1.8/) (or later "fingers crossed")
+* [openfst-1.3.2](http://www.openfst.org/twiki/bin/view/FST/FstDownload) (or later "fingers crossed")
+* [python 2.7](https://www.python.org/download/releases/2.7.3/) (or later "fingers crossed")
+
+#how to build
+I'm assuming your default compiler is either gcc 4.6.3, clang 3.1-8 (or later "fingers crossed")
+* bitext word alignment: make -f Makefile-latentCrfAligner
+* part-of-speech tagging: make -f Makefile-latentCrfPosTagger
+* code switching: make -f Makefile-latentCrfPosTagger (this is not a typo)
+* dependency parsing: make -f Makefile-latentCrfParser (still in the works)
 
 # example invocations: 
 ## part of speech tagging:
