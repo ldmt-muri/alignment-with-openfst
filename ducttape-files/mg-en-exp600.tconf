@@ -2,7 +2,7 @@ import mg-en.tconf
 
 global {
     # Output directory:
-    ducttape_output="/usr2/home/wammar/mt-systems/mg-en-exp600"
+    ducttape_output="/usr3/home/wammar/mt-systems/mg-en-exp600"
 
     # initial autoencoder params
     init_theta_fwd="" #/usr1/home/wammar/mt-systems/prefix.0.theta"

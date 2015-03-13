@@ -159,7 +159,7 @@ task GenerateWordpairFeatsS2T
   
   cp "talign/grammars/wordpairs.f-e.features" $wordpair_feats_file_cdec
 
-  python $alignment_with_openfst_dir/augment_wordpair_feats.py -i $wordpair_feats_file_cdec -sb $src_brown_clusters -tb $tgt_brown_clusters -o $wordpair_feats_file
+  python $alignment_with_openfst_dir/core/augment_wordpair_feats.py -i $wordpair_feats_file_cdec -sb $src_brown_clusters -tb $tgt_brown_clusters -o $wordpair_feats_file
   
 } 
 
@@ -199,7 +199,7 @@ task GenerateWordpairFeatsT2S
   
   cp "talign/grammars/wordpairs.f-e.features" $wordpair_feats_file_cdec
 
-  python $alignment_with_openfst_dir/augment_wordpair_feats.py -i $wordpair_feats_file_cdec -sb $src_brown_clusters -tb $tgt_brown_clusters -o $wordpair_feats_file
+  python $alignment_with_openfst_dir/core/augment_wordpair_feats.py -i $wordpair_feats_file_cdec -sb $src_brown_clusters -tb $tgt_brown_clusters -o $wordpair_feats_file
   
 } 
 
@@ -211,7 +211,7 @@ task BuildLatentCrfAligner
 
   pushd $alignment_with_openfst_dir
   make -f Makefile-latentCrfAligner
-  cp train-latentCrfAligner $executable
+  cp alignment/train-latentCrfAligner $executable
   popd
 }
 
