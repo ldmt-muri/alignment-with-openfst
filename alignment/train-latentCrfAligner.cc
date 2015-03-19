@@ -406,7 +406,9 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+  //learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::STOCHASTIC_GRADIENT_DESCENT;
+	
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
