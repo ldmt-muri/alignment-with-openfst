@@ -25,7 +25,7 @@ class LatentCrfPosTagger : public LatentCrfModel {
 
   std::vector<int64_t>& GetObservableContext(int exampleId) { /* do nothing */ return empty; }
 
-  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId);
+  std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId) override;
 
   int64_t GetContextOfTheta(unsigned sentId, int y) { return y; }
 
@@ -43,12 +43,17 @@ class LatentCrfPosTagger : public LatentCrfModel {
                                      const string &initThetaFilename);
 
   std::vector<int64_t>& GetObservableSequence(int exampleId);
+  
+  const std::vector<Eigen::VectorNeural>& GetNeuralSequence(int exampleId) override;
+  
+  const std::vector<Eigen::VectorNeural>& GetRandomNeural(double mean);
 
   // add constrained features with hand-crafted weights
   void AddConstrainedFeatures();
 
   using UnsupervisedSequenceTaggingModel::Label;
   void Label(std::vector<int64_t> &tokens, std::vector<int> &labels);
+  void Label(std::vector<string> &tokens, std::vector<int> &labels, std::vector<Eigen::VectorNeural> &neurals);
 
   void LabelInParallel(const string &labelsFilename); 
   
@@ -62,6 +67,8 @@ class LatentCrfPosTagger : public LatentCrfModel {
   
  public:
   std::vector<std::vector<int64_t> > data, testData;
+  
+  std::vector<std::vector<Eigen::VectorNeural>> neuralRep;
 
   std::vector<int64_t> empty;
 

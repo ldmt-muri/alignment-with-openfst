@@ -6,12 +6,12 @@ global {
       
   # tool paths
   brown_clusters_dir="/usr0/home/wammar/git/brown-cluster/"
-  wammar_utils_dir="/usr0/home/wammar/alignment-with-openfst/wammar-utils"
-  alignment_with_openfst_dir="/usr0/home/wammar/alignment-with-openfst/"
+  wammar_utils_dir="/usr0/home/chuchenl/git/alignment-with-openfst/wammar-utils"
+  alignment_with_openfst_dir="/usr0/home/chuchenl/git/alignment-with-openfst/"
   featurized_hmm_pos_inducer_dir="/home/wammar/bergkirkpatrick_pos_inducer_bundle/"
 
   # autoencoder hyperparams
-  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 two_point_five=2.5)
+  l2_strength=(L2Strength: point_three=0.3 zero=0 point_o_one=0.01 point_o_three=0.03 point_one=0.1  one=1.0 two_point_five=2.5 point_o_o_one=0.001 point_o_o_three=0.003)
   dirichlet_alpha=(DirichletAlpha: one_point_one=1.1 one_point_five=1.5 one_point_o_one=1.01 one=1.0 point_ninety_nine=0.99 point_nine=0.9 point_five=0.5 point_three=0.3 point_one=0.1 point_o_three=0.03 point_o_one=0.01 point_o_o_one=0.001 point_o_o_o_one=0.0001 )
   lbfgs_itercount=1
   em_itercount=1
@@ -19,7 +19,7 @@ global {
   test_with_crf_only=""
   optimize_lambdas_first=true
   min_relative_diff=0.0001
-  prefix=(Prefix: pos=pos3 other=other other2=other2 exp=exp)
+  prefix=(Prefix: pos=pos3cc other=othercc other2=other2cc exp=expcc)
   labels_count=12
   feature_set=(FeatureSet: full="full" hk="hk" basic="basic")
   effective_unlabeled_lines=(EffectiveUnlabeledLines:
@@ -42,8 +42,10 @@ task PreprocessData
     :: effective_unlabeled_lines=@
     :: labeled_train_labels=@
     :: labeled_test_labels=@
+   # :: unlabeled_train_labels=@
     > autoencoder_text
     > autoencoder_labels
+#    > oracle_labels
     > autoencoder_test_size
     > fhmm_text
     > fhmm_labels
@@ -130,7 +132,8 @@ task GenerateWordpairFeats
 {
   $brown_clusters_dir/wcluster --c=100 --text=$data_file --paths=temp_paths
   if [[ $precomputed_brown_clusters ]]; then
-    python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
+    # python $alignment_with_openfst_dir/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
+    python /usr0/home/wammar/alignment-with-openfst/parts-of-speech/remove_irrelevant_words.py -b $precomputed_brown_clusters -r temp_paths -o $paths
     cp $precomputed_brown_clusters $paths
   else
     mv temp_paths $paths
@@ -176,6 +179,7 @@ task AutoencoderPosInduction
     :: alignment_with_openfst_dir=@
     :: procs=$cores
     < data_file=$autoencoder_text@PreprocessData
+    # < oracle_labels=$oracle_labels@PreprocessData
     < gold_file=$autoencoder_labels@PreprocessData
     :: l2_strength=@
     :: dirichlet_alpha=@
@@ -189,6 +193,14 @@ task AutoencoderPosInduction
     :: labeled_test_text=@
     :: feature_set=@
     :: coord_itercount=@
+    :: scaled=(Scaled: ten="--ten-times" one="--one-time" five="--five-times" twenty="--twenty-times" two_point_five="--two-point-five-times" seven="--seven-times" fourteen="--fourteen-times" normalize="--normalize" no="")
+    :: senna=(EmbeddingType: senna="1" w2v="" manaal="" synEmb="")
+    :: w2v=(EmbeddingType: senna="" w2v="1" manaal="" synEmb="")
+    :: manaal=(EmbeddingType: senna="" w2v="" manaal="1" synEmb="")
+    :: synEmb=(EmbeddingType: senna="" w2v="" manaal="" synEmb="1")
+    :: neural=(Neural: yes="1" no="")
+    :: hmmOnly=(HmmOnly: yes="1" no="")
+    :: embeddings=@
     < executable=$executable@BuildLatentCrfPosTagger
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeats 
     < tgt_brown_clusters=$paths@GenerateWordpairFeats
@@ -207,6 +219,16 @@ task AutoencoderPosInduction
   python $alignment_with_openfst_dir/parts-of-speech/augment_tag_dict_with_case.py -i $tag_dict_file -o tag_dict_file.cased -t $data_file
   fi 
 
+  # python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural /usr0/home/chuchenl/git/tweet-embedding/w2v_model --mock $oracle_labels
+  if [[ $senna ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --senna $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $w2v ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $manaal ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --manaal $data_file neural $embeddings --hapax $data_file $scaled
+  elif [[ $synEmb ]]; then
+  python /usr0/home/chuchenl/git/cs-shared-task/sd_to_neurep.py --manaal $data_file neural $embeddings --hapax $data_file $scaled
+  fi
   test_size=$(cat $autoencoder_test_size)
   total_l2=$(echo "$l2_strength * $test_size" | bc -l)
   echo "effective l2 strength = $total_l2"
@@ -224,10 +246,22 @@ task AutoencoderPosInduction
   --wordpair-feats $wordpair_feats_file 
   --labels-count $labels_count
   --gold-labels-filename $gold_file"
+  # --neural-filename neural"
+  # --test-size $test_size "
 
   # initial values of theta 
   if [[ $init_theta ]]; then
     command="$command --init-theta $init_theta"
+  fi
+
+  # neural
+  if [[ $neural ]]; then
+    command="$command --neural-filename neural"
+  fi
+
+  # hmm only
+  if [[ $hmmOnly ]]; then
+    command="$command --hmm-only true"
   fi
 
   # initial values of lambda 

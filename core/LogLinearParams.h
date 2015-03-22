@@ -65,6 +65,7 @@ public:
     struct { int position; int label; } boundaryLabel;
     struct { unsigned posId; size_t pred_hash; int label;} otherPos;
     struct { bool bigramInContext; unsigned phraseListId; int label; int imLabel;} phraseListFeature;
+    struct { unsigned metaId; size_t value; int label;} sequenceMetadata;
   };
 
   friend inline std::istream& operator>>(std::istream& is, FeatureId& obj)
@@ -81,6 +82,7 @@ public:
       temp == "LABEL_BIGRAM"? FeatureTemplate::LABEL_BIGRAM:
       temp == "OTHER_POS"? FeatureTemplate::OTHER_POS:
       temp == "PHRASE"? FeatureTemplate::PHRASE:
+          temp == "SEQUENCE_METADATA" ? FeatureTemplate::SEQUENCE_METADATA:
       temp == "SRC_BIGRAM"? FeatureTemplate::SRC_BIGRAM:
       temp == "ALIGNMENT_JUMP"? FeatureTemplate::ALIGNMENT_JUMP:
       temp == "LOG_ALIGNMENT_JUMP"? FeatureTemplate::LOG_ALIGNMENT_JUMP:
@@ -202,6 +204,11 @@ public:
       tempSS.str(splits[2]); tempSS >> obj.otherPos.label;
       tempSS.str(splits[3]); tempSS >> obj.otherPos.pred_hash;
       break;
+        case FeatureTemplate::SEQUENCE_METADATA:
+            tempSS.str(splits[1]); tempSS >> obj.sequenceMetadata.metaId;
+            tempSS.str(splits[2]); tempSS >> obj.sequenceMetadata.value;
+            tempSS.str(splits[3]); tempSS >> obj.sequenceMetadata.label;
+            break;
     case FeatureTemplate::PHRASE:
         tempSS.str(splits[1]); 
         tempSS >> obj.phraseListFeature.bigramInContext;
@@ -300,6 +307,10 @@ public:
       ar & otherPos.pred_hash;
       ar & otherPos.label;
       break;
+        case FeatureTemplate::SEQUENCE_METADATA:
+            ar & sequenceMetadata.metaId;
+            ar & sequenceMetadata.value;
+            ar & sequenceMetadata.label;
         case FeatureTemplate::PHRASE:
             ar & phraseListFeature.bigramInContext;
             ar & phraseListFeature.imLabel;
@@ -395,6 +406,10 @@ public:
       case NULL_ALIGNMENT_LENGTH_RATIO:
         return false;
         break;
+        case SEQUENCE_METADATA:
+            return sequenceMetadata.metaId < rhs.sequenceMetadata.metaId || \
+(sequenceMetadata.metaId == rhs.sequenceMetadata.metaId && sequenceMetadata.value < rhs.sequenceMetadata.value) || \
+                    (sequenceMetadata.metaId == rhs.sequenceMetadata.metaId && sequenceMetadata.value == rhs.sequenceMetadata.value && sequenceMetadata.label < rhs.sequenceMetadata.label);
     case OTHER_ALIGNERS:
       return otherAligner.alignerId < rhs.otherAligner.alignerId || \
         (otherAligner.alignerId == rhs.otherAligner.alignerId && otherAligner.compatible < rhs.otherAligner.compatible);
@@ -485,6 +500,8 @@ public:
       break;
     case OTHER_ALIGNERS:
       return otherAligner.alignerId != rhs.otherAligner.alignerId || otherAligner.compatible != rhs.otherAligner.compatible;
+        case SEQUENCE_METADATA:
+            return sequenceMetadata.metaId != rhs.sequenceMetadata.metaId || sequenceMetadata.value != rhs.sequenceMetadata.value || sequenceMetadata.label != rhs.sequenceMetadata.label;
     case OTHER_POS:
       return otherPos.posId != rhs.otherPos.posId || otherPos.pred_hash != rhs.otherPos.pred_hash || otherPos.label != rhs.otherPos.label;
         case PHRASE:
@@ -582,6 +599,11 @@ public:
 	  boost::hash_combine(seed, x.otherPos.pred_hash);
 	  boost::hash_combine(seed, x.otherPos.label);
           break;
+          case SEQUENCE_METADATA:
+              boost::hash_combine(seed, x.sequenceMetadata.metaId);
+              boost::hash_combine(seed, x.sequenceMetadata.value);
+              boost::hash_combine(seed, x.sequenceMetadata.label);
+              break;
           case PHRASE:
               boost::hash_combine(seed, x.phraseListFeature.bigramInContext);
               boost::hash_combine(seed, x.phraseListFeature.imLabel);
@@ -674,6 +696,10 @@ public:
 	  left.otherPos.pred_hash == right.otherPos.pred_hash && \
           left.otherPos.label == right.otherPos.label;
 	  break;
+          case FeatureTemplate::SEQUENCE_METADATA:
+              return left.sequenceMetadata.metaId == right.sequenceMetadata.metaId && \
+                     left.sequenceMetadata.value == right.sequenceMetadata.value && \
+                     left.sequenceMetadata.label == right.sequenceMetadata.label;
           case FeatureTemplate::PHRASE:
               return left.phraseListFeature.bigramInContext == right.phraseListFeature.bigramInContext && \
                      left.phraseListFeature.imLabel == right.phraseListFeature.imLabel && \
@@ -781,6 +807,9 @@ class LogLinearParams {
   
   // load phrase lists
   void LoadPhrases();
+  
+  // load metadata
+  void LoadMetadata();
 
     // given the description of one transition on the alignment FST, find the features that would fire along with their values
     void FireFeatures(int srcToken, int prevSrcToken, int tgtToken,
@@ -906,6 +935,9 @@ class LogLinearParams {
 
   // for each other POS output, for each sentence, for each token, determines the predicted label
   std::vector< std::vector< std::vector< string > >* > otherPOSOutput;
+  
+  // for each metaId, for each sentence, mention the value of this metadata
+  std::vector< std::vector< size_t >* > metadata;
   
   // for each word see if it fires a bigram (or unigram if at sentence initial) in a list
   std::vector< std::set<size_t>* > phraseBigrams;

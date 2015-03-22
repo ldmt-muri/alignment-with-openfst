@@ -1,0 +1,28 @@
+global {
+    # Output directory:
+    ducttape_output="/usr2/home/chuchenl/crf-auto-pos/english-neu-test-mix"
+
+    # general
+    cores=10
+
+    # data files
+    labeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.0k-1k"
+    labeled_test_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.1k-2k"
+    unlabeled_train_text="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.tok.2k-3k"
+    labeled_train_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.0k-1k"
+    labeled_test_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.1k-2k"
+    unlabeled_train_labels="/usr1/home/wammar/pos-data/conll2007/autoencoder-format/english-ptb-2007.pos.2k-3k"
+    
+    embeddings_file="/usr0/home/chuchenl/git/tweet-embedding/w2v_model"
+
+    #tag_dict_file="/usr1/home/wammar/pos-data/li12-tag-dicts/autoencoder-format/en-wik-20120320.dic"
+    supervised=""
+
+    test_size=0
+    labels_count=12
+}
+
+plan Full {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_three) * (DirichletAlpha: o_one) * (FirePrecomputedFeaturesForXIM1: no) * (FirePrecomputedFeaturesForXIP1: no) * (ReconstructBrownClusters: no) 
+}
+

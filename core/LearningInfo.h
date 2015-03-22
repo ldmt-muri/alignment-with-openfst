@@ -23,6 +23,7 @@ class LearningInfo {
  LearningInfo(boost::mpi::communicator *mpiWorld, string outputFilenamePrefix) : 
   mpiWorld(mpiWorld), 
   outputFilenamePrefix(outputFilenamePrefix) {
+      hmmOnly=false;
     checkGradient = false;
     minTokenFrequency = 100;
     featureGaussianMeanFilename = "";
@@ -381,6 +382,9 @@ class LearningInfo {
   
   // phrase list filenames
   vector< string > phraseListFilenames;
+  
+  // metadata filenames
+  vector<string> metadataFilenames;
 
   // the id of the sentence pair currently being processed
   int currentSentId;
@@ -390,6 +394,8 @@ class LearningInfo {
   string outputFilenamePrefix;
 
   string goldFilename;
+  
+  string neuralRepFilename;
  
   string tagDictFilename;
 
@@ -402,6 +408,7 @@ class LearningInfo {
   int minTokenFrequency;
 
   bool checkGradient;
+  bool hmmOnly;
 
   int hackK;
 };

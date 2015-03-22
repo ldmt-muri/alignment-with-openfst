@@ -1,3 +1,5 @@
+#include <numeric>
+
 #include "LatentCrfModel.h"
 
 namespace mpi = boost::mpi;
@@ -431,6 +433,49 @@ double LatentCrfModel::ComputeNLogC(const fst::VectorFst<FstUtils::LogArc> &fst,
   return nLogC;
 }
 
+void LatentCrfModel::ComputeExpectedMean(unsigned sentId,
+        const vector<Eigen::VectorNeural>&z,
+        const fst::VectorFst<FstUtils::LogArc> &fst,
+        const vector<FstUtils::LogWeight> &alphas,
+        const vector<FstUtils::LogWeight> &betas,
+        boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> > &meanPerLabel,
+        boost::unordered_map< int64_t, std::vector<LogVal<double >>> &nNormalizingConstant, double nLogC) {
+
+    const vector<int64_t> &x = GetObservableSequence(sentId);
+    std::tr1::unordered_set<int> iStates, iP1States;
+
+    const auto zeros = Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE, 1);
+
+    iStates.insert(fst.Start());
+
+    for (auto i = 0; i < x.size(); i++) {
+        auto& zI = z[i];
+        for (auto iStatesIter = std::begin(iStates);
+                iStatesIter != std::end(iStates); iStatesIter++) {
+            auto fromState = *iStatesIter;
+            for (fst::ArcIterator< fst::VectorFst<FstUtils::LogArc> >
+                    aiter(fst, fromState); !aiter.Done(); aiter.Next()) {
+                FstUtils::LogArc arc = aiter.Value();
+                auto toState = arc.nextstate;
+                if (!zI.isConstant(Eigen::NONE)) {
+                    int64_t yI = arc.olabel;
+                    double arcWeight = arc.weight.Value();
+
+                    auto nLogMarginal = alphas[fromState].Value() + betas[toState].Value() + arcWeight;
+                    meanPerLabel[yI].push_back(zI);
+                    nNormalizingConstant[yI].push_back(LogVal<double>(-(nLogMarginal - nLogC), init_lnx()));
+                }
+                // prepare the schedule for visiting states in the next timestep
+                iP1States.insert(toState);
+            }
+        }
+        // prepare for next timestep
+        iStates = iP1States;
+        iP1States.clear();
+    }
+}
+
+
 // compute B(x,z) which can be indexed as: BXZ[y^*][z^*] to give B(x, z, z^*, y^*)
 // assumptions: 
 // - BXZ is cleared
@@ -554,6 +599,63 @@ double LatentCrfModel::GetNLogTheta(int64_t context, int64_t event) {
   return nLogThetaGivenOneLabel[context][event];
 }
 
+double LatentCrfModel::getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi) {
+    // if zi is NONE, return -log(1) == 0
+    if(zi.isConstant(Eigen::NONE)) {
+        return 0;
+    }
+    
+    const auto c = -0.5 * Eigen::NEURAL_SIZE * log(2 * M_PI);
+    const auto& mean = neuralMean[yi];
+    // TODO hack -- must fix later!
+    // const auto& var = neuralVar[yi];
+    const auto& var = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+    // const auto& var_inverse = getVarInverse(yi);
+    const auto& diff = zi - mean;
+    // auto pdf = pow(2 * M_PI, Eigen::NEURAL_SIZE / -2.0) / sqrt(var.determinant()) * exp(-0.5 * diff.transpose() * var_inverse * diff);
+    //auto log_pdf = -0.5 * Eigen::NEURAL_SIZE * log(2 * M_PI) - 0.5 * log(var.determinant()) - 0.5 * diff.transpose() * var_inverse * diff;
+    auto var_det = getVarDet(yi);
+#ifdef DEBUG
+    
+    // FIXME
+    // identity cov in this case; var_det (which is actually log(det)) must be zero
+    // assert(var_det==0);
+    
+    if(learningInfo.mpiWorld->rank() == 0 && (std::isnan(var_det) || std::isinf(var_det))) {
+        cerr << "something wrong! yi==" << yi << endl;
+        cerr << "fresh determinant: " << var.determinant() << endl;
+        // cerr << "var: " << neuralVar[yi];
+        cerr << endl << "mean: " << neuralMean[yi];
+        cerr << endl;
+        assert(false);
+    }
+#endif
+    //double inner_product = diff.transpose() *  var_inverse * diff;
+    double inner_product = getXTSigmaX(diff,yi);
+    if(std::isinf(inner_product)) {
+        cerr << "inner product inf!\n";
+        assert(false);
+        return 2.0e100;
+    }
+    double log_pdf = c - 0.5 * var_det - 0.5 * inner_product;
+    
+#ifdef DEBUG
+    if((std::isnan(log_pdf) || std::isinf(log_pdf))) {
+        cerr << "something wrong in gaussian pdf calculation!\n";
+        cerr << "process " << learningInfo.mpiWorld->rank() << endl;
+        cerr << "yi: " << yi << endl;
+        cerr << "zi: " << zi;
+        cerr << "mean: " << mean;
+        cerr << "determinant of log(var): " << var_det << endl;
+        // cerr << "var: " << var;
+        cerr << "diff: " << diff;
+        assert(false);
+    }
+#endif
+    
+    return -log_pdf;
+}
+
 double LatentCrfModel::GetNLogTheta(int yim1, int yi, int64_t zi, unsigned exampleId) {
   if(task == Task::POS_TAGGING) {
     return nLogThetaGivenOneLabel[yi][zi]; 
@@ -582,6 +684,134 @@ double LatentCrfModel::GetNLogTheta(int yim1, int yi, int64_t zi, unsigned examp
   } else {
     assert(false);
   }
+}
+
+// build an FST which path sums to 
+// -log \sum_y [ \prod_i \N_{z_i\mid y_i} e^{\lambda h(y_i, y_{i-1}, x, i)} ]
+
+void LatentCrfModel::BuildThetaLambdaFst(unsigned sentId, const vector<Eigen::VectorNeural> &z,
+        fst::VectorFst<FstUtils::LogArc> &fst,
+        vector<FstUtils::LogWeight> &alphas, vector<FstUtils::LogWeight> &betas) {
+    
+//#ifdef DEBUG
+//    if(learningInfo.mpiWorld->rank()==0) {
+//        cerr << "building theta lambda FST\n";
+//        for(auto& zI:z) {
+//            cerr << "zI\n";
+//            cerr << zI;
+//        }
+//    }
+//#endif
+
+    // FIXME refactor
+    // shamelessly and clumsily copied from the method below
+
+    PrepareExample(sentId);
+
+    const vector<int64_t> &x = GetObservableSequence(sentId);
+
+    // arcs represent a particular choice of y_i at time step i
+    // arc weights are -log \theta_{z_i|y_i} - \lambda h(y_i, y_{i-1}, x, i)
+    assert(fst.NumStates() == 0);
+    int startState = fst.AddState();
+    fst.SetStart(startState);
+    int finalState = fst.AddState();
+    fst.SetFinal(finalState, FstUtils::LogWeight::One());
+
+    // map values of y_{i-1} and y_i to fst states
+    boost::unordered_map<int, int> yIM1ToState, yIToState;
+
+    yIM1ToState[LatentCrfModel::START_OF_SENTENCE_Y_VALUE] = startState;
+
+    // for each timestep
+    for (unsigned i = 0; i < x.size(); i++) {
+
+        // timestep i hasn't reached any states yet
+        yIToState.clear();
+        // from each state reached in the previous timestep
+        for (auto prevStateIter = yIM1ToState.begin();
+                prevStateIter != yIM1ToState.end();
+                prevStateIter++) {
+
+            int fromState = prevStateIter->second;
+            int yIM1 = prevStateIter->first;
+            // to each possible value of y_i
+            for (auto yDomainIter = yDomain.begin();
+                    yDomainIter != yDomain.end();
+                    yDomainIter++) {
+
+                int yI = *yDomainIter;
+
+                // skip special classes
+                if (yI == LatentCrfModel::START_OF_SENTENCE_Y_VALUE || yI == END_OF_SENTENCE_Y_VALUE) {
+                    continue;
+                }
+
+                // also, if this observation appears in a tag dictionary, we only allow the corresponding word classes
+                if (tagDict.count(x[i]) > 0 && tagDict[x[i]].count(yI) == 0) {
+                    continue;
+                }
+
+                // compute h(y_i, y_{i-1}, x, i)
+                FastSparseVector<double> h;
+                FireFeatures(yI, yIM1, sentId, i, h);
+
+                // prepare -log N{z_i|y_i, \mu_{y_i}, \sigma_{y_i}}
+                auto& zI = z[i];
+
+                double nLogTheta_zI_y = getGaussianPDF(yI, zI);
+                // nLogTheta_zI_y = 1.;
+                assert(!std::isnan(nLogTheta_zI_y) && !std::isinf(nLogTheta_zI_y));
+
+                // compute the weight of this transition: \lambda h(y_i, y_{i-1}, x, i), and multiply by -1 to be consistent with the -log probability representatio
+                double nLambdaH = -1.0 * lambda->DotProduct(h);
+                assert(!std::isnan(nLambdaH) && !std::isinf(nLambdaH));
+                double weight = nLambdaH + nLogTheta_zI_y;
+                assert(!std::isnan(weight) && !std::isinf(weight));
+
+                // determine whether to add a new state or reuse an existing state which also represent label y_i and timestep i
+                int toState;
+                if (yIToState.count(yI) == 0) {
+                    toState = fst.AddState();
+                    // when each variable in the hidden sequence directly depends on the previous one:
+                    if (learningInfo.hiddenSequenceIsMarkovian) {
+                        yIToState[yI] = toState;
+                    } else {
+                        // when variables in the hidden sequence are independent given observed sequence x:
+                        for (auto yDomainIter2 = yDomain.begin();
+                                yDomainIter2 != yDomain.end();
+                                yDomainIter2++) {
+                            yIToState[*yDomainIter2] = toState;
+                        }
+                    }
+                    // is it a final state?
+                    if (i == x.size() - 1) {
+                        fst.AddArc(toState, FstUtils::LogArc(FstUtils::EPSILON, FstUtils::EPSILON, FstUtils::LogWeight::One(), finalState));
+                    }
+                } else {
+                    toState = yIToState[yI];
+                }
+                // now add the arc
+                fst.AddArc(fromState, FstUtils::LogArc(yIM1, yI, weight, toState));
+
+            }
+
+            // if hidden labels are independent given observation, then there's only one unique state in the previous timestamp
+            if (!learningInfo.hiddenSequenceIsMarkovian) {
+                break;
+            }
+        }
+
+        // now, that all states reached in step i have already been created, yIM1ToState has become irrelevant
+        yIM1ToState = yIToState;
+    }
+
+    // compute forward/backward state potentials
+    assert(alphas.size() == 0);
+    assert(betas.size() == 0);
+    ShortestDistance(fst, &alphas, false);
+    ShortestDistance(fst, &betas, true);
+
 }
 
 // build an FST which path sums to 
@@ -1157,11 +1387,20 @@ bool LatentCrfModel::ComputeNllZGivenXAndLambdaGradientPerSentence(bool ignoreTh
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
   vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
   if(!ignoreThetaTerms) {
-    BuildThetaLambdaFst(sentId, 
-                        GetReconstructedObservableSequence(sentId), 
-                        thetaLambdaFst, 
-                        thetaLambdaAlphas, 
-                        thetaLambdaBetas);
+        if(learningInfo.neuralRepFilename.empty()) {
+      BuildThetaLambdaFst(sentId, 
+                          GetReconstructedObservableSequence(sentId), 
+                          thetaLambdaFst, 
+                          thetaLambdaAlphas, 
+                          thetaLambdaBetas);
+        }
+        else {
+                  BuildThetaLambdaFst(sentId, 
+                          GetNeuralSequence(sentId), 
+                          thetaLambdaFst, 
+                          thetaLambdaAlphas, 
+                          thetaLambdaBetas);
+        }
   }
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   
@@ -1265,6 +1504,7 @@ double LatentCrfModel::ComputeNllZGivenXAndLambdaGradient(vector<double> &deriva
   // for each training example
   FastSparseVector<double> sentNllGradient;
   for(int sentId = fromSentId; sentId < toSentId; sentId++) {
+
     // initialize sentence-level variables.
     double sentNll = 0;
     sentNllGradient.clear();
@@ -1364,6 +1604,110 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   return nll;
 }
 
+void LatentCrfModel::NormalizeMleMeanAndUpdateMean(std::vector<boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> >>& allMeans,
+        std::vector<boost::unordered_map< int64_t, std::vector<LogVal<double>>>>& allNNormalizingConstant) {
+    assert(allMeans.size() == allNNormalizingConstant.size());
+    
+    boost::unordered_map<int64_t, LogVal<double>> sum;
+    // init
+    for(auto y:yDomain) {
+        sum[y] = LogVal<double>::Zero();
+    }
+    
+    // sum
+    for (auto i = 0; i < allNNormalizingConstant.size(); i++) {
+        auto& nNormalizingConstant = allNNormalizingConstant[i];
+        for (const auto& t : nNormalizingConstant) {
+            sum[t.first] += std::accumulate(t.second.begin(), t.second.end(), LogVal<double>::Zero());
+        }
+    }
+    
+    historyNeuralMean.push_back(neuralMean);
+
+#ifdef DEBUG
+    if(historyNeuralMean.size()>1) {
+        const auto& this_iter = historyNeuralMean[historyNeuralMean.size()-1];
+        const auto& prev_iter = historyNeuralMean[historyNeuralMean.size()-2];
+
+        for(auto y:yDomain) {
+            cerr << "\ndiff " << y << ":\n";
+            cerr << this_iter.at(y) - prev_iter.at(y);
+        }
+
+    }
+#endif  
+
+    // clear
+    double const pseudo = 0.01;
+    for(auto y:yDomain) {
+        neuralMean[y].setZero(Eigen::NEURAL_SIZE,1);
+        
+        // TODO fixing neuralVar for now; remember to uncomment
+        // neuralVar[y].setZero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+        
+        // neuralVar[y] = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE) * pseudo;
+        // pseudo
+        // const auto pseudo_prob = (pseudo / sum[y]).as_float();
+        // neuralMean[y] += pseudo_prob * Eigen::VectorNeural::Zero(Eigen::NEURAL_SIZE,1);
+        // sum[y] += pseudo;
+    }
+
+    for (auto j = 0; j < allMeans.size(); j++) {
+        auto& means = allMeans[j];
+        auto& nNormalizingConstant = allNNormalizingConstant[j];        
+        for (auto y : yDomain) {
+            for (auto i = 0; i < means[y].size(); i++) {
+                const auto weight = (nNormalizingConstant[y][i] / sum[y]).as_float();
+                neuralMean[y] += weight * means[y][i];
+            }
+        }
+    }
+
+/*
+    for(auto y:yDomain) {
+        // pseudo
+        const auto pseudo_prob = (pseudo / sum[y]).as_float();
+        const auto& diff = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+        // neuralVar[y] += pseudo_prob * diff;
+    }
+*/
+
+/*    
+    for (auto j=0; j < allMeans.size(); j++) {
+        auto& means = allMeans[j];
+        auto& nNormalizingConstant = allNNormalizingConstant[j];        
+        for (auto y : yDomain) {
+            for (auto i = 0; i < means[y].size(); i++) {
+                auto weight = (nNormalizingConstant[y][i] / sum[y]).as_float();
+                neuralVar[y] += weight * (means[y][i]-neuralMean[y])*(means[y][i]-neuralMean[y]).transpose();
+            }
+        }
+    }
+*/    
+    
+    const auto zero = Eigen::MatrixNeural::Zero(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+    for(auto y: yDomain) {
+        if(neuralVar[y] == zero) {
+            neuralVar[y] = Eigen::MatrixNeural::Identity(Eigen::NEURAL_SIZE,Eigen::NEURAL_SIZE);
+        }
+    }
+    
+
+#ifdef DEBUG
+    for(auto y: yDomain) {
+        // cerr << "mean " << y << ": " << neuralMean[y];
+        // cerr << endl;
+        cerr << "mean of mean: " << y << ": " << neuralMean[y].mean() << endl;
+        // cerr << "var " << y << ": " << neuralVar[y];
+        cerr << endl;
+        // cerr << "var " << y << " determinant: " << neuralVar[y].determinant();
+    }
+#endif
+
+    
+    clearVarCache();
+}
+
 void LatentCrfModel::NormalizeThetaMleAndUpdateTheta(
                                                      MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
                                                      boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
@@ -1441,6 +1785,18 @@ lbfgs_parameter_t LatentCrfModel::SetLbfgsConfig(bool supervised) {
   return lbfgsParams;
 }
 
+void LatentCrfModel::BroadcastMeans(unsigned rankId) {
+      if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BroadcastMeans()" << endl;
+  }
+  mpi::broadcast<boost::unordered_map< int64_t, Eigen::VectorNeural > >(*learningInfo.mpiWorld, neuralMean, rankId);
+  mpi::broadcast<boost::unordered_map< int64_t, Eigen::MatrixNeural > >(*learningInfo.mpiWorld, neuralVar, rankId);
+  mpi::broadcast<boost::unordered_map< int64_t, double > >(*learningInfo.mpiWorld, varDet, rankId);
+  mpi::broadcast<boost::unordered_map< int64_t, Eigen::MatrixNeural > >(*learningInfo.mpiWorld, varInverse, rankId);
+        if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
+    cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BroadcastMeans()" << endl;
+  }
+}
 void LatentCrfModel::BroadcastTheta(unsigned rankId) {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": before calling BroadcastTheta()" << endl;
@@ -1451,6 +1807,22 @@ void LatentCrfModel::BroadcastTheta(unsigned rankId) {
   if(learningInfo.debugLevel >= DebugLevel::REDICULOUS) {
     cerr << "rank #" << learningInfo.mpiWorld->rank() << ": after calling BroadcastTheta()" << endl;
   }
+}
+
+void LatentCrfModel::GatherMean(const boost::unordered_map< int64_t,
+        std::vector<Eigen::VectorNeural> > &means, boost::unordered_map< int64_t,
+        std::vector<LogVal<double>>> &nNormalizingConstant,
+        std::vector<boost::unordered_map< int64_t,
+        std::vector<Eigen::VectorNeural>>> &allMeans, std::vector<boost::unordered_map< int64_t,
+        std::vector<LogVal<double>>>> &allNNormalizingConstant) {
+
+    cerr << endl << learningInfo.mpiWorld->rank() << " starts reducing means\n";
+    mpi::gather<boost::unordered_map< int64_t,
+        std::vector<Eigen::VectorNeural>>>(*learningInfo.mpiWorld, means, allMeans, 0); 
+    
+    cerr << endl << learningInfo.mpiWorld->rank() << " starts reducing nNormalizingConstant\n";
+    mpi::gather<boost::unordered_map<int64_t,std::vector<LogVal<double>>>>(*learningInfo.mpiWorld, nNormalizingConstant, allNNormalizingConstant,0);
+
 }
 
 void LatentCrfModel::ReduceMleAndMarginals(
@@ -1553,7 +1925,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
         lambda->GetParamsCount();
         // skip EM updates of the first block-coord-descent iteration
         //if(learningInfo.iterationsCount == 0) {
-        //  break;
+        //  break;  
         //}
         
         // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
@@ -1562,6 +1934,24 @@ void LatentCrfModel::BlockCoordinateDescent() {
         MultinomialParams::ConditionalMultinomialParam< pair<int64_t, int64_t> > mleGivenTwoLabels;
         boost::unordered_map<int64_t, double> mleMarginalsGivenOneLabel;
         boost::unordered_map<std::pair<int64_t, int64_t>, double> mleMarginalsGivenTwoLabels;
+        
+        /**
+         * token-neural maps regardless of sentence boundaries
+         */
+        boost::unordered_map<int64_t, std::vector<Eigen::VectorNeural>> neuralPerLabel;
+        boost::unordered_map<int64_t, std::vector<LogVal<double>>> weightPerLabel;
+        
+        /**
+         * master only: collect all maps
+         */
+        std::vector<boost::unordered_map<int64_t, std::vector<Eigen::VectorNeural>>> allNeuralPerLabel;
+        std::vector<boost::unordered_map<int64_t, std::vector<LogVal<double>>>> allWeightPerLabel;
+        
+        // init map
+        for(auto y:yDomain) {
+            neuralPerLabel[y] = std::vector<Eigen::VectorNeural>();
+            weightPerLabel[y] = std::vector<LogVal<double>>();
+        }
         
         // update the mle for each sentence
         assert(examplesCount > 0);
@@ -1576,7 +1966,27 @@ void LatentCrfModel::BlockCoordinateDescent() {
             continue;
           }
 
-          double sentLoglikelihood = UpdateThetaMleForSent(sentId, mleGivenOneLabel, mleMarginalsGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+          double sentLoglikelihood;
+          if(learningInfo.neuralRepFilename.empty()) {
+              sentLoglikelihood = UpdateThetaMleForSent(sentId,
+                  mleGivenOneLabel, mleMarginalsGivenOneLabel,
+                  mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+          } else {
+              auto& z = GetNeuralSequence(sentId);
+              fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
+              std::vector<FstUtils::LogWeight> thetaLambdaAlphas, thetaLambdaBetas, lambdaAlphas, lambdaBetas;
+              BuildThetaLambdaFst(sentId, GetNeuralSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+              BuildLambdaFst(sentId,lambdaFst,lambdaAlphas,lambdaBetas);
+              auto nLogC = ComputeNLogC(thetaLambdaFst,thetaLambdaBetas);
+              auto nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+#ifdef DEBUG
+              if(learningInfo.mpiWorld->rank()==0) {
+                  cerr << "nLogC: " << nLogC << "\tnLogZ: " << nLogZ << endl;
+              }
+#endif
+              sentLoglikelihood = nLogC - nLogZ;
+              ComputeExpectedMean(sentId,z, thetaLambdaFst,thetaLambdaAlphas,thetaLambdaBetas, neuralPerLabel, weightPerLabel,nLogC);
+          }
           
           unregularizedObjective += sentLoglikelihood;
           
@@ -1589,9 +1999,16 @@ void LatentCrfModel::BlockCoordinateDescent() {
         cerr << learningInfo.mpiWorld->rank() << "|";
         
         // accumulate mle counts from slaves
-        ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
+        if(learningInfo.neuralRepFilename.empty()) {
+            ReduceMleAndMarginals(mleGivenOneLabel, mleGivenTwoLabels, mleMarginalsGivenOneLabel, mleMarginalsGivenTwoLabels);
+        } else {
+            /**
+             * FIXME just gather all vectors from all slaves
+             */
+            GatherMean(neuralPerLabel,weightPerLabel, allNeuralPerLabel, allWeightPerLabel);
+            cerr << endl << learningInfo.mpiWorld->rank() << " has reduced\n";
+        }
         mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
-
         double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
           AddL2Term(unregularizedObjective):
           unregularizedObjective;
@@ -1603,16 +2020,60 @@ void LatentCrfModel::BlockCoordinateDescent() {
           } else { 
             cerr << " unregularized objective = " << unregularizedObjective << " " << endl;
           }
-        }	
-        
+        }
+
         // normalize mle and update nLogTheta on master
+        if (learningInfo.mpiWorld->rank() == 0) {
+            if (learningInfo.neuralRepFilename.empty()) {
+                NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel,
+                        mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+            } else {
+
+                NormalizeMleMeanAndUpdateMean(allNeuralPerLabel, allWeightPerLabel);
+            }
+        }
+
+        /**
+         * check optimized theta/neural means
+         */
+        if(!learningInfo.neuralRepFilename.empty()) {
+            double loglikelihoodAfter = 0.;
+            for(unsigned sentId = firstSentIdUsedForTraining; sentId < examplesCount; sentId++) {
+                if(sentId % learningInfo.mpiWorld->size() != (unsigned)learningInfo.mpiWorld->rank()) {
+                    continue;
+                }
+                auto& z = GetNeuralSequence(sentId);
+                fst::VectorFst<FstUtils::LogArc> thetaLambdaFst, lambdaFst;
+                std::vector<FstUtils::LogWeight> thetaLambdaAlphas, thetaLambdaBetas, lambdaAlphas, lambdaBetas;
+                BuildThetaLambdaFst(sentId, GetNeuralSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
+                BuildLambdaFst(sentId,lambdaFst,lambdaAlphas,lambdaBetas);
+                auto nLogC = ComputeNLogC(thetaLambdaFst,thetaLambdaBetas);
+                auto nLogZ = ComputeNLogZ_lambda(lambdaFst, lambdaBetas);
+                loglikelihoodAfter += nLogC - nLogZ;
+            }
+            mpi::all_reduce<double>(*learningInfo.mpiWorld, loglikelihoodAfter, loglikelihoodAfter, std::plus<double>());
+            double regularizedAfter = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
+                AddL2Term(loglikelihoodAfter):loglikelihoodAfter;
+            if(learningInfo.mpiWorld->rank() == 0) {
+                if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2 || 
+                    learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::WeightedL2) {
+                    cerr << "AFTER l2 reg. objective = " << regularizedAfter << " " << endl;
+                } else { 
+                    cerr << "AFTER unregularized objective = " << loglikelihoodAfter << " " << endl;
+                }
+            }
+        }
         if(learningInfo.mpiWorld->rank() == 0) {
-          NormalizeThetaMleAndUpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel, 
-                                          mleGivenTwoLabels, mleMarginalsGivenTwoLabels);
+          cerr << "ending EM iteration #" << emIter <<  " at " << time(0) << endl;    
         }
         
-        // update nLogTheta on slaves
-        BroadcastTheta(0);
+        if (learningInfo.neuralRepFilename.empty()) {
+            // update nLogTheta on slaves
+            BroadcastTheta(0);
+        } else {
+            
+            BroadcastMeans(0);
+        }
       } // end of EM iterations
 
       // for debugging
@@ -1702,7 +2163,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
           double epsilon = 0.00000001;
           int granularities = 1;
           vector<int> testIndexes;
-          if(true && learningInfo.checkGradient) {
+          if(false && learningInfo.checkGradient) {
             testIndexes = lambda->SampleFeatures(testIndexesCount);
             cerr << "calling CheckGradient() before running lbfgs inside coordinate descent" << endl; 
             for(int granularity = 0; granularity < granularities; epsilon /= 10, granularity++) {
@@ -2395,6 +2856,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
   fst::VectorFst<FstUtils::LogArc> thetaLambdaFst;
   fst::VectorFst<FstUtils::LogArc> lambdaFst;
   std::vector<FstUtils::LogWeight> thetaLambdaAlphas, lambdaAlphas, thetaLambdaBetas, lambdaBetas;
+  assert(learningInfo.neuralRepFilename.empty());
   BuildThetaLambdaFst(sentId, GetReconstructedObservableSequence(sentId), thetaLambdaFst, thetaLambdaAlphas, thetaLambdaBetas);
   BuildLambdaFst(sentId, lambdaFst, lambdaAlphas, lambdaBetas);
   // compute the B matrix for this sentence

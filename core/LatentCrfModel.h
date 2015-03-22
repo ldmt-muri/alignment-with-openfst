@@ -8,6 +8,7 @@
 #include <set>
 #include <algorithm>
 #include <ctime>
+#include <vector>
 
 #include "mpi.h"
 
@@ -28,6 +29,24 @@
 #include <boost/bind/protect.hpp>
 #include <boost/unordered_map.hpp>
 
+#ifndef EIGEN_CONFIG_H_
+#define EIGEN_CONFIG_H_
+
+#include <boost/serialization/array.hpp>
+/** 
+ * FIXME:
+ * UGLY!!!!!
+ */
+#define EIGEN_DENSEBASE_PLUGIN "/usr0/home/chuchenl/git/alignment-with-openfst/core/EigenDenseBaseAddons.h"
+
+#include <Eigen/Core>
+
+#endif // EIGEN_CONFIG_H_
+
+#include <Eigen/Dense>
+#include <Eigen/QR>
+#include <Eigen/Cholesky>
+
 #define HAVE_BOOST_ARCHIVE_TEXT_OARCHIVE_HPP 1
 
 #include "MultinomialParams.h"
@@ -45,6 +64,24 @@
 
 #include "LogLinearParams.h"
 #include "UnsupervisedSequenceTaggingModel.h"
+
+// Define a matrix of doubles using Eigen.
+typedef LogVal<double> LogValD;
+namespace Eigen {
+  typedef Eigen::Matrix<LogValD, Dynamic, Dynamic> MatrixXlogd;
+  typedef Eigen::Matrix<LogValD, Dynamic, 1> VectorXlogd;
+  
+#ifndef NEURALCONST
+#define NEURALCONST 100
+#endif
+  const int NEURAL_SIZE = NEURALCONST;
+  
+  typedef Eigen::Matrix<double, NEURAL_SIZE, 1> VectorNeural;
+  typedef Eigen::Matrix<double, NEURAL_SIZE, NEURAL_SIZE> MatrixNeural;
+  
+  const double NONE = 5566;
+  const Eigen::VectorNeural NONE_VEC = VectorNeural::Ones(NEURAL_SIZE,1) * NONE;
+}
 
 typedef std::mt19937 rng;
 
@@ -70,8 +107,22 @@ template<class Archive, typename T, typename H, typename P, typename A>
 void serialize(Archive &ar,
                std::tr1::unordered_set<T,H,P,A> &s, const unsigned int version) {
     boost::serialization::split_free(ar,s,version);
-}
-
+//
+//        template<class Archive, typename _Scalar, int _Rows, int _Cols, int _Options, int _MaxRows, int _MaxCols>
+//        inline void serialize(
+//                Archive & ar,
+//                Eigen::Matrix<_Scalar, _Rows, _Cols, _Options, _MaxRows, _MaxCols> & t,
+//                const unsigned int file_version
+//                ) {
+//            for (size_t i = 0; i < t.size(); i++)
+//                ar & t.data()[i];
+//        }        
+    }
+        template<class Archive>
+        void serialize(Archive &ar,
+                LogVal<double> &s, const unsigned int version) {
+            ar & s.v_;
+        }
 }
 }
 
@@ -188,8 +239,17 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			     MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels,
 			     boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
 			     boost::unordered_map<std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels);
+
+    void GatherMean(const boost::unordered_map< int64_t,
+            std::vector<Eigen::VectorNeural> > &means, boost::unordered_map< int64_t,
+            std::vector<LogVal<double>>> &nNormalizingConstant,
+            std::vector<boost::unordered_map< int64_t,
+            std::vector<Eigen::VectorNeural>>> &allMeans, std::vector<boost::unordered_map< int64_t,
+            std::vector<LogVal<double>>>> &allNNormalizingConstant);
   
   void BroadcastTheta(unsigned rankId);
+  
+  void BroadcastMeans(unsigned rankId);
 
   // filenames
   string GetLambdaFilename(int iteration, bool humane);
@@ -211,6 +271,10 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 				       boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
 				       MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels, 
 				       boost::unordered_map< std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels);
+  
+
+  void NormalizeMleMeanAndUpdateMean( std::vector<boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural>>>& means,
+                                      std::vector<boost::unordered_map< int64_t, std::vector<LogVal<double>>>>& nNormalizingConstant);
   
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void InitLambda();
@@ -240,12 +304,16 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   double GetNLogTheta(const std::pair<int64_t,int64_t> context, int64_t event);
   double GetNLogTheta(int64_t context, int64_t event);
 
+  double getGaussianPDF(int64_t yi, const Eigen::VectorNeural& zi);
+  
+  
   virtual std::vector<int64_t>& GetObservableSequence(int exampleId) = 0;
 
   virtual std::vector<int64_t>& GetObservableContext(int exampleId) = 0;
 
   virtual std::vector<int64_t>& GetReconstructedObservableSequence(int exampleId) = 0;
 
+  virtual const std::vector<Eigen::VectorNeural>& GetNeuralSequence(int exampleId) = 0;
 
   // SENT LEVEL
   ///////////
@@ -281,6 +349,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, 
          std::vector<FstUtils::LogWeight>& betas);
 
+  // builds an FST to computes B(x,z) for neural rep
+  void BuildThetaLambdaFst(unsigned sentId, const std::vector<Eigen::VectorNeural> &z, 
+			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, 
+         std::vector<FstUtils::LogWeight>& betas);
+  
   // build an FST to compute Z(x)
   void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
 
@@ -313,6 +386,16 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 		const fst::VectorFst<FstUtils::LogArc> &fst, 
 		const std::vector<FstUtils::LogWeight> &alphas, const std::vector<FstUtils::LogWeight> &betas, 
 		boost::unordered_map< std::pair<int64_t, int64_t>, boost::unordered_map< int64_t, LogVal<double> > > &BXZ);
+
+    // FIXME
+    // computes expected mean per label
+    void ComputeExpectedMean(unsigned sentId,
+            const vector<Eigen::VectorNeural>&z,
+            const fst::VectorFst<FstUtils::LogArc> &fst,
+            const vector<FstUtils::LogWeight> &alphas,
+            const vector<FstUtils::LogWeight> &betas,
+            boost::unordered_map< int64_t, std::vector<Eigen::VectorNeural> > &meanPerLabel,
+            boost::unordered_map< int64_t, std::vector<LogVal<double >>> &nNormalizingConstant, double nLogC);
 
   // assumptions:
   // - fst, betas are populated using BuildThetaLambdaFst()
@@ -352,6 +435,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   // convert tgt tokens to a word class sequence (if provided)
   vector<int64_t> GetTgtWordClassSequence(vector<int64_t> &x_t);
+  
+    
 
  public:
   std::vector<std::vector<int64_t> > labels;
@@ -387,6 +472,112 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   std::tr1::unordered_map<int64_t, std::tr1::unordered_set<int> > tagDict;
   // this maps the vocab id of a POS tag (e.g. "NOUN") to the word class id used internally to represent it
   std::tr1::unordered_map<int64_t, int> posTagVocabIdToClassId;
+  
+  boost::unordered_map<int64_t, Eigen::VectorNeural> neuralMean;
+  boost::unordered_map<int64_t, Eigen::MatrixNeural> neuralVar;
+  
+  std::vector<boost::unordered_map<int64_t, Eigen::VectorNeural>> historyNeuralMean;
+  
+  void clearVarCache() {
+      varInverse.clear();
+      varDet.clear();
+      varCholesky.clear();
+  }
+  
+  const Eigen::MatrixNeural& getVarInverse(int64_t key) {
+      auto iter = varInverse.find(key);
+      if(iter==varInverse.end()) {
+          varInverse[key]=neuralVar[key].inverse();
+          return varInverse[key];
+      } else {
+          return iter->second;
+      }
+  }
+    
+  const double getVarDet(int64_t key) {
+      // FIXME identity matrix for now
+      return 0;
+      
+      auto iter = varDet.find(key);
+      if(iter==varDet.end()) {
+          Eigen::FullPivHouseholderQR<Eigen::MatrixNeural> qr = Eigen::FullPivHouseholderQR<Eigen::MatrixNeural>(neuralVar[key]);
+          const auto det = qr.logAbsDeterminant();
+          varDet[key]=det;
+          return det;
+      } else {
+          return iter->second;
+      }
+  }
+  
+  const double getXTSigmaX(const Eigen::VectorNeural& x, int64_t key) {
+      // FIXME identity matrix for now
+      return x.squaredNorm();
+      
+      auto iter = varCholesky.find(key);
+      if(iter==varCholesky.end()) {
+          const auto cholesky = neuralVar[key].llt();
+          varCholesky[key] = cholesky;
+      } else {
+          auto intermediate = varCholesky[key].solve(x);
+          return intermediate.transpose() * intermediate;
+      }
+  }
+  
+  // read each line in the text file, encodes each sentence into vector<VectorNeural> and appends it into 'data'
+  // assumptions: data is empty
+  static void readNeuralRep(const std::string &textFilename, std::vector<std::vector<Eigen::VectorNeural>> &data) {
+    assert(data.size() == 0);
+    
+    // open data file
+    std::ifstream textFile(textFilename.c_str(), std::ios::in);
+    
+    // for each line
+    std::string line;
+    int64_t lineNumber = -1;
+    while(getline(textFile, line)) {
+      
+      // skip empty lines
+      if(line.size() == 0) {
+        continue;
+      }
+      lineNumber++;
+      
+      // split tokens
+      std::vector<string> splits;
+      StringUtils::SplitString(line, ' ', splits);
+      
+      // encode tokens
+      data.resize(lineNumber+1);
+      
+      data[lineNumber].resize(splits.size());
+      
+      for(auto i = data[lineNumber].begin(); i != data[lineNumber].end(); i++) {
+          auto& word = *i;
+          word.setZero(Eigen::NEURAL_SIZE, 1);
+          auto word_idx = i - data[lineNumber].begin();
+          if(splits[word_idx] == "NONE") {
+              word = Eigen::NONE_VEC;
+              continue;
+          }
+          std::vector<string> dims;
+          StringUtils::SplitString(splits[word_idx], ',', dims);
+          assert(dims.size() == Eigen::NEURAL_SIZE);
+          for(auto j=dims.begin(); j != dims.end(); j++) {
+              auto dim_idx = j - dims.begin();
+              double v = std::stod(*j);
+              word(dim_idx) = v;
+          }
+      }
+    }
+  }
+
+  
+private:
+    boost::unordered_map<int64_t, Eigen::MatrixNeural> varInverse;
+    boost::unordered_map<int64_t, double> varDet;
+    boost::unordered_map<int64_t, Eigen::LLT<Eigen::MatrixNeural>> varCholesky;
+  
+
 
   // random generator
   rng random_generator; 

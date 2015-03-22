@@ -1,9 +1,11 @@
 global {
     # Output directory:
-    ducttape_output="/usr3/home/wammar/crf-auto-pos/nov2014/"
+    ducttape_output="/usr3/home/chuchenl/naacl-exps/1126-english4k-winsize1-scaled-rest/"
 
     # general
     cores=16
+
+    embeddings=(EmbeddingType: senna="/usr3/home/chuchenl/embeddings/w2v-en-complete.model" w2v="/usr3/home/chuchenl/corpora/tokenized-raws/w2v_model" manaal="/usr3/home/chuchenl/embeddings/de-projected-en-48.txt" synEmb="/usr3/home/chuchenl/embeddings/syntacticEmbeddings/skipdep_embeddings.txt") 
 
     # data
     labeled_train_text="/usr0/home/wammar/empty"
@@ -33,6 +35,7 @@ global {
                                  spanish="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/spanish-cast3lb-2006.tok"
                                  swedish="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/swedish-talbanken05-2006.tok"
                                  turkish06="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/turkish-metusbanci-2006.tok"
+                                 csdata="/usr3/home/chuchenl/mock/100.tok"
                       )
 
     unlabeled_train_text=(Language:        english1k="/usr0/home/wammar/empty"
@@ -61,6 +64,7 @@ global {
                                  spanish="/usr0/home/wammar/empty"
                                  swedish="/usr0/home/wammar/empty"
                                  turkish06="/usr0/home/wammar/empty"
+                                 csdata="/usr0/home/wammar/empty"
                       )
 
     labeled_train_labels="/usr0/home/wammar/empty"
@@ -90,6 +94,7 @@ global {
                                  spanish="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/spanish-cast3lb-2006.pos"
                                  swedish="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/swedish-talbanken05-2006.pos"
                                  turkish06="/usr1/home/wammar/pos-data/conll2006/autoencoder-format/turkish-metusbanci-2006.pos"
+                                 csdata="/usr3/home/chuchenl/mock/100.pos"
                       )
 
     # precomputed brown clusters' paths file
@@ -119,6 +124,7 @@ global {
                                  spanish=""
                                  swedish=""
                                  turkish06=""
+                                 csdata=""
                       )
 
     # initial values for theta    
@@ -148,6 +154,7 @@ global {
                                  spanish=""
                                  swedish=""
                                  turkish06=""
+                                 csdata=""
                       )
     
     # initial values for lambda    
@@ -177,6 +184,7 @@ global {
                                  spanish=""
                                  swedish=""
                                  turkish06=""
+                                 csdata=""
                       )
     
     # use labeled data exclusively for training?
@@ -189,9 +197,20 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (Model: featurized_hmm) * (L2Strength: point_three) * (DirichletAlpha: point_one) * (FeatureSet: full) * (CoordIterCount: fifty) * (Prefix: other) * (Language: malagasy) * (EffectiveUnlabeledLines: 0k)
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_o_o_one point_o_o_three point_o_one point_o_three point_one point_three one three ten thirty) * (DirichletAlpha: point_one) * (FeatureSet: full) * (CoordIterCount: fifty) * (Prefix: other) * (Language: english4k) * (EffectiveUnlabeledLines: 0k) * (EmbeddingType: w2v) * (Neural: yes) * (Scaled: no)
 # batch1: arabic basque    danish  greek   hungarian italian turkish07
 # batch2: bulgarian catalan chinese czech06   czech07 dutch     german japanese portuguese slovene spanish swedish turkish06
 # batch3: kinyarwanda malagasy 
+}
+plan Ten_Twenty {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_o_one point_o_three) * (DirichletAlpha: point_one) * (FeatureSet: full) * (CoordIterCount: fifty) * (Prefix: other) * (Language: english4k) * (EffectiveUnlabeledLines: 0k) * (EmbeddingType: w2v) * (Neural: yes) * (Scaled: ten twenty)
+}
+
+plan Normalize {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_o_one point_o_three) * (DirichletAlpha: point_one) * (FeatureSet: full) * (CoordIterCount: fifty) * (Prefix: other) * (Language: english4k) * (EffectiveUnlabeledLines: 0k) * (EmbeddingType: w2v) * (Neural: yes) * (Scaled: normalize)
+}
+
+plan Missing {
+    reach Evaluate via (Model: autoencoder) * (L2Strength: point_o_o_one point_o_o_three point_o_one point_one) * (DirichletAlpha: point_one) * (FeatureSet: full) * (CoordIterCount: fifty) * (Prefix: other) * (Language: english4k) * (EffectiveUnlabeledLines: 0k) * (EmbeddingType: w2v) * (Neural: yes) * (Scaled: five)
 }
 

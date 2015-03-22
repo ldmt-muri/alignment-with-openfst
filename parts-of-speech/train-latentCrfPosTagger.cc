@@ -62,12 +62,15 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     OPTIMIZE_LAMBDAS_FIRST = "optimize-lambdas-first",
     OTHER_ALIGNERS_OUTPUT_FILENAMES = "other-aligners-output-filenames",
     PHRASE_LIST_FILENAMES = "phrase-list-filenames",
+    METADATA_LIST_FILENAMES = "metadata-list-filenames",
     TGT_WORD_CLASSES_FILENAME = "tgt-word-classes-filename",
     GOLD_LABELS_FILENAME = "gold-labels-filename",
     TAG_DICT_FILENAME = "tag-dict-filename",
     LABELS_COUNT = "labels-count",
     SUPERVISED = "supervised",
-    CHECK_GRADIENT = "check-gradient";
+    CHECK_GRADIENT = "check-gradient",
+  NEURAL_FILENAME = "neural-filename",
+    HMM_ONLY = "hmm-only";
 
   // Declare the supported options.
   po::options_description desc("train-latentCrfAligner options");
@@ -99,12 +102,15 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
     (OPTIMIZE_LAMBDAS_FIRST.c_str(), po::value<bool>(&learningInfo.optimizeLambdasFirst)->default_value(false), "(flag) (defaults to false) in the very first coordinate descent iteration, don't update thetas.")
     (OTHER_ALIGNERS_OUTPUT_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.otherAlignersOutputFilenames), "(multiple strings) specifies filenames which consist of word alignment output for the training corpus")
     (PHRASE_LIST_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.phraseListFilenames), "(multiple strings) specifies filenames which are phrase lists")
+    (METADATA_LIST_FILENAMES.c_str(), po::value< vector< string > >(&learningInfo.metadataFilenames), "(multiple strings) specifies filenames which are metadata")
     (TGT_WORD_CLASSES_FILENAME.c_str(), po::value<string>(&learningInfo.tgtWordClassesFilename), "(string) specifies filename of word classes for the target vocabulary. Each line consists of three fields: word class, word type and frequency (tab-separated)")
     (GOLD_LABELS_FILENAME.c_str(), po::value<string>(&goldLabelsFilename), "(string) specifies filename of the hand-annotated POS tags corresponding to training data") 
     (TAG_DICT_FILENAME.c_str(), po::value<string>(&learningInfo.tagDictFilename)->default_value(""), "(string) specifies filename of POS tagging dictionary")
     (LABELS_COUNT.c_str(), po::value<unsigned int>(&labelsCount)->default_value(12), "(unsigned int) specifies the number of word classes that will be induced.")
     (SUPERVISED.c_str(), po::value<bool>(&learningInfo.supervisedTraining)->default_value(false), "(flag) (defaults to false) when set, gold labels must also be provided, and supervised training is performed. When clear but gold labels are provided, semi-supervised training is performed. When clear and gold labels are not provided, unsupervised training is performed.")
     (CHECK_GRADIENT.c_str(), po::value<bool>(&learningInfo.checkGradient)->default_value(false), "(flag) (defaults to false) when set, gradient computation is checked numerically with the method of finite differences.")
+    (NEURAL_FILENAME.c_str(), po::value< string >(&learningInfo.neuralRepFilename)->default_value(""), "(string) specifies the file which consists of neural representations of the corpus")
+    (HMM_ONLY.c_str(), po::value<bool>(&learningInfo.hmmOnly)->default_value(false), "(flag) (defaults to false) when set, run the HMM model and exit.")
     ;
 
   po::variables_map vm;
@@ -199,7 +205,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
       learningInfo.featureTemplates.push_back(FeatureTemplate::OTHER_POS);
     } else if(*featIter == "PHRASE") {
         learningInfo.featureTemplates.push_back(FeatureTemplate::PHRASE);
-    } else if(*featIter == "NULL_ALIGNMENT") {
+    } else if(*featIter == "SEQUENCE_METADATA") {
+      learningInfo.featureTemplates.push_back(FeatureTemplate::SEQUENCE_METADATA);   
+    }    else if(*featIter == "NULL_ALIGNMENT") {
       assert(false); // this feature does not make sense for POS tagging
       learningInfo.featureTemplates.push_back(FeatureTemplate::NULL_ALIGNMENT);
     } else if(*featIter == "NULL_ALIGNMENT_LENGTH_RATIO") {
@@ -217,6 +225,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
   if(vm.count(OPTIMIZER.c_str())) {
     if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
+      cerr << "setting subOptMethod=ADAGRAD\n";
     } else if(vm[OPTIMIZER.c_str()].as<string>() == "lbfgs") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
     } else if(vm[OPTIMIZER.c_str()].as<string>() == "str") {
@@ -225,6 +234,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename, string &output
       cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
       assert(false);
     }
+  } else {
+      // WTF
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   }
   
   // logging
@@ -304,7 +316,7 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
 
   LearningInfo learningInfo(&world, outputFilenamePrefix);
   learningInfo.useMaxIterationsCount = true;
-  learningInfo.maxIterationsCount = 10;
+  learningInfo.maxIterationsCount = 30;
   learningInfo.useMinLikelihoodRelativeDiff = true;
   learningInfo.minLikelihoodRelativeDiff = 0.0001;
   learningInfo.debugLevel = DebugLevel::CORPUS;
@@ -312,6 +324,11 @@ unsigned HmmInitialize(mpi::communicator world, string textFilename, string outp
   learningInfo.persistParamsAfterNIteration = 1;
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
   learningInfo.tgtWordClassesFilename = latentCrfPosTagger.learningInfo.tgtWordClassesFilename;
+  if(latentCrfPosTagger.learningInfo.hmmOnly) {
+  learningInfo.neuralRepFilename = latentCrfPosTagger.learningInfo.neuralRepFilename;
+  } else {
+      learningInfo.neuralRepFilename = "";
+  }
 
   // initialize the model
   HmmModel2 hmmModel(textFilename, outputFilenamePrefix, learningInfo, NUMBER_OF_LABELS, FIRST_LABEL_ID);
@@ -530,6 +547,10 @@ int main(int argc, char **argv) {
     // hmm initialization
     unsigned bestRank = HmmInitialize(world, textFilename, outputFilenamePrefix, NUMBER_OF_LABELS, *((LatentCrfPosTagger*)model), FIRST_LABEL_ID, goldLabelsFilename);
     model->BroadcastTheta(bestRank);
+    if(learningInfo.hmmOnly) {
+        cerr << "finished the HMM run. exiting.\n";
+        return 0;
+    }
   } 
   
   // sync all processes
