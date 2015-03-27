@@ -1989,6 +1989,7 @@ void LatentCrfModel::ShuffleElements(vector<int>& elements) {
 }
  
 void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
+for (int i=0; i < 5; i++ ) { 
   // populate lambdasArray and lambasArrayLength
   // don't optimize all parameters. only optimize unconstrained ones
   double* lambdasArray;
@@ -2037,7 +2038,7 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       learningInfo.optimizationMethod.subOptMethod->regularizationStrength : 0.0;
     double learningRate = learningInfo.optimizationMethod.subOptMethod->learningRate / 
       (1.0 + learningInfo.optimizationMethod.subOptMethod->learningRate * l2Strength * sentsCounter);
-    assert(learningRate > 0.0);
+    assert(learningRate == 0.0);
     weightsMultiplier *= (1.0 - learningRate * l2Strength);
     lambda->UpdateWeightsMultiplier(weightsMultiplier);
     for(auto& derivativePair : sentNllGradient) {
@@ -2086,6 +2087,7 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
   cerr << "after one SGD pass over the data, optimizedMiniBatchNll = " << optimizedMiniBatchNll << endl;
 
   cerr << learningInfo.mpiWorld->rank() << " is exiting OptimizeLambdasWithSgd()" << endl;
+}
 } // end of SGD optimization
 
 void LatentCrfModel::OptimizeLambdasWithAdagrad(double& optimizedMiniBatchNll, 
