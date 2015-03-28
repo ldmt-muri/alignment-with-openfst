@@ -1992,7 +1992,9 @@ void LatentCrfModel::ShuffleElements(vector<int>& elements) {
 void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
   // TODO: this hyperParam is just a guess
   for (int i=0; i<32; i++) {
-    float hyperParam = 0.025;    
+    time_t startTime = time(NULL);
+    // float hyperParam = 0.025;    
+    float hyperParam = 0.001;
     cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ " << endl;
     cerr << "Iteration of Sgd with unchanged theta: " << i << endl;
     // populate lambdasArray and lambasArrayLength
@@ -2044,9 +2046,11 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       assert(l2Strength == 0.0);
 
       // Bottou  
-      double prevLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
-      double learningRate = prevLearningRate / (1.0 + prevLearningRate * sentsCounter * hyperParam); 
-//      cerr << "Updated learningRate: " << learningRate << endl;
+       double prevLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
+       double learningRate = prevLearningRate / (1.0 + prevLearningRate * sentsCounter * hyperParam); 
+      if ((sentsCounter % 100000) == 0) {
+        cerr << "Updated learningRate: " << learningRate << endl;
+      }
       learningInfo.optimizationMethod.subOptMethod->learningRate = learningRate;
       assert(learningRate > 0.0);
  
@@ -2097,6 +2101,9 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     // cerr << endl << "regularization term = " << regularizationTerm;
     // reducedNll += regularizationTerm;
     // cerr << endl << "after regularization, reducedNll = " << reducedNll << endl;
+    time_t endTime = time(NULL);
+    time_t diffTime = endTime - startTime;
+    cerr << endl << "Total time used for one path of Sgd: " << diffTime << "seconds" << endl;
     cerr << endl << "Without regularization, reducedNll = " << reducedNll << endl;
 
     // done.
