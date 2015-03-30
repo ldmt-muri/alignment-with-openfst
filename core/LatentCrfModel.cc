@@ -1241,9 +1241,9 @@ bool LatentCrfModel::ComputeNllZGivenXAndLambdaGradientPerSentence(bool ignoreTh
   }
 
   // debug info
-  if(sentId % learningInfo.nSentsPerDot == 0) {
-    cerr << ".";
-  }
+  //if(sentId % learningInfo.nSentsPerDot == 0) {
+  //  cerr << ".";
+  //}
   // cerr << " Sgd of one sentence is done, the updated sentence NLL is: " << sentNll << endl;
   return true;
 }
@@ -1991,12 +1991,23 @@ void LatentCrfModel::ShuffleElements(vector<int>& elements) {
 
 void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
   // TODO: this hyperParam is just a guess
+  cerr << "Learning rate initialization: " << learningInfo.optimizationMethod.subOptMethod->learningRate << endl;
   for (int i=0; i<32; i++) {
-    time_t startTime = time(NULL);
     // float hyperParam = 0.025;    
-    float hyperParam = 0.001;
+    // float hyperParam = 0.001;
+    // float hyperParam = 0.0;
+   
+    // Semi-fixed 
+    // double learningRate = 1.0 / (i+1.0);    
+
     cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ " << endl;
     cerr << "Iteration of Sgd with unchanged theta: " << i << endl;
+    // cerr << "HyperParam is: " << hyperParam << endl;
+    
+    time_t startTime = time(NULL);
+    cerr << "startTime: " << startTime << " seconds" << endl;
+    
+    
     // populate lambdasArray and lambasArrayLength
     // don't optimize all parameters. only optimize unconstrained ones
     double* lambdasArray;
@@ -2020,6 +2031,7 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       }
     }
     // shuffle indexes
+    // TODO(fanyang): figure out if this function has effect.
     ShuffleElements(mySentIndexes);
 
     // process each of my sentences
@@ -2045,15 +2057,18 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
         learningInfo.optimizationMethod.subOptMethod->regularizationStrength : 0.0; 
       assert(l2Strength == 0.0);
 
-      // Bottou  
-       double prevLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
-       double learningRate = prevLearningRate / (1.0 + prevLearningRate * sentsCounter * hyperParam); 
+      // Fixed learning rate
+      double learningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
+      // Bottou 
+      // learningRate = learningRate / (1.0 + learningRate * sentsCounter * hyperParam); 
+      
+      // TODO(fanyang): parameterize the choice of sgd
+      assert(learningRate > 0.0);
+
       if ((sentsCounter % 100000) == 0) {
         cerr << "Updated learningRate: " << learningRate << endl;
       }
-      learningInfo.optimizationMethod.subOptMethod->learningRate = learningRate;
-      assert(learningRate > 0.0);
- 
+      
       weightsMultiplier *= (1.0 - learningRate * l2Strength);
       lambda->UpdateWeightsMultiplier(weightsMultiplier);
       for(auto& derivativePair : sentNllGradient) {
@@ -2066,8 +2081,7 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       }
     } 
 
-    // TODO (fanyang): calculate the objective nll after a loop over the whole
-    // dataset
+    // TODO (fanyang): calculate the objective nll after a loop over the whole dataset
 
     // now all processes aggregate their NllPiece's and have the same value of reducedNll
     double reducedNll = -1;
@@ -2101,14 +2115,17 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     // cerr << endl << "regularization term = " << regularizationTerm;
     // reducedNll += regularizationTerm;
     // cerr << endl << "after regularization, reducedNll = " << reducedNll << endl;
+    
     time_t endTime = time(NULL);
-    time_t diffTime = endTime - startTime;
-    cerr << endl << "Total time used for one path of Sgd: " << diffTime << "seconds" << endl;
-    cerr << endl << "Without regularization, reducedNll = " << reducedNll << endl;
+    time_t diffTime = (endTime - startTime);
+    cerr << "endTime: " << endTime << " seconds" << endl;
+    cerr << endl << "Total time used for one path of Sgd: " << diffTime << " seconds" << endl;
+    cerr << endl << "Without regularization, reducedNll = " << i << " " << reducedNll << endl;
 
     // done.
     optimizedMiniBatchNll = reducedNll;
     // cerr << "after one SGD pass over the data, optimizedMiniBatchNll = " << optimizedMiniBatchNll << endl;
+    
     cerr << learningInfo.mpiWorld->rank() << " is exiting OptimizeLambdasWithSgd()" << endl;
   }
 } // end of SGD optimization
