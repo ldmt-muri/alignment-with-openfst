@@ -408,7 +408,8 @@ int main(int argc, char **argv) {
   learningInfo.optimizationMethod.subOptMethod = new OptMethod();
   //learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
   learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::STOCHASTIC_GRADIENT_DESCENT;
-	
+  learningInfo.optimizationMethod.subOptMethod->learningRate = 1.0;
+  	
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
