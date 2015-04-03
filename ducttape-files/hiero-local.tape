@@ -22,6 +22,7 @@ global {
                       grow_diag="grow-diag"
                       intersect="intersect"
                       union="union")
+  lambda_optimizer=(LambdaOptimizer: sgd="sgd" lbfgs="lbfgs")
 }
 
 #import ../submitters.tape
@@ -239,6 +240,7 @@ task AutoencoderAlignS2T
     :: use_src_bigrams=@
     :: tgt_brown_clusters=@
     :: output_prefix=@
+    :: lambda_optimizer=@
     < executable=$executable@BuildLatentCrfAligner
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsS2T 
     > alignment 
@@ -256,13 +258,14 @@ task AutoencoderAlignS2T
   --feat PRECOMPUTED --feat DIAGONAL_DEVIATION --feat LOG_ALIGNMENT_JUMP
   --test-size $test_sents_count
   --max-model1-iter-count $model1_itercount
+  --lambda-optimizer $lambda_optimizer
   --max-iter-count 10"
 
   # --feat SRC0_TGT0
   #--tgt-word-classes-filename $tgt_brown_clusters
   # hiding --feat SRC0_TGT0 
   # --feat SYNC_START --feat SYNC_END  
-  #--optimizer adagrad --minibatch-size 1000
+  #  --minibatch-size 1000
 
   if [ $wordpair_feats_file ]; then
     command="$command --wordpair-feats $wordpair_feats_file"
@@ -372,6 +375,7 @@ task AutoencoderAlignT2S
     :: use_other_aligners=@
     :: use_src_bigrams=@
     :: src_brown_clusters=@
+    :: lambda_optimizer=@
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsT2S 
     < executable=$executable@BuildLatentCrfAligner
     > alignment 
@@ -390,11 +394,12 @@ task AutoencoderAlignT2S
   --test-size $test_sents_count 
   --reverse true
   --max-model1-iter-count $model1_itercount
+  --lambda-optimizer $lambda_optimizer 
   --max-iter-count 10"
   #--tgt-word-classes-filename $src_brown_clusters
   #   --feat SRC0_TGT0
   #   --feat SYNC_START --feat SYNC_END
-  #--optimizer adagrad --minibatch-size 1000
+  #--minibatch-size 1000
  
   if [ $wordpair_feats_file ]; then
     command="$command --wordpair-feats $wordpair_feats_file"

@@ -2,7 +2,7 @@ import mg-en.tconf
 
 global {
     # Output directory:
-    ducttape_output="/usr3/home/wammar/mt-systems/mg-en-exp600"
+    ducttape_output="/usr3/home/wammar/mt-systems/mg-en-exp005"
 
     # initial autoencoder params
     init_theta_fwd="" #/usr1/home/wammar/mt-systems/prefix.0.theta"
@@ -11,7 +11,7 @@ global {
     init_lambda_bwd=""
 
     # general
-    cores=8
+    cores=1
 
     # prefix; must be important for concurrent runs
     output_prefix="exp600"
@@ -19,6 +19,6 @@ global {
 }
 
 plan Full {
-    reach Evaluate via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2Strength: point_o_one) * (L1Strength: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and )
+    #reach Evaluate
+    reach AutoencoderAlignT2S via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2Strength: zero) * (L1Strength: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and ) * (LbfgsItercount: four) * (LambdaOptimizer: sgd)
 }
-

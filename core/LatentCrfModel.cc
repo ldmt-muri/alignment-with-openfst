@@ -1788,7 +1788,7 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
     } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == ADAGRAD) {
       OptimizeLambdasWithAdagrad(optimizedMiniBatchNll, miniBatchDevSetNll, gradient, u, h, adagradIter);
-    } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == STOCHASTIC_GRADIENT_DESCENT) { 
+    } else if (learningInfo.optimizationMethod.subOptMethod->algorithm == SGD) { 
       OptimizeLambdasWithSgd(optimizedMiniBatchNll);
     } else if(learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations == 0) {
       cerr << "Lambdas are not optimized due to ";
@@ -1992,8 +1992,8 @@ void LatentCrfModel::ShuffleElements(vector<int>& elements) {
 void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
 
   // TODO: implement mini-batch
-  if (learningInfo.optimizationMethod.subOptMethod->miniBatchSize != 1) {
-    cerr << "mini-batches of size > 1 have not been implemented for SGD yet." 
+  if (learningInfo.optimizationMethod.subOptMethod->miniBatchSize > 1) {
+    cerr << "mini-batches of size > 1 have not been implemented for SGD yet."
          << endl;
     assert(false);
   }

@@ -224,6 +224,13 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
       return false;
     }
   }
+
+  // If the minibatch size is not specified while using stochastic gradient descent, 
+  // assume a minibatch size of 1.
+  if (learningInfo.optimizationMethod.subOptMethod->algorithm == OptAlgorithm::SGD &&
+      learningInfo.optimizationMethod.subOptMethod->miniBatchSize == 0) {
+    learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 1;
+  }
   
   if(vm.count(LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str())) {
     if(vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() == "fixed") {
