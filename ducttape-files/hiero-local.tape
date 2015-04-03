@@ -8,7 +8,7 @@ global {
   l2_strength=(L2Strength: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
   l1_strength=(L1Strength: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0)
   dirichlet_alpha=(DirichletAlpha: one=1.0 zero_point_five=0.5 one_point_five=1.5)
-  lbfgs_itercount=(LbfgsItercount: one=1 two=2 four=4 eight=8)
+  max_lambda_epoch_count=(MaxLambdaEpochCount: one=1 two=2 four=4 eight=8)
   em_itercount=(EmItercount: one=1 zero=0 two=2 four=4 eight=8)
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
   test_with_crf_only=(TestWithCrfOnly: no=false yes=true)
@@ -227,7 +227,7 @@ task AutoencoderAlignS2T
     :: l1_strength=@
     :: dirichlet_alpha=@
     :: test_with_crf_only=@
-    :: lbfgs_itercount=@
+    :: max_lambda_epoch_count=@
     :: em_itercount=@
     :: optimize_lambdas_first=@
     :: fwd_giza_alignments=@
@@ -304,8 +304,8 @@ task AutoencoderAlignS2T
     command="$command --max-em-iter-count $em_itercount"
   fi
 
-  if [ $lbfgs_itercount ]; then
-    command="$command --max-lbfgs-iter-count $lbfgs_itercount"
+  if [ $max_lambda_epoch_count ]; then
+    command="$command --max-lambda-updates-epoch-count $max_lambda_epoch_count"
   fi 
 
   if [ $optimize_lambdas_first ]; then
@@ -363,7 +363,7 @@ task AutoencoderAlignT2S
     :: l1_strength=@
     :: dirichlet_alpha=@
     :: test_with_crf_only=@
-    :: lbfgs_itercount=@
+    :: max_lambda_epoch_count=@
     :: em_itercount=@
     :: optimize_lambdas_first=@
     :: fwd_giza_alignments=@
@@ -437,8 +437,8 @@ task AutoencoderAlignT2S
     command="$command --max-em-iter-count $em_itercount"
   fi
 
-  if [ $lbfgs_itercount ]; then
-    command="$command --max-lbfgs-iter-count $lbfgs_itercount"
+  if [ $max_lambda_epoch_count ]; then
+    command="$command --max-lambda-updates-epoch-count $max_lambda_epoch_count"
   fi 
 
   if [ $optimize_lambdas_first ]; then

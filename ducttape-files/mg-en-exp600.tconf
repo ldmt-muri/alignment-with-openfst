@@ -20,5 +20,5 @@ global {
 
 plan Full {
     #reach Evaluate
-    reach AutoencoderAlignT2S via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2Strength: zero) * (L1Strength: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and ) * (LbfgsItercount: four) * (LambdaOptimizer: sgd)
+    reach AutoencoderAlignT2S via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2Strength: zero) * (L1Strength: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and ) * (MaxLambdaEpochCount: four) * (LambdaOptimizer: lbfgs)
 }
