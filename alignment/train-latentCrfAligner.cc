@@ -79,13 +79,16 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     L1_STRENGTH = "l1-strength",
     MAX_ITER_COUNT = "max-iter-count",
     MIN_RELATIVE_DIFF = "min-relative-diff",
-    MAX_LBFGS_ITER_COUNT = "max-lbfgs-iter-count",
+    MAX_LAMBDA_UPDATES_EPOCH_COUNT = "max-lbfgs-iter-count",
     //MAX_ADAGRAD_ITER_COUNT = "max-adagrad-iter-count",
     MAX_EM_ITER_COUNT = "max-em-iter-count",
     MAX_MODEL1_ITER_COUNT = "max-model1-iter-count",
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
     CACHE_FEATS = "cache-feats",
-    OPTIMIZER = "optimizer",
+    LAMBDA_OPTIMIZER = "lambda-optimizer",
+    LAMBDA_OPTIMIZER_LEARNING_RATE = "lambda-learning-rate",
+    LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY = "lambda-optimizer-learning-rate-decay-strategy",
+    LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER = "lambda-optimizer-learning-rate-decay-parameter",
     MINIBATCH_SIZE = "minibatch-size",
     LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
     DIRICHLET_ALPHA = "dirichlet-alpha",
@@ -112,12 +115,15 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (L1_STRENGTH.c_str(), po::value<float>()->default_value(0.0), "(double) strength of an l1 regularizer")
     (MAX_ITER_COUNT.c_str(), po::value<int>(&learningInfo.maxIterationsCount)->default_value(50), "(int) max number of coordinate descent iterations after which the model is assumed to have converged")
     (MIN_RELATIVE_DIFF.c_str(), po::value<float>(&learningInfo.minLikelihoodRelativeDiff)->default_value(0.03), "(double) convergence threshold for the relative difference between the objective value in two consecutive coordinate descent iterations")
-    (MAX_LBFGS_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations)->default_value(6), "(int) quit LBFGS optimization after this many iterations")
+    (MAX_LAMBDA_UPDATES_EPOCH_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->epochs)->default_value(1), "(int) quit LBFGS optimization after this many iterations")
     //(MAX_ADAGRAD_ITER_COUNT.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->adagradParams.maxIterations)->default_value(4), "(int) quit Adagrad optimization after this many iterations")
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
-    (OPTIMIZER.c_str(), po::value<string>(), "(string) optimization algorithm to use for updating loglinear parameters")
+    (LAMBDA_OPTIMIZER.c_str(), po::value<string>()->default_value("sgd"), "(string) optimization algorithm to use for optimizing the CRF parameters. Supported values are: 'lbfgs', 'sgd', 'adagrad'. L-BFGS is a popular quasi-Newton optimization algorithm, SGD is stochastic gradient descent, and ADAGRAD is the adaptive gradient algorithm described at http://www.magicbroom.info/Papers/DuchiHaSi10.pdf")
+    (LAMBDA_OPTIMIZER_LEARNING_RATE.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->learningRate)->default_value(1.0), "(float) If the optimizer used for CRF parameters uses a learning rate (e.g., stochastic gradient descent), specify the initial learning rate using htis argument. Note that the learning rate decays in subsequent iterations of SGD.")
+    (LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str(), po::value<string>()->default_value("epoch-fixed"), "(string) Specify which strategy to use for diminishing the learning rate across iterations of stochastic gradient descent. Possible values are 'fixed', 'epoch-fixed', 'bottou', 'geometric'. 'fixed' means that learning rate is the same for all iterations and equal to the specified value for the initial learning rate. 'epoch-fixed' uses the same learning rate for each epoch = initial_learning_rate * 1.0 / epoch_index (the epoch index is one-based). 'bottou' uses the learning rate described in section 5.2 of Leon Bottou's article titled 'Stochastic Gradient Descent Tricks'; i.e., learning_rate = initial_learning_rate / (1 + initial_learning_rate * eta * iteration_index) where eta is the specified decay hyperparameter. 'geometric' uses learning_rate = initial_learning_rate / (1 + eta)^iteration_index.")
+    (LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->learningRateDecayParameter)->default_value(0.001), "(float) some decay strategies for the learning rate in stochastic gradient use a decay parameter (e.g., 'bottou'). The higher this parameter is, the faster will the learning rate decay. Must be greater than zero.")
     (MINIBATCH_SIZE.c_str(), po::value<int>(&learningInfo.optimizationMethod.subOptMethod->miniBatchSize)->default_value(0), "(int) minibatch size for optimizing loglinear params. Defaults to zero which indicates batch training.")
     (LOGLINEAR_OPT_FIX_Z_GIVEN_X.c_str(), po::value<bool>(&learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas)->default_value(false), "(flag) (clera by default) fix the feature expectations according to p(Z|X), which involves both multinomial and loglinear parameters. This speeds up the optimization of loglinear parameters and makes it convex; but it does not have principled justification.")
     (MAX_MODEL1_ITER_COUNT.c_str(), po::value<int>(&maxModel1IterCount)->default_value(15), "(int) (defaults to 15) number of model 1 iterations to use for initializing theta parameters")
@@ -143,11 +149,6 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     return false;
   }
 
-  if (vm.count(MAX_LBFGS_ITER_COUNT.c_str())) {
-    learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
-      vm[MAX_LBFGS_ITER_COUNT.c_str()].as<int>();
-  }
-  
   if (vm.count(FEAT.c_str()) == 0) {
     cerr << "No features were specified. We will enable src-tgt word pair identities features by default." << endl;
     learningInfo.featureTemplates.push_back(FeatureTemplate::SRC0_TGT0);
@@ -207,15 +208,38 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     learningInfo.hiddenSequenceIsMarkovian = false;
   }
   
-  if(vm.count(OPTIMIZER.c_str())) {
-    if(vm[OPTIMIZER.c_str()].as<string>() == "adagrad") {
+  if(vm.count(LAMBDA_OPTIMIZER.c_str())) {
+    if(vm[LAMBDA_OPTIMIZER.c_str()].as<string>() == "adagrad") {
       learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::ADAGRAD;
+    } else if (vm[LAMBDA_OPTIMIZER.c_str()].as<string>() == "sgd") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::SGD;
+    } else if (vm[LAMBDA_OPTIMIZER.c_str()].as<string>() == "lbfgs") {
+      learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
+      learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 
+        learningInfo.optimizationMethod.subOptMethod->epochs;
+      learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 
+        learningInfo.optimizationMethod.subOptMethod->epochs;
     } else {
-      cerr << "option --optimizer cannot take the value " << vm[OPTIMIZER.c_str()].as<string>() << endl;
+      cerr << "option --lambda-optimizer cannot take the value " << vm[LAMBDA_OPTIMIZER.c_str()].as<string>() << endl;
       return false;
     }
   }
   
+  if(vm.count(LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str())) {
+    if(vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() == "fixed") {
+      learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy = DecayStrategy::FIXED;
+    } else if(vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() == "epoch-fixed") {
+      learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy = DecayStrategy::EPOCH_FIXED;
+    } else if(vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() == "bottou") {
+      learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy = DecayStrategy::BOTTOU;
+    } else if(vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() == "geometric") {
+      learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy = DecayStrategy::GEOMETRIC;
+    } else {
+      cerr << "option --lambda-optimizer-learning-rate-decay-strategy cannot take the value " << vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() << endl;
+      return false;
+    }
+  }
+
   // logging
   if(learningInfo.mpiWorld->rank() == 0) {
     cerr << "program options are as follows:" << endl;
@@ -236,12 +260,12 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
     cerr << MAX_ITER_COUNT << "=" << learningInfo.maxIterationsCount << endl;
     cerr << MIN_RELATIVE_DIFF << "=" << learningInfo.minLikelihoodRelativeDiff << endl;
-    cerr << MAX_LBFGS_ITER_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations << endl;
+    cerr << MAX_LAMBDA_UPDATES_EPOCH_COUNT << "=" << learningInfo.optimizationMethod.subOptMethod->epochs << endl;
     cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
     cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
     cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
-    if(vm.count(OPTIMIZER.c_str())) {
-      cerr << OPTIMIZER << "=" << vm[OPTIMIZER.c_str()].as<string>() << endl;
+    if(vm.count(LAMBDA_OPTIMIZER.c_str())) {
+      cerr << LAMBDA_OPTIMIZER << "=" << vm[LAMBDA_OPTIMIZER.c_str()].as<string>() << endl;
     }
     cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
@@ -405,15 +429,13 @@ int main(int argc, char **argv) {
   // block coordinate descent
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::BLOCK_COORD_DESCENT;
   // lbfgs
-  learningInfo.optimizationMethod.subOptMethod = new OptMethod();
-  //learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::LBFGS;
-  learningInfo.optimizationMethod.subOptMethod->algorithm = OptAlgorithm::STOCHASTIC_GRADIENT_DESCENT;
-  learningInfo.optimizationMethod.subOptMethod->learningRate = 1.0;
-  	
+  learningInfo.optimizationMethod.subOptMethod = new OptMethod();  	
   learningInfo.optimizationMethod.subOptMethod->miniBatchSize = 0;
   learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxEvalsPerIteration = 4;
   learningInfo.optimizationMethod.subOptMethod->moveAwayPenalty = 0.0;
   learningInfo.retryLbfgsOnRoundingErrors = true;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.maxIterations = 6;
+  learningInfo.optimizationMethod.subOptMethod->lbfgsParams.memoryBuffer = 6;
   // thetas
   learningInfo.thetaOptMethod = new OptMethod();
   learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;

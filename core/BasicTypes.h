@@ -56,10 +56,24 @@ namespace Regularizer {
 }
 
 namespace OptAlgorithm {
-  enum OptAlgorithm {GRADIENT_DESCENT, STOCHASTIC_GRADIENT_DESCENT, 
+  enum OptAlgorithm {GRADIENT_DESCENT, SGD, 
     BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION,
     ADAGRAD};
 }
+
+// Specify which strategy to use for diminishing the learning rate across 
+// iterations of stochastic gradient descent. 
+// FIXED: learning rate is the same for all iterations and equal to the 
+//   specified value for the initial learning rate. 
+// EPOCH-FIXED: uses the same learning rate for all updates in the same epoch
+//   epoch_learning_rate = initial_learning_rate * 1.0 / epoch_index;
+//   (where the epoch index is one-based). 
+// BOTTOU: uses the learning rate described in section 5.2 of Leon Bottou's 
+//   article titled 'Stochastic Gradient Descent Tricks'; i.e., learning_rate=
+//   initial_learning_rate / (1 + initial_learning_rate*eta*iteration_index);
+//   where eta is the specified decay hyperparameter. 
+// GEOMETRIC: learning_rate = initial_learning_rate / (1 + eta)^iteration_index;
+enum class DecayStrategy {FIXED, EPOCH_FIXED, BOTTOU, GEOMETRIC};
 
 namespace DebugLevel {
   enum DebugLevel {NONE=0, ESSENTIAL=1, CORPUS=2, MINI_BATCH=3, SENTENCE=4, TOKEN=5, REDICULOUS=6, TEMP = 4};
@@ -113,28 +127,38 @@ struct OptMethod {
   LbfgsParams lbfgsParams;
   // if algorithm = ADAGRAD, use these ADAGRAD hyper params
   //AdagradParams adagradParams;
-  // some optimization algorithms require specifying a learning rate (e.g. gradient descent)
+  // some optimization algorithms require specifying a learning rate (e.g. gradient descent).
+  // when using stochastic gradient descent, the value specified by this variable is the initial
+  // learning rate which may or may not be diminished in subsequent iterations, depending on 
+  // learningRateDiminishingStrategy.
   float learningRate;
-  // stochastic = 0 means batch optimization
-  // stochastic = 1 means online optimization
-  bool stochastic;
-  // when stochastic = 1, specifies the minibatch size
+  // if using stochastic gradient descent, this variable determines the decay strategy for the learning rate.
+  DecayStrategy learningRateDecayStrategy;
+  // some decay strategies require a decay parameter
+  float learningRateDecayParameter;
+  // when using a stochastic optimization method, use this variable to specify the mini-batch size. 
   int miniBatchSize;
   // regularization details
   Regularizer::Regularizer regularizer;
   float regularizationStrength;
   // move-away from previous weights penalty
   float moveAwayPenalty;
+  // maximum number of epochs (1 epoch = full pass on the training set) this 
+  // algorithm is allowed to make to update lambdas in one iteration of block
+  // coordinate descent.
+  int epochs;
 
   OptMethod() {
-    stochastic = false;
     algorithm = OptAlgorithm::GRADIENT_DESCENT;
     learningRate = 0.01;
+    learningRateDecayParameter = 1.0;
+    learningRateDecayStrategy = DecayStrategy::EPOCH_FIXED;
     miniBatchSize = 1;
     regularizer = Regularizer::NONE;
     regularizationStrength = 1000;
     subOptMethod = 0;
     moveAwayPenalty = 1.0;
+    epochs = 1;
   }
 }; 
 

@@ -1990,101 +1990,172 @@ void LatentCrfModel::ShuffleElements(vector<int>& elements) {
 }
 
 void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
-  // TODO: this hyperParam is just a guess
-  cerr << "Learning rate initialization: " << learningInfo.optimizationMethod.subOptMethod->learningRate << endl;
-  for (int i=0; i<32; i++) {
-    // float hyperParam = 0.025;    
-    // float hyperParam = 0.001;
-    // float hyperParam = 0.0;
-   
-    // Semi-fixed 
-    // double learningRate = 1.0 / (i+1.0);    
 
-    cerr << "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ " << endl;
-    cerr << "Iteration of Sgd with unchanged theta: " << i << endl;
-    // cerr << "HyperParam is: " << hyperParam << endl;
+  // TODO: implement mini-batch
+  if (learningInfo.optimizationMethod.subOptMethod->miniBatchSize != 1) {
+    cerr << "mini-batches of size > 1 have not been implemented for SGD yet." 
+         << endl;
+    assert(false);
+  }
+
+  // TODO: implement L2 regularization
+  if (learningInfo.optimizationMethod.subOptMethod->regularizationStrength != 0) {
+    cerr << "regularization has not been (properly) implemented for SGD yet."
+         << endl;
+    assert(false);
+  }
+
+  // TODO: implement multiple processors
+  if (learningInfo.mpiWorld->size() > 1) {
+    cerr << "sgd is only properly implemented with one processor. in particular, "
+         << "asynchronous updates seem to be buggy." << endl;
+    assert(false);
+  }
+
+  // count the number of SGD updates for each process
+  uint sgdIterCounter = 0;
     
+  // recall the initial learning rate, and the decay parameter
+  double initialLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
+  double currentLearningRate = initialLearningRate;
+  cerr << "initial learning rate = " << initialLearningRate << endl;
+  double decayParameter = learningInfo.optimizationMethod.subOptMethod->learningRateDecayParameter;
+  if (decayParameter <= 0.0) {
+    cerr << "the specified decay parameter = " << decayParameter 
+         << " is not valid (must be > 0.0)" << endl;
+    assert(false);
+  }
+
+  // run SGD for the specified number of epochs.
+  for (int epochIndex = 0; 
+       epochIndex < learningInfo.optimizationMethod.subOptMethod->epochs; ++epochIndex) {
+
+    // debug info.
     time_t startTime = time(NULL);
-    cerr << "startTime: " << startTime << " seconds" << endl;
     
-    
-    // populate lambdasArray and lambasArrayLength
-    // don't optimize all parameters. only optimize unconstrained ones
-    double* lambdasArray;
-    int lambdasArrayLength;
-    lambdasArray = lambda->GetParamWeightsArray();
-    lambdasArrayLength = lambda->GetParamsCount();
+    // reset the learning rate if need be.
+    switch(learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy) {
+    case DecayStrategy::EPOCH_FIXED: 
+      currentLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate / (epochIndex+1.0);
+      cerr << "epoch #" << epochIndex << ": learning rate = " << currentLearningRate << endl;
+      break;
+    case DecayStrategy::FIXED:
+    case DecayStrategy::BOTTOU:
+    case DecayStrategy::GEOMETRIC:
+      // learning rate is not reset every epoch.
+      break;
+    default:
+      // something went wrong.
+      std::cerr << "Unknown learningRateDecayStrategy" << std::endl;
+      assert(false);
+    }
 
     // determine the sentence indexes which need to be processed.
-    int supervisedFromSentId = 0;
-    int supervisedToSentId = goldLabelSequences.size();
-    // semi-supervised training with SGD hasn't been implemented yet.
-    assert(supervisedToSentId == 0);
     int fromSentId = goldLabelSequences.size();
     int toSentId = examplesCount;
+    // TODO: semi-supervised training with SGD hasn't been implemented yet.
+    int supervisedFromSentId = 0;
+    int supervisedToSentId = goldLabelSequences.size();
+    assert(supervisedToSentId == 0);
+
+    // debug info.
     // cerr << "computing the supervised objective for sentIds: " << supervisedFromSentId << "-" << supervisedToSentId << endl;
     cerr << "computing the unsupervised objective for sentIds: " << fromSentId << "-" << toSentId << endl;
+
+    // construct a vector of the sentence indexes which belong to this process.
     vector<int> mySentIndexes;
     for(uint i = fromSentId; i < toSentId; ++i) {
       if(i % learningInfo.mpiWorld->size() == learningInfo.mpiWorld->rank()) {
         mySentIndexes.push_back(i);
       }
     }
-    // shuffle indexes
+
+    // shuffle the vector of indexes
     // TODO(fanyang): figure out if this function has effect.
     ShuffleElements(mySentIndexes);
 
-    // process each of my sentences
+    // use these variables to accumulate negative loglikelihood and its 
+    // gradient across sentences.
     double NllPiece = 0.0;
+    vector<double> NllGradientPiece(lambda->GetParamsCount(), 0.0);
+    
+    // reset this vector for each sentence.
     FastSparseVector<double> sentNllGradient;
 
+    // process each of my sentences
     uint sentsCounter = 0;
-    double weightsMultiplier = 1.0;
-    lambda->UpdateWeightsMultiplier(weightsMultiplier);
-    for(auto sentIter = mySentIndexes.begin(); sentIter != mySentIndexes.end(); ++sentIter, ++sentsCounter) {
+    for(auto sentIter = mySentIndexes.begin(); 
+        sentIter != mySentIndexes.end(); 
+        ++sentIter, ++sentsCounter, ++sgdIterCounter) {
+      
+      // reset the learning rate if need be.
+      switch(learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy) {
+      case DecayStrategy::EPOCH_FIXED: 
+      case DecayStrategy::FIXED:
+        // do not reset at each iteration.
+        break;
+      case DecayStrategy::BOTTOU:
+        currentLearningRate = initialLearningRate / (1.0 + initialLearningRate * sgdIterCounter * decayParameter); 
+        break;
+      case DecayStrategy::GEOMETRIC:
+        currentLearningRate = currentLearningRate / (1.0 + decayParameter);
+        break;
+      default:
+        // something went wrong.
+        std::cerr << "Unknown learningRateDecayStrategy" << std::endl;
+        assert(false);
+      }
+      assert(currentLearningRate >= 0.0);
+
       // Process this sentence.
+      sentNllGradient.clear();
       int sentId = *sentIter;
       double sentNll = 0.0;
       bool ignoreThetaTerms = false;
-      sentNllGradient.clear();
       if(!ComputeNllZGivenXAndLambdaGradientPerSentence(ignoreThetaTerms, sentId, sentNll, sentNllGradient)) continue;
 
-      // update objective
+      // update objective value across sentences
       NllPiece += sentNll;
 
-      // update parameters     
-      double l2Strength = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
-        learningInfo.optimizationMethod.subOptMethod->regularizationStrength : 0.0; 
-      assert(l2Strength == 0.0);
-
-      // Fixed learning rate
-      double learningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
-      // Bottou 
-      // learningRate = learningRate / (1.0 + learningRate * sentsCounter * hyperParam); 
-      
-      // TODO(fanyang): parameterize the choice of sgd
-      assert(learningRate > 0.0);
-
+      // debug info.
       if ((sentsCounter % 100000) == 0) {
-        cerr << "Updated learningRate: " << learningRate << endl;
+        cerr << "currentLearningRate = " << currentLearningRate << endl;
       }
+
+      double l2Strength = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
+        learningInfo.optimizationMethod.subOptMethod->regularizationStrength : 0.0;
       
-      weightsMultiplier *= (1.0 - learningRate * l2Strength);
-      lambda->UpdateWeightsMultiplier(weightsMultiplier);
+      // first, shrink all parameter weights (which implicitly adds the 
+      // gradient of the L2 regularizer). See Alex Smola's blog post for details
+      // http://blog.smola.org/post/940672544/fast-quadratic-regularization-for-online-learning
+      double oldWeightsMultiplier = lambda->GetWeightsMultiplier();
+      double newWeightsMultiplier = 
+        oldWeightsMultiplier * (1.0 - currentLearningRate * l2Strength);
+      lambda->UpdateWeightsMultiplier(newWeightsMultiplier);
+
+      // then, for each feature with a non-zero derivative for this sentence:  
       for(auto& derivativePair : sentNllGradient) {
         unsigned featureIndex = derivativePair.first;
         double oldScaledWeight = lambda->GetParamWeight(featureIndex);
         double derivative = derivativePair.second;
-        double newScaledWeight = oldScaledWeight - learningRate * derivative;
-        // TODO(wammar): consider lazy-syncing instead of blind updating here.
-        lambda->UpdateParam(derivativePair.first, newScaledWeight); // update of lambda w.r.t. a single sentence
+        double newScaledWeight = oldScaledWeight - currentLearningRate * derivative;
+        // actually update the feature weight. 
+        // since the weights multiplier != 1, UpdateParam will set the 
+        // unscaled weight = (newScaledWeight / newWeightsMultiplier);
+        lambda->UpdateParam(featureIndex, newScaledWeight);
+
+        // aggregate derivatives across sentences
+        NllGradientPiece[featureIndex] += derivative;
       }
-    } 
+    }
 
     // TODO (fanyang): calculate the objective nll after a loop over the whole dataset
 
+    // debug info.
     // now all processes aggregate their NllPiece's and have the same value of reducedNll
     double reducedNll = -1;
+    vector<double> reducedNllGradient;
+    mpi::all_reduce< vector<double> >(*learningInfo.mpiWorld, NllGradientPiece, reducedNllGradient, AggregateVectors2());
     mpi::all_reduce<double>(*learningInfo.mpiWorld, NllPiece, reducedNll, std::plus<double>());
     assert(reducedNll != -1);
 
@@ -2093,40 +2164,50 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       lambda->ScaleWeights();
       assert(lambda->GetWeightsMultiplier() == 1.0);
     }
-    // everyone reset the weights multiplier to 1.0
-    lambda->UpdateWeightsMultiplier(1.0);
 
+    // reset the weights multiplier which is used internally (inside lambda) to
+    // represent the weight vector. This is related to efficient implementation
+    // of L2 regularization. Refer to Alex Smola's blog post:
+    // http://blog.smola.org/post/940672544/fast-quadratic-regularization-for-online-learning
+    // for details.
+    double weightsMultiplier = 1.0;
+    if(learningInfo.mpiWorld->rank() == 0) {
+      lambda->ScaleWeights();
+    }
+    lambda->UpdateWeightsMultiplier(weightsMultiplier);
+    
     // wait for the master
     double dummy = 0;
     mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy, dummy, std::plus<double>());
-
+    
+    // debug info.
+    cerr << endl << "before regularization, reducedNll = " << reducedNll << endl;
+    
     // Add the L2 regularizer to reducedNll
-    // cerr << endl << "before regularization, reducedNll = " << reducedNll << endl;
     double regularizationTerm = 0.0;
     if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
       for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
-        double paramValue = lambda->GetParamWeight(i);
-        regularizationTerm += paramValue * paramValue;
-        assert(!std::isnan(paramValue) || !std::isinf(paramValue));
-      } 
+        double scaledParamValue = lambda->GetParamWeight(i);
+        // TODO: performance speedup, instead of "term += scaledParamValue^2", consider
+        //   "term += unscaledParamValue^2", and at the end do
+        //   "term *= weightsMultiplier^2"  
+        regularizationTerm += scaledParamValue * scaledParamValue;
+        assert(!std::isnan(scaledParamValue) || !std::isinf(scaledParamValue));
+      }
     }
+    reducedNll += regularizationTerm;
 
-    // NOT USING L2 Penalty 
-    // cerr << endl << "regularization term = " << regularizationTerm;
-    // reducedNll += regularizationTerm;
-    // cerr << endl << "after regularization, reducedNll = " << reducedNll << endl;
-    
-    time_t endTime = time(NULL);
-    time_t diffTime = (endTime - startTime);
-    cerr << "endTime: " << endTime << " seconds" << endl;
-    cerr << endl << "Total time used for one path of Sgd: " << diffTime << " seconds" << endl;
-    cerr << endl << "Without regularization, reducedNll = " << i << " " << reducedNll << endl;
+    // debug info.
+    if (learningInfo.mpiWorld->rank() == 0) {
+      cerr << endl << "regularization term = " << regularizationTerm;
+      cerr << endl << "after regularization, reducedNll = " << reducedNll << endl;
+      time_t endTime = time(NULL);
+      time_t diffTime = (endTime - startTime);
+      cerr << endl << "Total time used for one path of Sgd: " << diffTime << " seconds" << endl;
+    }
 
     // done.
     optimizedMiniBatchNll = reducedNll;
-    // cerr << "after one SGD pass over the data, optimizedMiniBatchNll = " << optimizedMiniBatchNll << endl;
-    
-    cerr << learningInfo.mpiWorld->rank() << " is exiting OptimizeLambdasWithSgd()" << endl;
   }
 } // end of SGD optimization
 
