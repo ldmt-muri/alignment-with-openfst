@@ -1210,7 +1210,7 @@ bool LatentCrfModel::ComputeNllZGivenXAndLambdaGradientPerSentence(bool ignoreTh
 
   // update the log likelihood
   sentNll -= nLogZ;
-  if(nLogC < nLogZ) {
+  if(nLogC < nLogZ && learningInfo.optimizationMethod.subOptMethod->algorithm != SGD) {
     cerr << "this must be a bug. nLogC always be >= nLogZ. " << endl;
     cerr << "nLogC = " << nLogC << endl;
     cerr << "nLogZ = " << nLogZ << endl;
