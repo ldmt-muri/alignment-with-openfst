@@ -2159,6 +2159,15 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     mpi::all_reduce<double>(*learningInfo.mpiWorld, NllPiece, reducedNll, std::plus<double>());
     assert(reducedNll != -1);
 
+    // debug info.
+    double nllGradientL2NormSquared = 0.0;
+    for (auto nllDerivative = reducedNllGradient.begin(); 
+         nllDerivative != reducedNllGradient.end();
+         ++nllDerivative) {
+      nllGradientL2NormSquared += (*nllDerivative) * (*nllDerivative);
+    }
+    cerr << "||gradient|| = " << sqrt(nllGradientL2NormSquared) << endl;
+
     // the master scales the weights such that weightsMultiplier is 1.0
     if(learningInfo.mpiWorld->rank() == 0) {
       lambda->ScaleWeights();
@@ -2185,6 +2194,7 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     
     // Add the L2 regularizer to reducedNll
     double regularizationTerm = 0.0;
+    
     if(learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2) {
       for(unsigned i = 0; i < lambda->GetParamsCount(); i++) {
         double scaledParamValue = lambda->GetParamWeight(i);
