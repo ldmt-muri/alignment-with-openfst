@@ -1993,32 +1993,22 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
 
   // TODO: implement mini-batch
   if (learningInfo.optimizationMethod.subOptMethod->miniBatchSize > 1) {
-    cerr << "mini-batches of size > 1 have not been implemented for SGD yet."
+    cerr << "rank #" << learningInfo.mpiWorld->rank()
+         << ": mini-batches of size > 1 have not been implemented for SGD yet."
          << endl;
-    assert(false);
-  }
-
-  // TODO: implement L2 regularization
-  if (learningInfo.optimizationMethod.subOptMethod->regularizationStrength != 0) {
-    cerr << "regularization has not been (properly) implemented for SGD yet."
-         << endl;
-    assert(false);
-  }
-
-  // TODO: implement multiple processors
-  if (learningInfo.mpiWorld->size() > 1) {
-    cerr << "sgd is only properly implemented with one processor. in particular, "
-         << "asynchronous updates seem to be buggy." << endl;
     assert(false);
   }
 
   // count the number of SGD updates for each process
   uint sgdIterCounter = 0;
-    
+
   // recall the initial learning rate, and the decay parameter
   double initialLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate;
   double currentLearningRate = initialLearningRate;
-  cerr << "initial learning rate = " << initialLearningRate << endl;
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "master #" << learningInfo.mpiWorld->rank()
+         << "initial learning rate = " << initialLearningRate << endl;
+  }
   double decayParameter = learningInfo.optimizationMethod.subOptMethod->learningRateDecayParameter;
   if (decayParameter <= 0.0) {
     cerr << "the specified decay parameter = " << decayParameter 
@@ -2036,8 +2026,13 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     // reset the learning rate if need be.
     switch(learningInfo.optimizationMethod.subOptMethod->learningRateDecayStrategy) {
     case DecayStrategy::EPOCH_FIXED: 
-      currentLearningRate = learningInfo.optimizationMethod.subOptMethod->learningRate / (epochIndex+1.0);
-      cerr << "epoch #" << epochIndex << ": learning rate = " << currentLearningRate << endl;
+      currentLearningRate = 
+        learningInfo.optimizationMethod.subOptMethod->learningRate / 
+        (epochIndex+1.0);
+      if (learningInfo.mpiWorld->rank() == 0) {
+        cerr << "epoch #" << epochIndex << ": learning rate = " 
+             << currentLearningRate << endl;
+      }
       break;
     case DecayStrategy::FIXED:
     case DecayStrategy::BOTTOU:
@@ -2046,7 +2041,8 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       break;
     default:
       // something went wrong.
-      std::cerr << "Unknown learningRateDecayStrategy" << std::endl;
+      std::cerr << "rank #" << learningInfo.mpiWorld->rank()
+                << "Unknown learningRateDecayStrategy" << std::endl;
       assert(false);
     }
 
@@ -2059,11 +2055,17 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     assert(supervisedToSentId == 0);
 
     // debug info.
-    // cerr << "computing the supervised objective for sentIds: " << supervisedFromSentId << "-" << supervisedToSentId << endl;
-    cerr << "computing the unsupervised objective for sentIds: " << fromSentId << "-" << toSentId << endl;
+    if (learningInfo.mpiWorld->rank() == 0) {
+      // cerr << "computing the supervised objective for sentIds: "     << supervisedFromSentId << "-" << supervisedToSentId << endl;
+      cerr << "master #" << learningInfo.mpiWorld->rank() 
+           << "computing the unsupervised objective for sentIds: " 
+           << fromSentId << "-" << toSentId << endl;
+    }
 
     // construct a vector of the sentence indexes which belong to this process.
     vector<int> mySentIndexes;
+    int totalSentCount = toSentId - fromSentId;
+    assert(totalSentCount > 0);
     for(uint i = fromSentId; i < toSentId; ++i) {
       if(i % learningInfo.mpiWorld->size() == learningInfo.mpiWorld->rank()) {
         mySentIndexes.push_back(i);
@@ -2117,11 +2119,6 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       // update objective value across sentences
       NllPiece += sentNll;
 
-      // debug info.
-      if ((sentsCounter % 100000) == 0) {
-        cerr << "currentLearningRate = " << currentLearningRate << endl;
-      }
-
       double l2Strength = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
         learningInfo.optimizationMethod.subOptMethod->regularizationStrength : 0.0;
       
@@ -2130,9 +2127,9 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       // http://blog.smola.org/post/940672544/fast-quadratic-regularization-for-online-learning
       double oldWeightsMultiplier = lambda->GetWeightsMultiplier();
       double newWeightsMultiplier = 
-        oldWeightsMultiplier * (1.0 - currentLearningRate * l2Strength);
+        oldWeightsMultiplier * (1.0 - currentLearningRate * l2Strength / totalSentCount);
       lambda->UpdateWeightsMultiplier(newWeightsMultiplier);
-
+      
       // then, for each feature with a non-zero derivative for this sentence:  
       for(auto& derivativePair : sentNllGradient) {
         unsigned featureIndex = derivativePair.first;
@@ -2166,7 +2163,9 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
          ++nllDerivative) {
       nllGradientL2NormSquared += (*nllDerivative) * (*nllDerivative);
     }
-    cerr << "||gradient|| = " << sqrt(nllGradientL2NormSquared) << endl;
+    if (learningInfo.mpiWorld->rank() == 0) {
+      cerr << "||gradient|| = " << sqrt(nllGradientL2NormSquared) << endl;
+    }
 
     // the master scales the weights such that weightsMultiplier is 1.0
     if(learningInfo.mpiWorld->rank() == 0) {
@@ -2190,8 +2189,10 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
     mpi::all_reduce<double>(*learningInfo.mpiWorld, dummy, dummy, std::plus<double>());
     
     // debug info.
-    cerr << endl << "before regularization, reducedNll = " << reducedNll << endl;
-    
+    if (learningInfo.mpiWorld->rank() == 0) {
+      cerr << endl << "before regularization, reducedNll = " << reducedNll << endl;
+    }
+
     // Add the L2 regularizer to reducedNll
     double regularizationTerm = 0.0;
     

@@ -163,7 +163,6 @@ namespace MultinomialParams {
 			    const VocabEncoder &vocabEncoder,
 			    bool decodeContext=false,
 			    bool decodeEvent=false) {
-    cerr << "persisting multinomial parameters in " << paramsFilename << endl;
     std::ofstream paramsFile(paramsFilename.c_str(), std::ios::out);
     for (boost::unordered_map<int64_t, MultinomialParam>::const_iterator srcIter = params.params.begin(); 
          srcIter != params.params.end(); 

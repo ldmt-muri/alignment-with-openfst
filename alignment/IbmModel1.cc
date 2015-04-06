@@ -45,7 +45,6 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
   PersistParams(initialModelFilename.str());
   
   // create the initial grammar FST
-  cerr << "create grammar fst" << endl;
   CreateGrammarFst();
 
 }
@@ -53,7 +52,6 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
 void IbmModel1::Train() {
 
   // create tgt fsts
-  cerr << "create tgt fsts" << endl;
   vector< VectorFst <FstUtils::LogArc> > tgtFsts;
   CreateTgtFsts(tgtFsts);
 
@@ -302,11 +300,6 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
 	validationLogLikelihood += fSentLogLikelihood;
       } else {
 	logLikelihood += fSentLogLikelihood;
-      }
-
-      // logging
-      if (++sentsCounter % 1000 == 0) {
-	cerr << sentsCounter << " sents processed. iterationLoglikelihood = " << logLikelihood <<  endl;
       }
     }
     
