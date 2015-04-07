@@ -17,8 +17,9 @@ public:
   inline void UpdateParam(const FeatureId &paramId, const double newValue) {
     assert(weightsMultiplier > 0.0);
     assert(sealed);
-    if(!AddParam(paramId, newValue / weightsMultiplier)) {
-      (*paramWeightsPtr)[paramIndexes[paramId]] = newValue / weightsMultiplier;
+    double unscaledValue = newValue / weightsMultiplier;
+    if(!AddParam(paramId, unscaledValue)) {
+      (*paramWeightsPtr)[paramIndexes[paramId]] = unscaledValue;
     }
   }
 

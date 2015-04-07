@@ -815,11 +815,11 @@ class LogLinearParams {
 
   double DotProduct(const std::vector<double>& values);
 
-  double DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights);
+  double DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights, double weightsMultiplier);
 
   double DotProduct(const FastSparseVector<double> &values);
 
-  double DotProduct(const FastSparseVector<double> &values, const ShmemVectorOfDouble& weights);
+  double DotProduct(const FastSparseVector<double> &values, const ShmemVectorOfDouble& weights, double weightsMultiplier);
  
   // updates the model parameters given the gradient and an optimization method
   void UpdateParams(const unordered_map_featureId_double &gradient, const OptMethod &optMethod);

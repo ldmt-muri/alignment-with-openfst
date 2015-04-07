@@ -5,10 +5,9 @@ global {
   ducttape_experimental_imports=enable
 
   # autoencoder hyperparams
-  l2_strength=(L2Strength: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
-  l1_strength=(L1Strength: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0)
+  l2_strength=(L2: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
   dirichlet_alpha=(DirichletAlpha: one=1.0 zero_point_five=0.5 one_point_five=1.5)
-  lbfgs_itercount=(LbfgsItercount: one=1 two=2 four=4 eight=8)
+  max_lambda_epoch_count=(MaxLambdaEpochCount: one=1 two=2 four=4 eight=8)
   em_itercount=(EmItercount: one=1 zero=0 two=2 four=4 eight=8)
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
   test_with_crf_only=(TestWithCrfOnly: no=false yes=true)
@@ -22,6 +21,7 @@ global {
                       grow_diag="grow-diag"
                       intersect="intersect"
                       union="union")
+  lambda_optimizer=(LambdaOptimizer: sgd="sgd" lbfgs="lbfgs")
 }
 
 #import ../submitters.tape
@@ -223,10 +223,9 @@ task AutoencoderAlignS2T
     :: init_theta=$init_theta_fwd
     :: init_lambda=$init_lambda_fwd
     :: l2_strength=@
-    :: l1_strength=@
     :: dirichlet_alpha=@
     :: test_with_crf_only=@
-    :: lbfgs_itercount=@
+    :: max_lambda_epoch_count=@
     :: em_itercount=@
     :: optimize_lambdas_first=@
     :: fwd_giza_alignments=@
@@ -239,6 +238,7 @@ task AutoencoderAlignS2T
     :: use_src_bigrams=@
     :: tgt_brown_clusters=@
     :: output_prefix=@
+    :: lambda_optimizer=@
     < executable=$executable@BuildLatentCrfAligner
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsS2T 
     > alignment 
@@ -256,13 +256,14 @@ task AutoencoderAlignS2T
   --feat PRECOMPUTED --feat DIAGONAL_DEVIATION --feat LOG_ALIGNMENT_JUMP
   --test-size $test_sents_count
   --max-model1-iter-count $model1_itercount
+  --lambda-optimizer $lambda_optimizer
   --max-iter-count 10"
 
   # --feat SRC0_TGT0
   #--tgt-word-classes-filename $tgt_brown_clusters
   # hiding --feat SRC0_TGT0 
   # --feat SYNC_START --feat SYNC_END  
-  #--optimizer adagrad --minibatch-size 1000
+  #  --minibatch-size 1000
 
   if [ $wordpair_feats_file ]; then
     command="$command --wordpair-feats $wordpair_feats_file"
@@ -281,10 +282,6 @@ task AutoencoderAlignS2T
     command="$command --l2-strength $l2_strength"
   fi
 
-  if [ $l1_strength ]; then
-    command="$command --l1-strength $l1_strength"
-  fi
-
   if [ $dirichlet_alpha ]; then
     command="$command --dirichlet-alpha $dirichlet_alpha"
   fi
@@ -301,8 +298,8 @@ task AutoencoderAlignS2T
     command="$command --max-em-iter-count $em_itercount"
   fi
 
-  if [ $lbfgs_itercount ]; then
-    command="$command --max-lbfgs-iter-count $lbfgs_itercount"
+  if [ $max_lambda_epoch_count ]; then
+    command="$command --max-lambda-updates-epoch-count $max_lambda_epoch_count"
   fi 
 
   if [ $optimize_lambdas_first ]; then
@@ -357,10 +354,9 @@ task AutoencoderAlignT2S
     :: init_theta=$init_theta_bwd
     :: init_lambda=$init_lambda_bwd
     :: l2_strength=@
-    :: l1_strength=@
     :: dirichlet_alpha=@
     :: test_with_crf_only=@
-    :: lbfgs_itercount=@
+    :: max_lambda_epoch_count=@
     :: em_itercount=@
     :: optimize_lambdas_first=@
     :: fwd_giza_alignments=@
@@ -372,6 +368,7 @@ task AutoencoderAlignT2S
     :: use_other_aligners=@
     :: use_src_bigrams=@
     :: src_brown_clusters=@
+    :: lambda_optimizer=@
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsT2S 
     < executable=$executable@BuildLatentCrfAligner
     > alignment 
@@ -390,11 +387,12 @@ task AutoencoderAlignT2S
   --test-size $test_sents_count 
   --reverse true
   --max-model1-iter-count $model1_itercount
+  --lambda-optimizer $lambda_optimizer 
   --max-iter-count 10"
   #--tgt-word-classes-filename $src_brown_clusters
   #   --feat SRC0_TGT0
   #   --feat SYNC_START --feat SYNC_END
-  #--optimizer adagrad --minibatch-size 1000
+  #--minibatch-size 1000
  
   if [ $wordpair_feats_file ]; then
     command="$command --wordpair-feats $wordpair_feats_file"
@@ -410,10 +408,6 @@ task AutoencoderAlignT2S
 
   if [ $l2_strength ]; then
     command="$command --l2-strength $l2_strength"
-  fi
-
-  if [ $l1_strength ]; then
-    command="$command --l1-strength $l1_strength"
   fi
 
   if [ $dirichlet_alpha ]; then
@@ -432,8 +426,8 @@ task AutoencoderAlignT2S
     command="$command --max-em-iter-count $em_itercount"
   fi
 
-  if [ $lbfgs_itercount ]; then
-    command="$command --max-lbfgs-iter-count $lbfgs_itercount"
+  if [ $max_lambda_epoch_count ]; then
+    command="$command --max-lambda-updates-epoch-count $max_lambda_epoch_count"
   fi 
 
   if [ $optimize_lambdas_first ]; then

@@ -1622,7 +1622,7 @@ double LogLinearParams::DotProduct(const unordered_map_featureId_double& values)
     if(std::isnan(dotProduct) || std::isinf(dotProduct)){
       cerr << "problematic param: " << valuesIter->first << " with index " << paramIndexes[valuesIter->first] << endl;
       cerr << "value = " << valuesIter->second << endl;
-      cerr << "weight = " << (*paramWeightsPtr)[paramIndexes[valuesIter->first]] << endl;
+      cerr << "weight = " << weightsMultiplier * (*paramWeightsPtr)[paramIndexes[valuesIter->first]] << endl;
       if(newParam) { cerr << "newParam." << endl; } else { cerr << "old param." << endl;}
       assert(false);
     }
@@ -1631,7 +1631,9 @@ double LogLinearParams::DotProduct(const unordered_map_featureId_double& values)
   return dotProduct;
 }
 
-double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const ShmemVectorOfDouble& weights) {
+double LogLinearParams::DotProduct(const FastSparseVector<double> &values, 
+                                   const ShmemVectorOfDouble& weights, 
+                                   double weightsMultiplier) {
   if(!sealed) {
     return 0.0;
   }
@@ -1641,18 +1643,20 @@ double LogLinearParams::DotProduct(const FastSparseVector<double> &values, const
     assert(ParamExists(valuesIter->first));
     dotProduct += valuesIter->second * weights[valuesIter->first];
   }
+  assert(!std::isnan(dotProduct) && !std::isinf(dotProduct));
   dotProduct *= weightsMultiplier;
+  assert(!std::isnan(dotProduct) && !std::isinf(dotProduct));
   return dotProduct;
 }
 
 double LogLinearParams::DotProduct(const FastSparseVector<double> &values) {
-  return DotProduct(values, *paramWeightsPtr);
+  return DotProduct(values, *paramWeightsPtr, weightsMultiplier);
 }
 
 // compute dot product of two vectors
 // assumptions:
 // -both vectors are of the same size
-double LogLinearParams::DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights) {
+double LogLinearParams::DotProduct(const std::vector<double>& values, const ShmemVectorOfDouble& weights, double weightsMultiplier) {
   if(!sealed) {
     return 0.0;
   }
@@ -1670,6 +1674,6 @@ double LogLinearParams::DotProduct(const std::vector<double>& values, const Shme
 // assumptions:
 // - values and paramWeights are both of the same size
 double LogLinearParams::DotProduct(const std::vector<double>& values) {
-  return DotProduct(values, *paramWeightsPtr);
+  return DotProduct(values, *paramWeightsPtr, weightsMultiplier);
 }
   
