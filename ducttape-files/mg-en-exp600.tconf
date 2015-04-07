@@ -11,7 +11,7 @@ global {
     init_lambda_bwd=""
 
     # general
-    cores=1
+    cores=32
 
     # prefix; must be important for concurrent runs
     output_prefix="exp600"
@@ -20,5 +20,5 @@ global {
 
 plan Full {
     #reach Evaluate
-    reach AutoencoderAlignT2S via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2: zero) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and ) * (MaxLambdaEpochCount: four) * (LambdaOptimizer: lbfgs)
+    reach AutoencoderAlignT2S via (TuneOrTest: tune test) * (UseCustomLM: yes) * (Aligner: autoencoder giza fast) * (L2: point_o_one) * (DirichletAlpha: one_point_five) * (PrecomputedFeatures: dyer11) * (OptimizeLambdasFirst: yes) * (UseOtherAligners: yes) * (EmItercount: two) * (SymHeuristic: grow_diag_final_and ) * (MaxLambdaEpochCount: four) * (LambdaOptimizer: sgd)
 }
