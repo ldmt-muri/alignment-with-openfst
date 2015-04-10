@@ -11,8 +11,8 @@ global {
   max_lambda_epoch_count=(MaxLambdaEpochCount: one=1 two=2 four=4 eight=8)
   em_itercount=(EmItercount: one=1 zero=0 two=2 four=4 eight=8)
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
-  test_with_crf_only=(TestWithCrfOnly: no=false yes=true)
-  optimize_lambdas_first=(OptimizeLambdasFirst: no=false yes=true)
+  test_with_crf_only=false
+  optimize_lambdas_first=true
   precomputed_features=(PrecomputedFeatures: all=all dyer11=dyer11 none=none)
   use_other_aligners=(UseOtherAligners: no="" yes=yes)
   use_src_bigrams=(UseSrcBigrams: no="" yes=yes)
