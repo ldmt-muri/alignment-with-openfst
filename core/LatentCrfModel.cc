@@ -4,7 +4,7 @@ namespace mpi = boost::mpi;
 using namespace std;
 using namespace OptAlgorithm;
 
-// singlenton instance definition and trivial initialization
+// singleton instance definition and trivial initialization
 LatentCrfModel* LatentCrfModel::instance = 0;
 int LatentCrfModel::START_OF_SENTENCE_Y_VALUE = -100;
 unsigned LatentCrfModel::NULL_POSITION = -100;
@@ -1351,17 +1351,30 @@ void LatentCrfModel::UpdateTheta(
     MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
     boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel) {
 
-  // deep copy of expected counts.
-  nLogThetaGivenOneLabel = mleGivenOneLabel;
+  if (learningInfo.variationalInferenceOfMultinomials || 
+      learningInfo.multinomialSymmetricDirichletAlpha != 1.0) {
+    cerr << "variational infrerence and dirichlet priors are not implemented for online EM" << endl;
+    exit(1);
+  }
 
-  // normalize thetas.
-  bool unnormalizedParamsAreInNLog = false;
-  bool normalizedParamsAreInNLog = true;
-  MultinomialParams::NormalizeParams(nLogThetaGivenOneLabel,
-                                     learningInfo.multinomialSymmetricDirichletAlpha, 
-                                     unnormalizedParamsAreInNLog,
-                                     normalizedParamsAreInNLog,
-                                     learningInfo.variationalInferenceOfMultinomials);
+  // Only override the theta distributions for contexts observed in mleGivenOneLabel so far. 
+  for (auto contextIter = mleGivenOneLabel.params.begin();
+       contextIter != mleGivenOneLabel.params.end();
+       ++contextIter) {
+    // Update all decisions conditioned on a particular context.
+    for (auto decisionIter = nLogThetaGivenOneLabel[contextIter->first].begin();
+         decisionIter != nLogThetaGivenOneLabel[contextIter->first].end();
+         ++decisionIter) {
+      // normalize mle counts to get the probability of a decision.
+      double probability = 
+        contextIter->second.count(decisionIter->first) > 0 ?
+        contextIter->second[decisionIter->first] /
+        mleMarginalsGivenOneLabel[contextIter->first] :
+        0.0;
+      nLogThetaGivenOneLabel[contextIter->first][decisionIter->first] = 
+        MultinomialParams::nLog(probability);
+    }
+  }
 }
 
 void LatentCrfModel::PrintLbfgsConfig(lbfgs_parameter_t &lbfgsParams) {
@@ -1529,10 +1542,14 @@ void LatentCrfModel::BlockCoordinateDescent() {
         exit(1);
       }
 
+      if (learningInfo.mpiWorld->rank() == 0) {
+        cerr << "optimizing thetas using online expecation maximization." << endl;
+      }
+
       // remember the number of updates we've made so far to mle and to theta. it's
       // initialized to 2 according to section 3.2 in (Liang and Klein 2009)
       // this is updated with every stochastic update.
-      long theta_updates_counter = 2;  // this is called k+2 in (Liang and Klein 2009)
+      long theta_updates_counter = 2; // this way, the first eta will 2^{-alpha}
       long mle_updates_counter = 0; // this is only needed for mini-batches
 
       // this is the step size reduction power, alpha, as described in section
@@ -1543,20 +1560,23 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
       // TODO: properly specify minibatch size in the command line.
       // update thetas after every minibatch.
-      int minibatchSize = 100;
+      int minibatchSize = 1000;
       
       // current step size, explained in section 3.2 of (Liang and Klein 2009).
-      // this is updated stochastic update.
       double eta = pow(theta_updates_counter, -alpha);
+      double learningRate = 1 - eta;
+      cerr << "initializing eta = " << eta << ", learning rate = " << learningRate << endl;
+
+      // data structure to hold theta MLE estimates
+      MultinomialParams::ConditionalMultinomialParam<int64_t> mleGivenOneLabel;
+      boost::unordered_map<int64_t, double> mleMarginalsGivenOneLabel;
 
       // run a few online EM epochs to update thetas
-      for(unsigned emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
-        lambda->GetParamsCount();
-
-        // UPDATE THETAS by normalizing soft counts (i.e. the closed form MLE solution)
-        // data structure to hold theta MLE estimates
-        MultinomialParams::ConditionalMultinomialParam<int64_t> mleGivenOneLabel;
-        boost::unordered_map<int64_t, double> mleMarginalsGivenOneLabel;
+      for (unsigned emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
+        // debug
+        if (learningInfo.mpiWorld->rank() == 0) {
+          cerr << "emIter = " << emIter << endl;
+        }
 
         // update the mle for each sentence
         assert(examplesCount > 0);
@@ -1579,20 +1599,25 @@ void LatentCrfModel::BlockCoordinateDescent() {
           // http://cs.stanford.edu/~pliang/papers/online-naacl2009.pdf
           double sentLoglikelihood = 
             UpdateThetaMleForSent(sentId, mleGivenOneLabel, 
-                                  mleMarginalsGivenOneLabel, eta);
-          
-          // update the step size (eta).
-          eta = pow(theta_updates_counter, -alpha);
-
+                                  mleMarginalsGivenOneLabel, learningRate);
           // TODO: re-estimate thetas (every m sentences for a mini-batch of size m)
           if (++mle_updates_counter % minibatchSize == 0) {
+
+            // update the step size (eta) and learning rate.
+            learningRate /= eta;
+            eta = pow(theta_updates_counter, -alpha);
+            learningRate *= eta / (1 - eta);
+            ++theta_updates_counter;
+            cerr << "now, eta = " << eta << ", learning rate = " << learningRate << endl;
+            
             // update theta with the current mle estimate.
             // TODO: check whether regularization and variational inference is 
             //       correctly implemented in the stochastic EM case.
-            UpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel);
 
-            // count the number of times we update theta
-            ++theta_updates_counter;
+            cerr << "rank " << learningInfo.mpiWorld->rank() << ": after processing sentId " << sentId << endl;
+            cerr << "updating theta...";
+            UpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel);
+            cerr << "done." << endl;
           }
 
           unregularizedObjective += sentLoglikelihood;
@@ -1608,6 +1633,8 @@ void LatentCrfModel::BlockCoordinateDescent() {
         // accumulate mle counts from slaves
         ReduceMleAndMarginals(mleGivenOneLabel, mleMarginalsGivenOneLabel);
         mpi::all_reduce<double>(*learningInfo.mpiWorld, unregularizedObjective, unregularizedObjective, std::plus<double>());
+        // debug
+        cerr << "reduced MLE across processors" << endl;
 
         double regularizedObjective = learningInfo.optimizationMethod.subOptMethod->regularizer == Regularizer::L2?
           AddL2Term(unregularizedObjective):
@@ -1624,8 +1651,17 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
         // normalize mle and update nLogTheta on master
         if(learningInfo.mpiWorld->rank() == 0) {
+          cerr << "updating theta...";
           UpdateTheta(mleGivenOneLabel, mleMarginalsGivenOneLabel);
+          cerr << "done." << endl;
         }
+
+        // update the step size (eta) and learning rate.
+        learningRate /= eta;
+        eta = pow(theta_updates_counter, -alpha);
+        learningRate *= eta / (1 - eta);
+        ++theta_updates_counter;
+        cerr << "now, eta = " << eta << ", learning rate = " << learningRate << endl;
 
         // update nLogTheta on slaves
         BroadcastTheta(0);
@@ -1633,6 +1669,11 @@ void LatentCrfModel::BlockCoordinateDescent() {
 
       // end of if(thetaOptMethod->algorithm == online EM)
     } else if (learningInfo.thetaOptMethod->algorithm == EXPECTATION_MAXIMIZATION) {
+
+      if (learningInfo.mpiWorld->rank() == 0) {
+        cerr << "optimizing thetas using batch expecation maximization." << endl;
+      }
+
       // run a few EM iterations to update thetas
       for(unsigned emIter = 0; emIter < learningInfo.emIterationsCount; ++emIter) {
         lambda->GetParamsCount();
@@ -1658,10 +1699,10 @@ void LatentCrfModel::BlockCoordinateDescent() {
             continue;
           }
 
-          double eta = 0.0;
+          double learningRate = 1.0;
           double sentLoglikelihood = 
             UpdateThetaMleForSent(sentId, mleGivenOneLabel, 
-                                  mleMarginalsGivenOneLabel, 0.0);
+                                  mleMarginalsGivenOneLabel, learningRate);
 
           unregularizedObjective += sentLoglikelihood;
 
@@ -2604,14 +2645,12 @@ int64_t LatentCrfModel::GetContextOfTheta(unsigned sentId, int y) {
 }
 
 // returns -log p(z|x)
-// eta is the step size parameter. for the batch EM, eta is 0.0 because we don't
-// want to interpolate. For stepwise EM, eta is described in Liang and Klein (2009)'s 
-// paper titled ``Online EM for Unsupervised Models''.
-
+// learningRate corresponds to \frac{\eta_k}{\prod_{j<k}(1-\eta_j)} 
+// in sec 3.2 in Liang and Klein (2009) under "fast implementation"
 double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId, 
                                              MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
                                              boost::unordered_map<int64_t, double> &mleMarginals,
-                                             double eta = 0.0) {
+                                             double learningRate = 1.0) {
 
   assert(sentId < examplesCount);
 
@@ -2653,7 +2692,7 @@ double LatentCrfModel::UpdateThetaMleForSent(const unsigned sentId,
       // eta is the step size for the stepwise EM algorith. 
       // for details, see http://cs.stanford.edu/~pliang/papers/online-naacl2009.pdf
       double oldMle = mle[context][z_];
-      double newMle = (1.0 - eta) * mle[context][z_] + eta * bOverC;
+      double newMle = mle[context][z_] + learningRate * bOverC;
       mle[context][z_] = newMle;
       mleMarginals[context] += newMle - oldMle;
     }

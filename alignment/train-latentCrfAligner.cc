@@ -86,6 +86,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     NO_DIRECT_DEP_BTW_HIDDEN_LABELS = "no-direct-dep-btw-hidden-labels",
     CACHE_FEATS = "cache-feats",
     LAMBDA_OPTIMIZER = "lambda-optimizer",
+    THETA_OPTIMIZER = "theta-optimizer",
     LAMBDA_OPTIMIZER_LEARNING_RATE = "lambda-learning-rate",
     LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY = "lambda-optimizer-learning-rate-decay-strategy",
     LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER = "lambda-optimizer-learning-rate-decay-parameter",
@@ -121,6 +122,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
     (LAMBDA_OPTIMIZER.c_str(), po::value<string>()->default_value("sgd"), "(string) optimization algorithm to use for optimizing the CRF parameters. Supported values are: 'lbfgs', 'sgd', 'adagrad'. L-BFGS is a popular quasi-Newton optimization algorithm, SGD is stochastic gradient descent, and ADAGRAD is the adaptive gradient algorithm described at http://www.magicbroom.info/Papers/DuchiHaSi10.pdf")
+    (THETA_OPTIMIZER.c_str(), po::value<string>()->default_value("em"), "(string) optimization algorithm to use for optimizing the reconstruction parameters. Supported values are: 'em' and 'online_em'. 'em' is the standard batch expectation maximization algorithm. 'online_em' is the the stepwise EM algorithm described in Liang and Klein (2009)'s paper titled ``Online EM for Unsupervised Models''.")
     (LAMBDA_OPTIMIZER_LEARNING_RATE.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->learningRate)->default_value(1.0), "(float) If the optimizer used for CRF parameters uses a learning rate (e.g., stochastic gradient descent), specify the initial learning rate using htis argument. Note that the learning rate decays in subsequent iterations of SGD.")
     (LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str(), po::value<string>()->default_value("epoch-fixed"), "(string) Specify which strategy to use for diminishing the learning rate across iterations of stochastic gradient descent. Possible values are 'fixed', 'epoch-fixed', 'bottou', 'geometric'. 'fixed' means that learning rate is the same for all iterations and equal to the specified value for the initial learning rate. 'epoch-fixed' uses the same learning rate for each epoch = initial_learning_rate * 1.0 / epoch_index (the epoch index is one-based). 'bottou' uses the learning rate described in section 5.2 of Leon Bottou's article titled 'Stochastic Gradient Descent Tricks'; i.e., learning_rate = initial_learning_rate / (1 + initial_learning_rate * eta * iteration_index) where eta is the specified decay hyperparameter. 'geometric' uses learning_rate = initial_learning_rate / (1 + eta)^iteration_index.")
     (LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->learningRateDecayParameter)->default_value(0.001), "(float) some decay strategies for the learning rate in stochastic gradient use a decay parameter (e.g., 'bottou'). The higher this parameter is, the faster will the learning rate decay. Must be greater than zero.")
@@ -221,6 +223,21 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
         learningInfo.optimizationMethod.subOptMethod->epochs;
     } else {
       cerr << "option --lambda-optimizer cannot take the value " << vm[LAMBDA_OPTIMIZER.c_str()].as<string>() << endl;
+      return false;
+    }
+  }
+
+  if (vm.count(THETA_OPTIMIZER.c_str())) {
+    if (vm[THETA_OPTIMIZER.c_str()].as<string>() == "em") {
+      learningInfo.thetaOptMethod->algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+    } else if (vm[THETA_OPTIMIZER.c_str()].as<string>() == "online_em") {
+      learningInfo.thetaOptMethod->algorithm = OptAlgorithm::ONLINE_EXPECTATION_MAXIMIZATION;
+      learningInfo.thetaOptMethod->miniBatchSize = 1;
+      if (vm.count(MINIBATCH_SIZE.c_str())) {
+        learningInfo.thetaOptMethod->miniBatchSize = vm[MINIBATCH_SIZE.c_str()].as<int>();
+      }
+    } else {
+      cerr << "option --theta-optimizer cannot take the value " << vm[THETA_OPTIMIZER.c_str()].as<string>() << endl;
       return false;
     }
   }
@@ -332,7 +349,7 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.debugLevel = DebugLevel::CORPUS;
   learningInfo.mpiWorld = &world;
   learningInfo.persistParamsAfterNIteration = 1;
-  learningInfo.optimizationMethod.algorithm = OptAlgorithm::EXPECTATION_MAXIMIZATION;
+  learningInfo.optimizationMethod.algorithm = OptAlgorithm::ONLINE_EXPECTATION_MAXIMIZATION;
 
   // initialize the model
   cerr << "initializing IbmModel1...";
