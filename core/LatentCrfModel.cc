@@ -2128,6 +2128,10 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
       double oldWeightsMultiplier = lambda->GetWeightsMultiplier();
       double newWeightsMultiplier = 
         oldWeightsMultiplier * (1.0 - currentLearningRate * l2Strength / totalSentCount);
+      // (fanyang) Averaged sgd (correct only if one core) 
+      if (learningInfo.optimizationMethod.subOptMethod->useAveragedGradient) {
+        newWeightsMultiplier =((sentsCounter-1.0)/sentsCounter)*oldWeightsMultiplier + (1.0/sentsCounter) * newWeightsMultiplier;
+      }
       lambda->UpdateWeightsMultiplier(newWeightsMultiplier);
       
       // then, for each feature with a non-zero derivative for this sentence:  

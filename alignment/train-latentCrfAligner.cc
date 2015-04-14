@@ -89,6 +89,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     LAMBDA_OPTIMIZER_LEARNING_RATE = "lambda-learning-rate",
     LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY = "lambda-optimizer-learning-rate-decay-strategy",
     LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER = "lambda-optimizer-learning-rate-decay-parameter",
+    USE_AVERAGED_GRADIENT = "use-averaged-gradient",
     MINIBATCH_SIZE = "minibatch-size",
     LOGLINEAR_OPT_FIX_Z_GIVEN_X = "loglinear-opt-fix-z-given-x",
     DIRICHLET_ALPHA = "dirichlet-alpha",
@@ -120,6 +121,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     (MAX_EM_ITER_COUNT.c_str(), po::value<unsigned int>(&learningInfo.emIterationsCount)->default_value(3), "(int) quit EM optimization after this many iterations")
     (NO_DIRECT_DEP_BTW_HIDDEN_LABELS.c_str(), "(flag) consecutive labels are independent given observation sequence")
     (CACHE_FEATS.c_str(), po::value<bool>(&learningInfo.cacheActiveFeatures)->default_value(false), "(flag) (set by default) maintains and uses a map from a factor to its active features to speed up training, at the expense of higher memory requirements.")
+    (USE_AVERAGED_GRADIENT.c_str(), po::value<bool>(&learningInfo.optimizationMethod.subOptMethod->useAveragedGradient)->default_value(false), "(flag) (unset by default) use averaged gradient.")
     (LAMBDA_OPTIMIZER.c_str(), po::value<string>()->default_value("sgd"), "(string) optimization algorithm to use for optimizing the CRF parameters. Supported values are: 'lbfgs', 'sgd', 'adagrad'. L-BFGS is a popular quasi-Newton optimization algorithm, SGD is stochastic gradient descent, and ADAGRAD is the adaptive gradient algorithm described at http://www.magicbroom.info/Papers/DuchiHaSi10.pdf")
     (LAMBDA_OPTIMIZER_LEARNING_RATE.c_str(), po::value<float>(&learningInfo.optimizationMethod.subOptMethod->learningRate)->default_value(1.0), "(float) If the optimizer used for CRF parameters uses a learning rate (e.g., stochastic gradient descent), specify the initial learning rate using htis argument. Note that the learning rate decays in subsequent iterations of SGD.")
     (LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str(), po::value<string>()->default_value("epoch-fixed"), "(string) Specify which strategy to use for diminishing the learning rate across iterations of stochastic gradient descent. Possible values are 'fixed', 'epoch-fixed', 'bottou', 'geometric'. 'fixed' means that learning rate is the same for all iterations and equal to the specified value for the initial learning rate. 'epoch-fixed' uses the same learning rate for each epoch = initial_learning_rate * 1.0 / epoch_index (the epoch index is one-based). 'bottou' uses the learning rate described in section 5.2 of Leon Bottou's article titled 'Stochastic Gradient Descent Tricks'; i.e., learning_rate = initial_learning_rate / (1 + initial_learning_rate * eta * iteration_index) where eta is the specified decay hyperparameter. 'geometric' uses learning_rate = initial_learning_rate / (1 + eta)^iteration_index.")
@@ -271,6 +273,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     cerr << MAX_EM_ITER_COUNT << "=" << learningInfo.emIterationsCount << endl;
     cerr << NO_DIRECT_DEP_BTW_HIDDEN_LABELS << "=" << !learningInfo.hiddenSequenceIsMarkovian << endl;
     cerr << CACHE_FEATS << "=" << learningInfo.cacheActiveFeatures << endl;
+    cerr << USE_AVERAGED_GRADIENT << "=" << learningInfo.optimizationMethod.subOptMethod->useAveragedGradient << endl;
     if(vm.count(LAMBDA_OPTIMIZER.c_str())) {
       cerr << LAMBDA_OPTIMIZER << "=" << vm[LAMBDA_OPTIMIZER.c_str()].as<string>() << endl;
     }

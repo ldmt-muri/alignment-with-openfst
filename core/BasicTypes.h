@@ -136,6 +136,9 @@ struct OptMethod {
   DecayStrategy learningRateDecayStrategy;
   // some decay strategies require a decay parameter
   float learningRateDecayParameter;
+  // use averaged gradient, refer section 5.3 in
+  // http://research.microsoft.com/pubs/192769/tricks-2012.pdf
+  bool useAveragedGradient;
   // when using a stochastic optimization method, use this variable to specify the mini-batch size. 
   int miniBatchSize;
   // regularization details
@@ -153,6 +156,7 @@ struct OptMethod {
     learningRate = 0.01;
     learningRateDecayParameter = 1.0;
     learningRateDecayStrategy = DecayStrategy::EPOCH_FIXED;
+    useAveragedGradient = true;
     miniBatchSize = 1;
     regularizer = Regularizer::NONE;
     regularizationStrength = 1000;
