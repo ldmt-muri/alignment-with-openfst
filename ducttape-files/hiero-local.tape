@@ -7,11 +7,12 @@ global {
   # autoencoder hyperparams
   l2_strength=(L2: zero="" point_o_one=0.01 point_one=0.1 one=1.0 ten=10.0 hundred=100.0 thousand=1000.0 three_thousand=3000.0 ten_thousand=10000.0 thirty_thousand=30000.0 hundred_thousand=100000.0 million=1000000.0)
   dirichlet_alpha=(DirichletAlpha: one=1.0 zero_point_five=0.5 one_point_five=1.5)
+  init_learning_rate=(InitLearningRate: one=1.0 point_five=0.5 point_three=0.3 point_o_three=0.03)
   max_lambda_epoch_count=(MaxLambdaEpochCount: one=1 two=2 four=4 eight=8)
   em_itercount=(EmItercount: one=1 zero=0 two=2 four=4 eight=8)
   #coord_itercount=(CoordItercount: normal=50 zero=0 ten=10)
-  test_with_crf_only=(TestWithCrfOnly: no=false yes=true)
-  optimize_lambdas_first=(OptimizeLambdasFirst: no=false yes=true)
+  test_with_crf_only=false
+  optimize_lambdas_first=true
   precomputed_features=(PrecomputedFeatures: all=all dyer11=dyer11 none=none)
   use_other_aligners=(UseOtherAligners: no="" yes=yes)
   use_src_bigrams=(UseSrcBigrams: no="" yes=yes)
@@ -224,6 +225,7 @@ task AutoencoderAlignS2T
     :: init_lambda=$init_lambda_fwd
     :: l2_strength=@
     :: dirichlet_alpha=@
+    :: init_learning_rate=@
     :: test_with_crf_only=@
     :: max_lambda_epoch_count=@
     :: em_itercount=@
@@ -284,6 +286,10 @@ task AutoencoderAlignS2T
 
   if [ $dirichlet_alpha ]; then
     command="$command --dirichlet-alpha $dirichlet_alpha"
+  fi
+
+  if [ $init_learning_rate ]; then
+    command="$command --lambda-learning-rate $init_learning_rate"
   fi
 
   if [ $variational ]; then
@@ -355,6 +361,7 @@ task AutoencoderAlignT2S
     :: init_lambda=$init_lambda_bwd
     :: l2_strength=@
     :: dirichlet_alpha=@
+    :: init_learning_rate=@
     :: test_with_crf_only=@
     :: max_lambda_epoch_count=@
     :: em_itercount=@
@@ -412,6 +419,10 @@ task AutoencoderAlignT2S
 
   if [ $dirichlet_alpha ]; then
     command="$command --dirichlet-alpha $dirichlet_alpha"
+  fi
+
+  if [ $init_learning_rate ]; then
+    command="$command --lambda-learning-rate $init_learning_rate"
   fi
 
   if [ $variational ]; then
