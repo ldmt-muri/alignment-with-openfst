@@ -1,1 +1,0 @@
-ducttape hiero-local.tape -C mg-en-exp.tconf -p Full -y
