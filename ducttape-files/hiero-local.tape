@@ -22,6 +22,7 @@ global {
                       intersect="intersect"
                       union="union")
   lambda_optimizer=(LambdaOptimizer: sgd="sgd" lbfgs="lbfgs")
+  theta_optimizer=(ThetaOptimizer: em="em" online_em="online_em")
 }
 
 #import ../submitters.tape
@@ -239,6 +240,7 @@ task AutoencoderAlignS2T
     :: tgt_brown_clusters=@
     :: output_prefix=@
     :: lambda_optimizer=@
+    :: theta_optimizer=@
     < executable=$executable@BuildLatentCrfAligner
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsS2T 
     > alignment 
@@ -257,6 +259,7 @@ task AutoencoderAlignS2T
   --test-size $test_sents_count
   --max-model1-iter-count $model1_itercount
   --lambda-optimizer $lambda_optimizer
+  --theta-optimizer $theta_optimizer
   --max-iter-count 10"
 
   # --feat SRC0_TGT0
@@ -369,6 +372,7 @@ task AutoencoderAlignT2S
     :: use_src_bigrams=@
     :: src_brown_clusters=@
     :: lambda_optimizer=@
+    :: theta_optimizer=@
     < wordpair_feats_file=$wordpair_feats_file@GenerateWordpairFeatsT2S 
     < executable=$executable@BuildLatentCrfAligner
     > alignment 
@@ -377,7 +381,7 @@ task AutoencoderAlignT2S
 {
 
   model1_itercount="5"
-  variational="true"
+  variational=""
 
   # the latent-CRF word alignment mode
   command="mpirun -np $procs $executable 
@@ -388,7 +392,9 @@ task AutoencoderAlignT2S
   --reverse true
   --max-model1-iter-count $model1_itercount
   --lambda-optimizer $lambda_optimizer 
+  --theta-optimizer $theta_optimizer
   --max-iter-count 10"
+
   #--tgt-word-classes-filename $src_brown_clusters
   #   --feat SRC0_TGT0
   #   --feat SYNC_START --feat SYNC_END
@@ -579,7 +585,6 @@ task Tune
    # :: .submitter=torque_normal .walltime="48:00:00" .cpus=32 .vmem=60g .q=normal 
 {
 
-
   ref_count=$(head -n 1 $tune_set | grep -o '|||' | wc -l)
   #cut -f 1 -d '|' $tune_set > ./tune_source
   for i in `seq 1 $ref_count`; do
@@ -606,8 +611,8 @@ task Tune
   echo "Glue 0.0"              >> $initial_weights
   echo "WordPenalty 0.0"       >> $initial_weights
 
-  $cdec_dir/training/mira/mira.py -j $cores --update-size 250 -o $mira_work --weights ./initial_weights \
-    --devset $tune_set --config $cdec_ini
+  $cdec_dir/training/mira/mira.py --jobs $cores --kbest-size 500 -o $mira_work --weights ./initial_weights \
+    -d $tune_set --config $cdec_ini --step-size 0.001
 
   index=$(ls $mira_work | grep '^weights\.[0-9]*$' | sed 's/^weights\.//' | sort -n | tail -n 1)
   ln -s $mira_work/weights.$index $optimized_weights

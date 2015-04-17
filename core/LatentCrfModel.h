@@ -187,6 +187,9 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel,
                              boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
   
+  void AllReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel,
+                                boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
+  
   void BroadcastTheta(unsigned rankId);
 
   // filenames

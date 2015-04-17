@@ -395,10 +395,8 @@ void endOfKIterationsCallbackFunction() {
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
 
   // fix learningInfo.test_size
-  cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
   if(aligner.learningInfo.firstKExamplesToLabel <= 0) {
     aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
-    cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
   }
 
   // find viterbi alignment for the top K examples of the training set (i.e. our test set)
