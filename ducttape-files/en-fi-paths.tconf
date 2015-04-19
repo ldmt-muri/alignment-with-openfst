@@ -1,0 +1,37 @@
+global {
+
+    train_corpus="/usr3/home/wammar/corpora/parallel/en-fi.short.en-fi"
+    tune_corpus="/usr3/home/wammar/corpora/parallel/en-fi.wmt-dev"
+    test_corpus="/usr3/home/wammar/corpora/parallel/en-fi.wmt-devtest"
+    src_brown_clusters="/usr1/home/wammar/parallel/english/news-commentary10.cz-en.en.tok.brown80"
+    tgt_brown_clusters="/usr3/home/wammar/brown-clusters/wmt_mono+parallel+dev+devtest-c100-p1.out/paths"
+
+    # only specify when you want to reuse a previously built LM 
+    language_model=""
+    # only use these two parameters if you want to build a language model. if you have a language model already built, specify "language_model=" instead
+    lm_order=4
+    lm_data="/usr3/home/wammar/corpora/monolingual/finnish/wmt_mono+parallel+dev+devtest.tok"
+    
+    # tool paths
+    cdec_dir="/home/wammar/cdec/"
+    multeval="/home/wammar/git/multeval/multeval.sh"
+    giza_bin="/opt/tools/mgizapp-0.7.2/bin"
+    moses_train_script="/home/wammar/git/mosesdecoder/scripts/training/train-model.perl"
+    mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
+    wammar_utils_dir="/home/wammar/wammar-utils"
+    alignment_with_openfst_dir="/home/wammar/online_em/alignment-with-openfst/"
+    kenlm_dir="/home/wammar/git/kenlm"
+
+    # aer
+    conv_pharaoh_script="/home/wammar/alignment-with-openfst/data/hansards/conv-pharaoh.pl"
+    aer_eval_script=""
+    gold_alignment=""
+
+    # other aligner outputs
+    fwd_giza_alignments=""
+    bwd_giza_alignments=""
+    sym_giza_alignments=""
+    fwd_fast_alignments=""
+    bwd_fast_alignments=""
+    sym_fast_alignments=""
+}

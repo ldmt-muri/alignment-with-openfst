@@ -57,8 +57,8 @@ namespace Regularizer {
 
 namespace OptAlgorithm {
   enum OptAlgorithm {GRADIENT_DESCENT, SGD, 
-    BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION,
-    ADAGRAD};
+                     BLOCK_COORD_DESCENT, LBFGS, SIMULATED_ANNEALING, EXPECTATION_MAXIMIZATION,
+                     ONLINE_EXPECTATION_MAXIMIZATION, ADAGRAD};
 }
 
 // Specify which strategy to use for diminishing the learning rate across 
