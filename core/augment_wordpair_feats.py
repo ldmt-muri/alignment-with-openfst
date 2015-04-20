@@ -33,7 +33,13 @@ def read_brown_clusters(brown_filename, prefix_length):
   for line in brown_file:
     if len(line.strip()) == 0: continue
     if line.startswith('#'): continue
-    bitstring, word_type, freq = line.strip().split('\t')
+    splits = line.strip().split('\t')
+    if len(splits) != 3: 
+      print 'malformatted line in the brown clusters file {}:'.format(brown_filename)
+      print line
+      print 'will die'
+      exit(1);
+    bitstring, word_type, freq = splits[0], splits[1], splits[2]
     type_to_cluster[word_type] = bitstring
     # token frequency
     freq = int(freq)
