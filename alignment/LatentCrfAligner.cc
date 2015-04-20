@@ -55,22 +55,14 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   // unlike POS tagging, yDomain depends on the src sentence length. we will set it on a per-sentence basis.
   this->yDomain.clear();
   
-  // slaves wait for master
-  if(learningInfo.mpiWorld->rank() != 0) {
-    bool vocabEncoderIsReady;
-    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
-  }
-
   // encode the null token which is conventionally added to the beginning of the src sentnece. 
   NULL_TOKEN_STR = "__null__token__";
   NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR);
   assert(NULL_TOKEN != vocabEncoder.UnkInt());
   
   // read and encode tgt words and their classes (e.g. brown clusters)
-  if(learningInfo.mpiWorld->rank() == 0) {
-    EncodeTgtWordClasses();
-  } 
-
+  EncodeTgtWordClasses();
+  
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
@@ -86,12 +78,6 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
 
   if(learningInfo.mpiWorld->rank() == 0 && wordPairFeaturesFilename.size() > 0) {
     lambda->LoadPrecomputedFeaturesWith2Inputs(wordPairFeaturesFilename);
-  }
-
-  // master signals to slaves that he's done
-  if(learningInfo.mpiWorld->rank() == 0) {
-    bool vocabEncoderIsReady;
-    boost::mpi::broadcast<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, 0);
   }
 
   // load the mapping from each target word to its word class (e.g. brown clusters)

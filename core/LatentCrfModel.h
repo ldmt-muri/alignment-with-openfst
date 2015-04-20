@@ -14,12 +14,12 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/mpi/nonblocking.hpp>
+#include <boost/mpi/collectives.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/utility.hpp>
-#include <boost/mpi/collectives.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/exception/all.hpp>
 #include <boost/exception/diagnostic_information.hpp> 

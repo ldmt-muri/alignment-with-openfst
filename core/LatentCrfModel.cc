@@ -73,10 +73,10 @@ LatentCrfModel::~LatentCrfModel() {
 
 // initialize model weights to zeros
 LatentCrfModel::LatentCrfModel(const string &textFilename, 
-    const string &outputPrefix, 
-    LearningInfo &learningInfo, 
-    unsigned FIRST_LABEL_ID,
-    LatentCrfModel::Task task) : UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
+			       const string &outputPrefix, 
+			       LearningInfo &learningInfo, 
+			       unsigned FIRST_LABEL_ID,
+			       LatentCrfModel::Task task) : UnsupervisedSequenceTaggingModel(textFilename, learningInfo),
   learningInfo(learningInfo),
   gaussianSampler(0.0, 10.0) {
 
