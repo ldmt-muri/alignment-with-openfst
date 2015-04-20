@@ -14,12 +14,12 @@
 #include <boost/mpi/environment.hpp>
 #include <boost/mpi/communicator.hpp>
 #include <boost/mpi/nonblocking.hpp>
+#include <boost/mpi/collectives.hpp>
 #include <boost/thread/thread.hpp>
 #include <boost/serialization/map.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/set.hpp>
 #include <boost/serialization/utility.hpp>
-#include <boost/mpi/collectives.hpp>
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/exception/all.hpp>
 #include <boost/exception/diagnostic_information.hpp> 
@@ -184,10 +184,11 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   // CONVENIENCE MPI OPERATIONS
   /////////////////////////////
 
-  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
-			     MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels,
-			     boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
-			     boost::unordered_map<std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels);
+  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel,
+                             boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
+  
+  void AllReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel,
+                                boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
   
   void BroadcastTheta(unsigned rankId);
 
@@ -207,10 +208,8 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
 
   // (MINI)BATCH LEVEL
 
-  void NormalizeThetaMleAndUpdateTheta(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
-				       boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
-				       MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels, 
-				       boost::unordered_map< std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels);
+  void UpdateTheta(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
+                   boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
   
   // make sure all lambda features which may fire on this training data are added to lambda.params
   void InitLambda();
@@ -236,7 +235,7 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   virtual void FireFeatures(int yI, int yIM1, unsigned sentId, int i, 
 		    FastSparseVector<double> &activeFeatures) = 0;
 
-  double GetNLogTheta(int yim1, int yi, int64_t zi, unsigned exampleId);
+  double GetNLogTheta(int yi, int64_t zi, unsigned exampleId);
   double GetNLogTheta(const std::pair<int64_t,int64_t> context, int64_t event);
   double GetNLogTheta(int64_t context, int64_t event);
 
@@ -251,35 +250,29 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   ///////////
 
   virtual double UpdateThetaMleForSent(const unsigned sentId, 
-			       MultinomialParams::ConditionalMultinomialParam<pair<int64_t,int64_t> > &mle, 
-			       boost::unordered_map< pair<int64_t, int64_t> , double> &mleMarginals);
-    
-  virtual double UpdateThetaMleForSent(const unsigned sentId, 
-			       MultinomialParams::ConditionalMultinomialParam< int64_t > &mle, 
-			       boost::unordered_map< int64_t , double> &mleMarginals);
+                                       MultinomialParams::ConditionalMultinomialParam< int64_t > &mle, 
+                                       boost::unordered_map< int64_t , double> &mleMarginals, 
+                                       double eta);
     
   // adds l2 reguarlization term (for lambdas) to both the objective and the gradient
-  double AddL2Term(const std::vector<double> &unregularizedGradient, double *regularizedGradient, double unregularizedObjective, double &gradientL2Norm);
+  double AddL2Term(const std::vector<double> &unregularizedGradient, 
+                   double *regularizedGradient, double unregularizedObjective, 
+                   double &gradientL2Norm);
 
   // adds l2 reguarlization term (for lambdas) to the objective
   double AddL2Term(double unregularizedObjective);
 
-  void AddWeightedL2Term(vector<double> *gradient, double *objective, FastSparseVector<double> &activeFeatures);
+  void AddWeightedL2Term(vector<double> *gradient, double *objective, 
+                         FastSparseVector<double> &activeFeatures);
 
   // prepare the model before processing an example
   virtual void PrepareExample(unsigned exampleId) = 0;
 
-  // collect soft counts from this sentence
-  double UpdateThetaMleForSent(const unsigned sentId, 
-			     MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
-			     boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel,
-			     MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > &mleGivenTwoLabels, 
-			     boost::unordered_map< std::pair<int64_t, int64_t>, double> &mleMarginalsGivenTwoLabels);
-
   // builds an FST to computes B(x,z)
   void BuildThetaLambdaFst(unsigned sentId, const std::vector<int64_t> &z, 
-			   fst::VectorFst<FstUtils::LogArc> &fst, std::vector<FstUtils::LogWeight>& alphas, 
-         std::vector<FstUtils::LogWeight>& betas);
+                           fst::VectorFst<FstUtils::LogArc> &fst, 
+                           std::vector<FstUtils::LogWeight>& alphas, 
+                           std::vector<FstUtils::LogWeight>& betas);
 
   // build an FST to compute Z(x)
   void BuildLambdaFst(unsigned sentId, fst::VectorFst<FstUtils::LogArc> &fst);
@@ -358,7 +351,6 @@ class LatentCrfModel : public UnsupervisedSequenceTaggingModel {
   LearningInfo learningInfo;
   LogLinearParams *lambda;
   MultinomialParams::ConditionalMultinomialParam<int64_t> nLogThetaGivenOneLabel;
-  MultinomialParams::ConditionalMultinomialParam< std::pair<int64_t, int64_t> > nLogThetaGivenTwoLabels;
   static int START_OF_SENTENCE_Y_VALUE;
   static unsigned NULL_POSITION;
   int END_OF_SENTENCE_Y_VALUE, FIRST_ALLOWED_LABEL_VALUE;

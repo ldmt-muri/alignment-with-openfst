@@ -2,7 +2,7 @@ CC=mpiCC
 SINGLE=-c
 BEFORE=-x c++ -std=c++11
 LIBS=-llbfgs -lfst -ldl -lboost_mpi  -lboost_program_options -lboost_serialization -lboost_thread -lboost_system -lrt
-OPT=-g
+OPT=-O3 -g
 
 all: train-latentCrfAligner
 
@@ -10,20 +10,20 @@ all: train-latentCrfAligner
 train-latentCrfAligner: train-latentCrfAligner.o
 	$(CC) train-latentCrfAligner.o IbmModel1.o FstUtils.o LatentCrfModel.o LatentCrfAligner.o LogLinearParams.o fdict.o -o alignment/train-latentCrfAligner  $(LIBS)
 
-train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o alignment/train-latentCrfAligner.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h
+train-latentCrfAligner.o: IbmModel1.o LatentCrfModel.o LatentCrfAligner.o alignment/train-latentCrfAligner.cc wammar-utils/ClustersComparer.h wammar-utils/StringUtils.h core/LearningInfo.h core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) alignment/train-latentCrfAligner.cc $(OPT) 
 
-LatentCrfAligner.o: LatentCrfModel.o alignment/LatentCrfAligner.h alignment/LatentCrfAligner.cc
+LatentCrfAligner.o: LatentCrfModel.o alignment/LatentCrfAligner.h alignment/LatentCrfAligner.cc core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) alignment/LatentCrfAligner.cc $(OPT)
 
 # shared code
 LatentCrfModel.o: LogLinearParams.o core/LatentCrfModel.cc core/LatentCrfModel.h core/LatentCrfModel-inl.h wammar-utils/Samplers.h core/VocabEncoder.h core/UnsupervisedSequenceTaggingModel.h core/LearningInfo.h core/Functors.h cdec-utils/dict.h cdec-utils/fdict.h cdec-utils/fast_sparse_vector.h core/MultinomialParams.h
 	$(CC) $(BEFORE) $(SINGLE) core/LatentCrfModel.cc $(OPT)
 
-LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h
+LogLinearParams.o: fdict.o core/LogLinearParams.cc core/LogLinearParams.h core/LogLinearParams-inl.h core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) core/LogLinearParams.cc $(OPT)
 
-HmmModel.o: FstUtils.o core/HmmModel.cc core/HmmModel.h core/LearningInfo.h wammar-utils/StringUtils.h core/MultinomialParams.h
+HmmModel.o: FstUtils.o core/HmmModel.cc core/HmmModel.h core/LearningInfo.h wammar-utils/StringUtils.h core/MultinomialParams.h core/VocabEncoder.h
 	$(CC) $(BEFORE) $(SINGLE) core/HmmModel.cc $(OPT)
 
 IbmModel1.o: FstUtils.o alignment/IbmModel1.cc alignment/IbmModel1.h core/LearningInfo.h wammar-utils/StringUtils.h alignment/IAlignmentModel.h core/MultinomialParams.h core/VocabEncoder.h
