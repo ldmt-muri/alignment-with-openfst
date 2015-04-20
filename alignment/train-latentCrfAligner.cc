@@ -27,25 +27,28 @@ void my_handler(int s) {
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
   if(aligner.learningInfo.mpiWorld->rank() == 0) {
     cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": running viterbi..." << endl;
-  } else {
-    cerr << "rank #" << aligner.learningInfo.mpiWorld->rank() << ": will exit." << endl;
-    //exit(0);
   }
   string suffix = ".interrupted-labels";
   string labelsFilename = aligner.outputPrefix + suffix;
   aligner.Label(labelsFilename);
-  cerr << "viterbi word alignment can be found at " << labelsFilename << endl;
-  cerr << "now, persist the current model parameters..." << endl;
+  if (aligner.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "viterbi word alignment can be found at " << labelsFilename << endl;
+    cerr << "now, persist the current model parameters..." << endl;
+  }
   suffix = ".interrupted-theta";
   string thetaFilename = aligner.outputPrefix + suffix;
   aligner.PersistTheta(thetaFilename);
-  cerr << "done persisting theta params" << endl;
-  cerr << "theta params can be found at " << thetaFilename << endl;
+  if (aligner.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "done persisting theta params" << endl;
+    cerr << "theta params can be found at " << thetaFilename << endl;
+  }
   suffix = ".interrupted-lambda";
   string lambdaFilename = aligner.outputPrefix + suffix;
   aligner.lambda->PersistParams(lambdaFilename);
-  cerr << "done persisting lambda params." << endl;
-  cerr << "lambda params can be found at " << lambdaFilename << endl;
+  if (aligner.learningInfo.mpiWorld->rank() == 0) {
+    cerr << "done persisting lambda params." << endl;
+    cerr << "lambda params can be found at " << lambdaFilename << endl;
+  }
   exit(0);
 }
 
@@ -280,7 +283,12 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 	 featIter != vm[FEAT.c_str()].as<vector<string> >().end(); ++featIter) {
       cerr << *featIter << " ";
     }
-    cerr << endl;
+    cerr << LAMBDA_OPTIMIZER_LEARNING_RATE << "=" 
+	 << vm[LAMBDA_OPTIMIZER_LEARNING_RATE.c_str()].as<float>() << endl;
+    cerr << LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY << "=" 
+	 << vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_STRATEGY.c_str()].as<string>() << endl;
+    cerr << LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER << "=" 
+	 << vm[LAMBDA_OPTIMIZER_LEARNING_RATE_DECAY_PARAMETER.c_str()].as<float>() << endl;
     cerr << L2_STRENGTH << "=" << vm[L2_STRENGTH.c_str()].as<float>() << endl;
     cerr << WEIGHTED_L2_STRENGTH << "=" << vm[WEIGHTED_L2_STRENGTH.c_str()].as<float>() << endl;
     cerr << L1_STRENGTH << "=" << vm[L1_STRENGTH.c_str()].as<float>() << endl;
@@ -293,6 +301,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
     if(vm.count(LAMBDA_OPTIMIZER.c_str())) {
       cerr << LAMBDA_OPTIMIZER << "=" << vm[LAMBDA_OPTIMIZER.c_str()].as<string>() << endl;
     }
+    cerr << 
     cerr << MINIBATCH_SIZE << "=" << learningInfo.optimizationMethod.subOptMethod->miniBatchSize << endl;
     cerr << LOGLINEAR_OPT_FIX_Z_GIVEN_X << "=" << learningInfo.fixPosteriorExpectationsAccordingToPZGivenXWhileOptimizingLambdas << endl;
     cerr << MAX_MODEL1_ITER_COUNT << "=" << maxModel1IterCount << endl;
@@ -332,17 +341,9 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
 // returns the rank of the process which have found the best HMM parameters
 void IbmModel1Initialize(mpi::communicator world, string textFilename, string outputFilenamePrefix, LatentCrfAligner &latentCrfAligner, string &NULL_SRC_TOKEN, string &initialThetaParamsFilename, int maxIterCount, LearningInfo& originalLearningInfo) {
 
-  // only the master does this
-  if(world.rank() != 0){
-    return;
-  }
-
   outputFilenamePrefix += ".ibm1";
-
-  
+ 
   // configurations
-  cerr << "rank #" << world.rank() << ": training the ibm model 1 to initialize latentCrfAligner parameters..." << endl;
-
   LearningInfo learningInfo = originalLearningInfo;
   learningInfo.useMaxIterationsCount = true;
   learningInfo.maxIterationsCount = maxIterCount;
@@ -354,41 +355,33 @@ void IbmModel1Initialize(mpi::communicator world, string textFilename, string ou
   learningInfo.optimizationMethod.algorithm = OptAlgorithm::ONLINE_EXPECTATION_MAXIMIZATION;
 
   // initialize the model
-  cerr << "initializing IbmModel1...";
   IbmModel1 ibmModel1(textFilename, outputFilenamePrefix, learningInfo, NULL_SRC_TOKEN, latentCrfAligner.vocabEncoder);
-  cerr << "done." << endl;
-
-  // train model parameters
-  cerr << "rank #" << world.rank() << ": train the model..." << endl;
-  ibmModel1.Train();
-  cerr << "rank #" << world.rank() << ": training finished!" << endl;
   
-  // only override theta params if initialThetaParamsFilename is not specified
-  if(initialThetaParamsFilename.size() == 0 && learningInfo.initializeThetasWithModel1) {
-    cerr << "rank #" << world.rank() << ": now update the multinomail params of the latentCrfAligner model." << endl;
-    for(auto contextIter = ibmModel1.params.params.begin(); 
-        contextIter != ibmModel1.params.params.end();
-        contextIter++) {
-      for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
-        if(learningInfo.tgtWordClassesFilename.size() == 0) {
-          latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
-        } else {
-          int64_t tgtWordClass = latentCrfAligner.tgtWordToClass[probIter->first];
-          latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
-        }
+  // train model parameters
+  ibmModel1.Train();
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "model 1 training finished!" << endl;
+  }
+
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "now update the multinomail params of the latentCrfAligner model." << endl;
+  }
+
+  for(auto contextIter = ibmModel1.params.params.begin(); 
+      contextIter != ibmModel1.params.params.end();
+      contextIter++) {
+    for(auto probIter = contextIter->second.begin(); probIter != contextIter->second.end(); probIter++) {
+      if(learningInfo.tgtWordClassesFilename.size() == 0) {
+	latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
+      } else {
+	int64_t tgtWordClass = latentCrfAligner.tgtWordToClass[probIter->first];
+	latentCrfAligner.nLogThetaGivenOneLabel.params[contextIter->first][probIter->first] = probIter->second;
       }
     }
   }
-  
-  // nLogThetaGivenOneLabel is not normalized
-  // TODO: normalize it
-  //MultinomialParams::NormalizeParams<int64_t>(latentCrfAligner.nLogThetaGivenOneLabel, 
-  //                                            learningInfo.multinomialSymmetricDirichletAlpha, 
-  //                                            true, true, 
-  //                                            learningInfo.variationalInferenceOfMultinomials);
-
-
-  cerr << "rank #" << world.rank() << ": ibm model 1 initialization finished." << endl;
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "ibm model 1 initialization finished." << endl;
+  }
 }
 
 void endOfKIterationsCallbackFunction() {
@@ -500,15 +493,17 @@ int main(int argc, char **argv) {
   
   LatentCrfAligner &latentCrfAligner = *((LatentCrfAligner*)model);
   
-  if(initialThetaParamsFilename.size() == 0) {
+  // only override theta params if initialThetaParamsFilename is not specified
+  if(initialThetaParamsFilename.size() == 0 && learningInfo.initializeThetasWithModel1) {
     // ibm model 1 initialization of theta params. 
     IbmModel1Initialize(world, textFilename, outputFilenamePrefix, latentCrfAligner, latentCrfAligner.NULL_TOKEN_STR, initialThetaParamsFilename, ibmModel1MaxIterCount, learningInfo);
   }
 
-  latentCrfAligner.BroadcastTheta(0);
-  
   assert(model->lambda->IsSealed());
-
+  // sync all processors.
+  bool dummy = true;
+  mpi::all_reduce<bool>(*learningInfo.mpiWorld, dummy, dummy, std::logical_and<bool>());
+  
   // unsupervised training of the model
   model->Train();
 
@@ -529,10 +524,8 @@ int main(int argc, char **argv) {
 
   // fix learningInfo.test_size
   LatentCrfAligner &aligner = *( (LatentCrfAligner*) model );
-  cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
   if(aligner.learningInfo.firstKExamplesToLabel <= 0) {
     aligner.learningInfo.firstKExamplesToLabel = aligner.examplesCount;
-    cerr << "firstKExamplesToLabel = " << aligner.learningInfo.firstKExamplesToLabel << endl;
   }
   
   ((LatentCrfAligner*)model)->Label(labelsFilename);

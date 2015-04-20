@@ -38,7 +38,9 @@ void IbmModel1::CoreConstructor(const string& bitextFilename,
   assert(vocabEncoder.ConstEncode(NULL_SRC_TOKEN) != vocabEncoder.UnkInt());
   
   // initialize the model parameters
-  cerr << "init model1 params" << endl;
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "init model1 params" << endl;
+  }
   stringstream initialModelFilename;
   initialModelFilename << outputPrefix << ".param.init";
   InitParams();
@@ -56,22 +58,31 @@ void IbmModel1::Train() {
   CreateTgtFsts(tgtFsts);
 
   // training iterations
-  cerr << "train!" << endl;
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "train!" << endl;
+  }
   LearnParameters(tgtFsts);
 
   // persist parameters
-  cerr << "persist" << endl;
-  PersistParams(outputPrefix + ".param.final");
+  if (learningInfo.mpiWorld->rank() == 0) {
+    cerr << "persist" << endl;
+    PersistParams(outputPrefix + ".param.final");
+  }
 }
 
 void IbmModel1::CreateTgtFsts(vector< VectorFst< FstUtils::LogArc > >& targetFsts) {
 
   for(unsigned i = 0; i < tgtSents.size(); i++) {
+    VectorFst< FstUtils::LogArc > tgtFst;
+    if (i % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      targetFsts.push_back(tgtFst);
+      continue;
+    }
+
     // read the list of integers representing target tokens
     vector< int64_t > &intTokens  =tgtSents[i];
     
     // create the fst
-    VectorFst< FstUtils::LogArc > tgtFst;
     for(unsigned stateId = 0; stateId < intTokens.size()+1; stateId++) {
       int temp = tgtFst.AddState();
       assert(temp == (int)stateId);
@@ -98,6 +109,7 @@ void IbmModel1::PrintParams() {
 }
 
 void IbmModel1::PersistParams(const string& outputFilename) {
+  if (learningInfo.mpiWorld->rank() == 0) { return; }
   MultinomialParams::PersistParams(outputFilename, params, vocabEncoder, true, true);
 }
 
@@ -157,8 +169,14 @@ void IbmModel1::CreateGrammarFst() {
 }
 
 void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >& perSentGrammarFsts) {
-  
+
   for(unsigned sentId = 0; sentId < srcSents.size(); sentId++) {
+    VectorFst< FstUtils::LogArc > grammarFst;
+    if (sentId % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+      perSentGrammarFsts.push_back(grammarFst);
+      continue;
+    }
+
     vector<int64_t> &srcTokens = srcSents[sentId];
     vector<int64_t> &tgtTokensVector = tgtSents[sentId];
     set<int64_t> tgtTokens(tgtTokensVector.begin(), tgtTokensVector.end());
@@ -167,7 +185,6 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >
     assert(srcTokens[0] == NULL_SRC_TOKEN_ID);
     
     // create the fst
-    VectorFst< FstUtils::LogArc > grammarFst;
     int stateId = grammarFst.AddState();
     assert(stateId == 0);
     for(auto srcTokenIter = srcTokens.begin(); srcTokenIter != srcTokens.end(); srcTokenIter++) {
@@ -191,9 +208,69 @@ void IbmModel1::CreatePerSentGrammarFsts(vector< VectorFst< FstUtils::LogArc > >
 void IbmModel1::ClearParams() {
   for (auto srcIter = params.params.begin(); srcIter != params.params.end(); srcIter++) {
     for (auto tgtIter = srcIter->second.begin(); tgtIter != srcIter->second.end(); tgtIter++) {
-      tgtIter->second = FstUtils::LOG_ZERO;
+      tgtIter->second = 0.0;
     }
   }
+}
+
+void IbmModel1::UpdateTheta(
+    MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
+    boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel) {
+
+  // Only override the theta distributions for contexts observed in mleGivenOneLabel so far. 
+  for (auto contextIter = mleGivenOneLabel.params.begin();
+       contextIter != mleGivenOneLabel.params.end();
+       ++contextIter) {
+    // Update all decisions conditioned on a particular context.
+    for (auto decisionIter = params[contextIter->first].begin();
+         decisionIter != params[contextIter->first].end();
+         ++decisionIter) {
+      // normalize mle counts to get the probability of a decision.
+      double numerator = 0, denominator = 1;
+      if (learningInfo.variationalInferenceOfMultinomials) {
+        numerator = 
+          exp( boost::math::digamma( contextIter->second[decisionIter->first] +
+                                     contextIter->second.size() * learningInfo.multinomialSymmetricDirichletAlpha) );
+        denominator = 
+          exp( boost::math::digamma( mleMarginalsGivenOneLabel[contextIter->first] + 
+                                     learningInfo.multinomialSymmetricDirichletAlpha ));
+      } else if (learningInfo.multinomialSymmetricDirichletAlpha != 1.0 ) {
+        numerator = 
+          contextIter->second[decisionIter->first] +
+          contextIter->second.size() * (learningInfo.multinomialSymmetricDirichletAlpha - 1.0);
+        denominator = 
+	  mleMarginalsGivenOneLabel[contextIter->first] + 
+          learningInfo.multinomialSymmetricDirichletAlpha - 1.0;
+      } else {
+        numerator = contextIter->second[decisionIter->first];
+        denominator = mleMarginalsGivenOneLabel[contextIter->first];
+      }
+      assert(denominator != 0.0);
+      
+      // numerical errors may cause probability to be < 0.0
+      double probability = max(0.0, numerator / denominator);
+      params[contextIter->first][decisionIter->first] = 
+        MultinomialParams::nLog(probability);
+    }
+  }
+}
+
+void IbmModel1::BroadcastTheta(unsigned rankId) {
+  boost::mpi::broadcast< boost::unordered_map< int64_t, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, params.params, rankId);
+}
+
+void IbmModel1::ReduceMleAndMarginals(
+    MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
+    boost::unordered_map<int64_t, double> &mleMarginals) {
+
+  boost::mpi::reduce< boost::unordered_map< int64_t, MultinomialParams::MultinomialParam > >(*learningInfo.mpiWorld, 
+                                                                                      mle.params, 
+                                                                                      mle.params, 
+                                                                                      MultinomialParams::AccumulateConditionalMultinomials< int64_t >, 0);
+  boost::mpi::reduce< boost::unordered_map< int64_t, double > >(*learningInfo.mpiWorld, 
+                                                         mleMarginals,
+                                                         mleMarginals, 
+                                                         MultinomialParams::AccumulateMultinomials<int64_t>, 0);
 }
 
 void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts) {
@@ -205,17 +282,26 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
     CreatePerSentGrammarFsts(perSentGrammarFsts);
     grammarConstructionClocks += clock() - t05;
 
-    float logLikelihood = 0, validationLogLikelihood = 0;
+    double logLikelihood = 0, validationLogLikelihood = 0;
     //    cout << "iteration's loglikelihood = " << logLikelihood << endl;
     
-    // this vector will be used to accumulate fractional counts of parameter usages
+    // params will be used to accumulate fractional counts of parameter usages.
+    // This would be problematic if some processors had not finished creating their per-sent grammars.
+    bool sync = true;
+    boost::mpi::all_reduce<bool>(*learningInfo.mpiWorld, sync, sync, std::logical_and<bool>());
     ClearParams();
-    
+    // also keep track of the partial counts per context
+    boost::unordered_map<int64_t, double> mleMarginals;
+
     // iterate over sentences
     int sentsCounter = 0;
     for( vector< VectorFst< FstUtils::LogArc > >::const_iterator tgtIter = tgtFsts.begin(), grammarIter = perSentGrammarFsts.begin(); 
          tgtIter != tgtFsts.end() && grammarIter != perSentGrammarFsts.end(); 
-         tgtIter++, grammarIter++) {
+         tgtIter++, grammarIter++, sentsCounter++) {
+
+      if (sentsCounter % learningInfo.mpiWorld->size() != learningInfo.mpiWorld->rank()) {
+	continue;
+      }
       
       // build the alignment fst
       clock_t t20 = clock();
@@ -229,15 +315,9 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
       vector<FstUtils::LogWeight> alphas, betas;
       ShortestDistance(alignmentFst, &alphas, false);
       ShortestDistance(alignmentFst, &betas, true);
-      float fSentLogLikelihood = betas[alignmentFst.Start()].Value();
+      double fSentLogLikelihood = betas[alignmentFst.Start()].Value();
       
       forwardBackwardClocks += clock() - t30;
-      //      cout << "sent's shifted log likelihood = " << fShiftedSentLogLikelihood << endl;
-      //      float fSentLikelihood = exp(-1.0 * fShiftedSentLogLikelihood) / alignmentsCount;
-      //      cout << "sent's likelihood = " << fSentLikelihood << endl;
-      //      float fSentLogLikelihood = nLog(fSentLikelihood);
-      //      cout << "nLog(alignmentsCount) = nLog(" << alignmentsCount << ") = " << nLog(alignmentsCount) << endl;
-      //      cout << "sent's loglikelihood = " << fSentLogLikelihood << endl;
       
       // compute and accumulate fractional counts for model parameters
       clock_t t40 = clock();
@@ -254,46 +334,16 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
           // probability of using this parameter given this sentence pair and the previous model
           FstUtils::LogWeight currentParamLogProb = arcIter.Value().weight;
           FstUtils::LogWeight unnormalizedPosteriorLogProb = Times(Times(alphas[fromState], currentParamLogProb), betas[toState]);
-          //float fUnnormalizedPosteriorProb = exp(-1.0 * unnormalizedPosteriorLogProb.Value());
-          //float fNormalizedPosteriorProb = (fUnnormalizedPosteriorProb / alignmentsCount) / fSentLikelihood;
-          //float fNormalizedPosteriorLogProb = -1.0 * log(fNormalizedPosteriorProb);
-          float fNormalizedPosteriorLogProb = unnormalizedPosteriorLogProb.Value() - fSentLogLikelihood;
-          
-          // logging
-          /*
-            if(srcToken == 2 && tgtToken == 2){
-            
-            cout << "The alignment FST looks like this: " << endl;
-            cout << "================================== " << endl;
-            PrintFstSummary(alignmentFst);
-            
-            cout << endl << "Updates on prob(2|2): " << endl;
-            cout << "===================== " << endl;
-            cout << " before: " << params[srcToken][tgtToken] << endl;
-            cout << " before: logProb(2|2) = " << currentParamLogProb.Value() << endl;
-            cout << " alpha[fromState] = " << alphas[fromState] << endl;
-            cout << " beta[toState] = " << betas[toState] << endl;
-            cout << " unnormalized logProb(2-2|sent) = alpha[fromState] logTimes logProb(2|2) logTimes beta[toState] = " << unnormalizedPosteriorLogProb.Value() << endl;
-            cout << " unnormalized prob(2-2|sent) = " << fUnnormalizedPosteriorProb << endl;
-            cout << " prob(2-2|sent) = " << fNormalizedPosteriorProb << endl;
-            cout << " logProb(2-2|sent) = " << fNormalizedPosteriorLogProb << endl;
-            cout << " adding: " << fNormalizedPosteriorLogProb << endl;
-            }
-          */
+          double fNormalizedPosteriorLogProb = unnormalizedPosteriorLogProb.Value() - fSentLogLikelihood;
           
           // append the fractional count for this parameter
-          params[srcToken][tgtToken] = Plus(FstUtils::LogWeight(params[srcToken][tgtToken]), FstUtils::LogWeight(fNormalizedPosteriorLogProb)).Value();
-          
-          // logging
-          /*
-            if(srcToken == 2 && tgtToken == 2){
-            cout << " after: " << params[srcToken][tgtToken] << endl << endl;
-            }
-          */
-          
-        }
+          params[srcToken][tgtToken] += exp(fNormalizedPosteriorLogProb);
+	  if (mleMarginals.count(srcToken) == 0) {
+	    mleMarginals[srcToken] = 0.0;
+	  }
+	  mleMarginals[srcToken] += exp(fNormalizedPosteriorLogProb);
+	}
       }
-      updatingFractionalCountsClocks += clock() - t40;
       
       // update the iteration log likelihood with this sentence's likelihod
       if(excludeFractionalCountsInThisSent) {
@@ -302,43 +352,33 @@ void IbmModel1::LearnParameters(vector< VectorFst< FstUtils::LogArc > >& tgtFsts
 	logLikelihood += fSentLogLikelihood;
       }
     }
-    
-    // normalize fractional counts such that \sum_t p(t|s) = 1 \forall s
-    clock_t t50 = clock();
-    NormalizeParams();
-    normalizationClocks += clock() - t50;
-    
-    // persist parameters
-    if(false) {
-      stringstream filename;
-      filename << outputPrefix << ".param." << learningInfo.iterationsCount;
-      PersistParams(filename.str());
+
+    // accumulate mle counts from slaves
+    ReduceMleAndMarginals(params, mleMarginals);
+    boost::mpi::all_reduce<double>(*learningInfo.mpiWorld, logLikelihood, logLikelihood, std::plus<double>());
+
+    // normalize mle and update nLogTheta on master
+    if(learningInfo.mpiWorld->rank() == 0) {
+      UpdateTheta(params, mleMarginals);
     }
+
+    // update nLogTheta on slaves
+    BroadcastTheta(0);
     
     // create the new grammar
-    clock_t t60 = clock();
     CreateGrammarFst();
-    grammarConstructionClocks += clock() - t60;
 
     // logging
-    cerr << "iteration # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
-    
+    if (learningInfo.mpiWorld->rank() == 0) {
+      cerr << "Ibm Model 1 iteration # " << learningInfo.iterationsCount << " - total loglikelihood = " << logLikelihood << endl;
+    }
+
     // update learningInfo
     learningInfo.logLikelihood.push_back(logLikelihood);
     learningInfo.validationLogLikelihood.push_back(validationLogLikelihood);
     learningInfo.iterationsCount++;
     // check for convergence
   } while(!learningInfo.IsModelConverged());
-
-  // logging
-  cerr << endl;
-  cerr << "trainTime        = " << (float) (clock() - t00) / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "compositionTime  = " << (float) compositionClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "forward/backward = " << (float) forwardBackwardClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "fractionalCounts = " << (float) updatingFractionalCountsClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "normalizeClocks  = " << (float) normalizationClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << "grammarConstruct = " << (float) grammarConstructionClocks / CLOCKS_PER_SEC << " sec." << endl;
-  cerr << endl;
 }
 
 // given the current model, align the corpus

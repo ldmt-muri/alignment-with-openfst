@@ -346,6 +346,10 @@ class VocabEncoder {
         }
       }
     }
+
+    // sync.
+    bool vocabEncoderIsReady;
+    boost::mpi::all_reduce<bool>(*learningInfo.mpiWorld, vocabEncoderIsReady, vocabEncoderIsReady, std::logical_and<bool>());
   }
   
   void ReadConll(const std::string &conllFilename, vector< vector<ObservationDetails> > &data, unsigned minFreq = 1) {

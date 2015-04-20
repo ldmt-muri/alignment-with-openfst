@@ -4,8 +4,15 @@
 #include <iostream>
 #include <fstream>
 #include <math.h>
+#include <algorithm>
+
+#include "mpi.h"
 
 #include <boost/unordered_map.hpp>
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/mpi/nonblocking.hpp>
+#include <boost/mpi/collectives.hpp>
 
 #include "../wammar-utils/unordered_map_serialization.hpp"
 
@@ -68,6 +75,14 @@ class IbmModel1 : public IAlignmentModel {
 
   virtual void AlignTestSet(const string &srcTestSetFilename, const string &tgtTestSetFilename, const string &outputAlignmentsFilename);
 
+  void UpdateTheta(MultinomialParams::ConditionalMultinomialParam<int64_t> &mleGivenOneLabel, 
+		   boost::unordered_map<int64_t, double> &mleMarginalsGivenOneLabel);
+    
+  void BroadcastTheta(unsigned rankId);
+
+  void ReduceMleAndMarginals(MultinomialParams::ConditionalMultinomialParam<int64_t> &mle, 
+			     boost::unordered_map<int64_t, double> &mleMarginals);
+    
  private:
   string bitextFilename, outputPrefix;
   VectorFst<FstUtils::LogArc> grammarFst;
