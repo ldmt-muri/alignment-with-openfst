@@ -404,6 +404,8 @@ class LearningInfo {
   bool checkGradient;
 
   int hackK;
+
+  string vocabFilename;
 };
 
 #endif

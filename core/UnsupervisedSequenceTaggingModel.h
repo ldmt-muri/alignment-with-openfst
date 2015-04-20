@@ -116,11 +116,11 @@ class UnsupervisedSequenceTaggingModel {
 
  protected:
   
- UnsupervisedSequenceTaggingModel(const string &vocabEncoderFilenameInitializer, 
+ UnsupervisedSequenceTaggingModel(const string &dataFilename,
                                   LearningInfo &learningInfo) : 
-  vocabEncoder(vocabEncoderFilenameInitializer, learningInfo, 2, 1),
+  vocabEncoder(learningInfo.vocabFilename != ""? learningInfo.vocabFilename : dataFilename, learningInfo, 2, 1),
     learningInfo(learningInfo),
-    dataFilename(vocabEncoderFilenameInitializer)
+    dataFilename(dataFilename)
   {
   }
 

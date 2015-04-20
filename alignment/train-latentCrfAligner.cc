@@ -68,6 +68,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   
   string HELP = "help",
     TRAIN_DATA = "train-data", 
+    VOCAB = "vocab", 
     INIT_LAMBDA = "init-lambda",
     INIT_THETA = "init-theta", 
     WORDPAIR_FEATS = "wordpair-feats",
@@ -104,6 +105,7 @@ bool ParseParameters(int argc, char **argv, string &textFilename,
   po::options_description desc("train-latentCrfAligner options");
   desc.add_options()
     (TRAIN_DATA.c_str(), po::value<string>(&textFilename), "(filename) parallel data used for training the model. Every line should consist of <space delimited tokens in source sentence> ||| <space delimited tokens in target sentence>")
+    (VOCAB.c_str(), po::value<string>(&learningInfo.vocabFilename), "(filename) optional -- the vocabulary used in the parallel data. It speeds up initialization.")
     (INIT_LAMBDA.c_str(), po::value<string>(&initialLambdaParamsFilename), "(filename) initial weights of lambda parameters")
     (INIT_THETA.c_str(), po::value<string>(&initialThetaParamsFilename), "(filename) initial weights of theta parameters")
     (WORDPAIR_FEATS.c_str(), po::value<string>(&wordPairFeaturesFilename), "(filename) features defined for pairs of source-target word pairs")
