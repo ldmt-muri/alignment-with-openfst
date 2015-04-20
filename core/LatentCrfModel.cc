@@ -1375,7 +1375,7 @@ void LatentCrfModel::UpdateTheta(
           mleMarginalsGivenOneLabel[contextIter->first] + 
           learningInfo.multinomialSymmetricDirichletAlpha - 1.0;
       } else {
-        numerator = contextIter->second.count(decisionIter->first);
+        numerator = contextIter->second[decisionIter->first];
         denominator = mleMarginalsGivenOneLabel[contextIter->first];
       }
       assert(denominator != 0.0);
