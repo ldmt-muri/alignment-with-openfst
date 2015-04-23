@@ -193,7 +193,7 @@ class LearningInfo {
   
   // should be called only once in the constructor
   void SetSharedMemorySegment(bool create) {
-    size_t segmentSize = 30 * 1024; // in GBs
+    size_t segmentSize = 256 * 1024; // in GBs
     segmentSize *= 1024 * 1024;
     string SEGMENT_NAME = outputFilenamePrefix + ".segment";
     using namespace boost::interprocess;

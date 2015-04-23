@@ -2,6 +2,15 @@
 #define _LATENT_CRF_ALIGNER_H_
 
 #include <fstream>
+
+#include "mpi.h"
+
+#include <boost/mpi/environment.hpp>
+#include <boost/mpi/communicator.hpp>
+#include <boost/mpi/nonblocking.hpp>
+#include <boost/mpi/collectives.hpp>
+
+
 #include "../core/LatentCrfModel.h"
 
 class LatentCrfAligner : public LatentCrfModel {

@@ -296,13 +296,17 @@ class VocabEncoder {
 
       if (end_of_file) {
 	break;
-      } else {
+      }
+
+      // Wait till the master has encoded this line.
+      if (learningInfo.mpiWorld->rank() != 0) {
 	boost::mpi::broadcast<std::string>(*learningInfo.mpiWorld, line, 0);
       }
       
       // skip empty lines
       if(line.size() == 0) {
-	continue;
+	cerr << "Blank lines are not allowed in parallel data. Will die." << endl;
+	exit(1);
       }
       lineNumber++;
       
@@ -314,10 +318,14 @@ class VocabEncoder {
       srcSents.resize(lineNumber+1);
       tgtSents.resize(lineNumber+1);
       vector<int64_t> temp;
-
       Encode(splits, temp);
-      
       assert(splits.size() == temp.size());
+
+      // Having encoded the words in this line, the master now sends this line to the slaves.
+      if (learningInfo.mpiWorld->rank() == 0) {
+	boost::mpi::broadcast<std::string>(*learningInfo.mpiWorld, line, 0);
+      }
+      
       // src sent is written before tgt sent
       bool src = true;
       if(nullToken.size() > 0) {

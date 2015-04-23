@@ -57,12 +57,17 @@ LatentCrfAligner::LatentCrfAligner(const string &textFilename,
   
   // encode the null token which is conventionally added to the beginning of the src sentnece. 
   NULL_TOKEN_STR = "__null__token__";
-  NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR);
+  if (learningInfo.mpiWorld->rank() == 0) {
+    NULL_TOKEN = vocabEncoder.Encode(NULL_TOKEN_STR);
+  }
+  boost::mpi::broadcast<int64_t>(*learningInfo.mpiWorld, NULL_TOKEN, 0);
   assert(NULL_TOKEN != vocabEncoder.UnkInt());
   
   // read and encode tgt words and their classes (e.g. brown clusters)
-  EncodeTgtWordClasses();
-  
+  if (learningInfo.mpiWorld->rank() == 0) {
+    EncodeTgtWordClasses();
+  }
+
   // read and encode data
   srcSents.clear();
   tgtSents.clear();
