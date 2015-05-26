@@ -1,11 +1,11 @@
 global {
 
     train_corpus="/usr3/home/wammar/subset.en-fi.tok.lc.max5.uniq"
-    #train_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
+    # train_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
     tune_corpus="/usr3/home/wammar/subset.en-fi.tok.lc.max5.uniq"
-    #tune_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
+    # tune_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
     test_corpus="/usr3/home/wammar/subset.en-fi.tok.lc.max5.uniq"
-    #test_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
+    # test_corpus="/usr0/home/wammar/alignment-with-openfst/toy-data/love.en-ar"
     src_brown_clusters="/usr3/home/wammar/brown-clusters/malagasy-c80-p1.out/paths"
     tgt_brown_clusters="/usr1/home/wammar/parallel/english/news-commentary10.cz-en.en.tok.brown80"
 
@@ -22,7 +22,8 @@ global {
     moses_train_script="/home/wammar/git/mosesdecoder/scripts/training/train-model.perl"
     mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
     wammar_utils_dir="/home/wammar/wammar-utils"
-    alignment_with_openfst_dir="/home/wammar/stochastic-crf-autoencoder/alignment-with-openfst/"
+    # alignment_with_openfst_dir="/home/wammar/stochastic-crf-autoencoder/alignment-with-openfst/"
+    alignment_with_openfst_dir="/usr3/home/fanyang1/alignment-with-openfst/"
     kenlm_dir="/home/wammar/git/kenlm"
 
     # aer
