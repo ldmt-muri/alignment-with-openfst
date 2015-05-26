@@ -21,6 +21,8 @@ global {
                       grow_diag_final_and="grow-diag-final-and"
                       grow_diag="grow-diag"
                       intersect="intersect"
+    alignment_with_openfst_dir="/home/wammar/stochastic-crf-autoencoder/alignment-with-openfst/"
+    ch
                       union="union")
   lambda_optimizer=(LambdaOptimizer: sgd="sgd" lbfgs="lbfgs")
 }
@@ -395,7 +397,8 @@ task AutoencoderAlignT2S
   --reverse true
   --max-model1-iter-count $model1_itercount
   --lambda-optimizer $lambda_optimizer 
-  --max-iter-count 10"
+  --max-iter-count 10
+  --use-averaged-gradient false"
   #--tgt-word-classes-filename $src_brown_clusters
   #   --feat SRC0_TGT0
   #   --feat SYNC_START --feat SYNC_END
