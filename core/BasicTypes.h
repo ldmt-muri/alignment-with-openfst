@@ -156,7 +156,7 @@ struct OptMethod {
     learningRate = 0.01;
     learningRateDecayParameter = 1.0;
     learningRateDecayStrategy = DecayStrategy::EPOCH_FIXED;
-    useAveragedGradient = true;
+    useAveragedGradient = false;
     miniBatchSize = 1;
     regularizer = Regularizer::NONE;
     regularizationStrength = 1000;
