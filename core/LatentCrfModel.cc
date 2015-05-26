@@ -2130,7 +2130,11 @@ void LatentCrfModel::OptimizeLambdasWithSgd(double& optimizedMiniBatchNll) {
         oldWeightsMultiplier * (1.0 - currentLearningRate * l2Strength / totalSentCount);
       // (fanyang) Averaged sgd (correct only if one core) 
       if (learningInfo.optimizationMethod.subOptMethod->useAveragedGradient) {
-        newWeightsMultiplier =((sentsCounter-1.0)/sentsCounter)*oldWeightsMultiplier + (1.0/sentsCounter) * newWeightsMultiplier;
+        double prev = sentsCounter * 1.0 / (1.0 + sentsCounter);
+        double next = 1.0 / (1.0 + sentsCounter);
+        // std::cerr << "prev: " << prev << std::endl;
+        // std::cerr << "next: " << next << std::endl;
+        newWeightsMultiplier = prev * oldWeightsMultiplier + next * newWeightsMultiplier;
       }
       lambda->UpdateWeightsMultiplier(newWeightsMultiplier);
       
