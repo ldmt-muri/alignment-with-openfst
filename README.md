@@ -13,11 +13,11 @@ Our NIPS 2014 [paper](http://arxiv.org/pdf/1411.1147v2.pdf) describes the CRF au
 
 #dependencies:
 * [cdec](https://github.com/redpony/cdec)
-* [boost 1.54](http://www.boost.org/users/history/version_1_54_0.html) (or later "fingers crossed")
-* [libLBFGS-1.10](https://github.com/downloads/chokkan/liblbfgs/liblbfgs-1.10.tar.gz) (or later "fingers crossed")
-* [MPI-1.8](http://www.open-mpi.org/software/ompi/v1.8/) (or later "fingers crossed")
-* [openfst-1.3.2](http://www.openfst.org/twiki/bin/view/FST/FstDownload) (or later "fingers crossed")
-* [python 2.7](https://www.python.org/download/releases/2.7.3/) (or later "fingers crossed")
+* [boost 1.54](http://www.boost.org/users/history/version_1_54_0.html) 
+* [libLBFGS-1.10](https://github.com/downloads/chokkan/liblbfgs/liblbfgs-1.10.tar.gz) 
+* [MPI-1.8](http://www.open-mpi.org/software/ompi/v1.8/) 
+* [openfst-1.3.2](http://www.openfst.org/twiki/bin/view/FST/FstDownload) 
+* [python 2.7](https://www.python.org/download/releases/2.7.3/) 
 
 #how to build
 I'm assuming your default compiler is either gcc 4.6.3, clang 3.1-8 (or later "fingers crossed")
